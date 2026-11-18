@@ -11,7 +11,8 @@ import asyncpg
 from .config import settings
 from .engine import EASTERN, eastern_date, evaluate_symbol, headline_session
 from .news import fetch_headlines
-from .prices import fetch_daily_bars
+from .prices import fetch_daily_bars, fetch_last_24h
+from .symbols import trades_all_day
 from .scoring import attach_scores
 from .sectors import ensure_symbol_sectors
 from .store import (
@@ -75,6 +76,9 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
             stored_news = await _headlines_for_rules(
                 conn, symbol, headlines, "finbert"
             )
+            trailing = None
+            if trades_all_day(symbol):
+                trailing = await asyncio.to_thread(fetch_last_24h, symbol, now=moment)
             drafts = evaluate_symbol(
                 symbol=symbol,
                 bars=stored_bars,
@@ -86,6 +90,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 sentiment_threshold=rules["sentiment_threshold"],
                 news_lookback_hours=settings.news_lookback_hours,
                 fusion_window_hours=settings.fusion_window_hours,
+                trailing_24h=trailing,
             )
             today = eastern_date(moment)
             drafts = [draft for draft in drafts if draft.bar_date == today]

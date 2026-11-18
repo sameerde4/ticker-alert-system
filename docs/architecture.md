@@ -13,7 +13,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | Watchlist of tickers, with a local symbol and company-name search. A suggestion fills the box. Add rejects a symbol that is not on that list and that Yahoo does not quote | **As-built** |
 | Yahoo daily bars into `daily_bars` | **As-built** |
 | Yahoo headlines scored with local FinBERT on a 0–100 scale, with confidence and a class breakdown | **As-built** |
-| Price alert: percent change versus the prior close, with a volume-spike flag | **As-built** |
+| Price alert: a stock's percent change versus the prior close, or the last 24 hours for a market that trades all day, with a volume-spike flag on stocks | **As-built** |
 | News alert: absolute sentiment at or beyond the configured threshold, on that headline's trading day | **As-built** |
 | News plus price only when both rules fire for the same trading day | **As-built** |
 | Plain-English summary from the alert fields, including the thresholds in force when it fired | **As-built** |
@@ -58,7 +58,7 @@ The deck never defines the window, the symbol match, or what happens when only o
 
 | Proposal | This app |
 |---|---|
-| Tick stream, anomaly within seconds | One daily close versus the prior close. A volume spike is a note, not a separate detector |
+| Tick stream, anomaly within seconds | One daily close versus the prior close for stocks. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on stocks, not a separate detector |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
 | Correlation window, unspecified | Same Eastern trading day. Weekend stories stay with Friday. A next-morning story does not attach to the prior close |
 | Alert only when both sides meet | Price only, news only, or news + price |
@@ -82,7 +82,7 @@ flowchart TB
     end
 
     subgraph rules [Alert rules]
-        BARS --> PRICE{Abs move versus prior close}
+        BARS --> PRICE{Abs move versus prior close, or the last 24 hours}
         PRICE -->|at or beyond threshold| PA[Price alert]
         PRICE --> VOL[Volume versus recent average]
         VOL --> PA

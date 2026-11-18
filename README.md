@@ -2,11 +2,11 @@
 
 Watch a list of tickers. Each symbol gets one alert per day:
 
-- **Price** — only the close moved at least a configured percent versus the prior close.
+- **Price** — a stock's close moved at least a configured percent versus the prior close. A symbol that trades around the clock, such as BTC-USD, is measured over the 24 hours before the check.
 - **News** — only headlines cleared the sentiment rule. The alert lists each score and link.
 - **News + price** — both rules fired. The alert has a price section, a news section, and a short synthesis.
 
-Each alert stores a plain-English explanation assembled from the alert fields. When FinBERT is selected, that model only produces the headline score. It does not write the paragraph. The time on a card is when the condition was met, in US Eastern: the 4:00 PM close for a price move, the earliest headline for news, and the later of those two when both fire.
+Each alert stores a plain-English explanation assembled from the alert fields. When FinBERT is selected, that model only produces the headline score. It does not write the paragraph. The time on a card is when the condition was met, in US Eastern: the 4:00 PM close for a stock price move, the time of the check for a 24-hour crypto move, the earliest headline for news, and the later of the price time and the headline when both fire.
 
 Home lists alerts saved after you last had the page open. Reloading the page starts that visit again, so older cards stay on Alert History. Alert History is the full list, newest first: symbol, sector, type, time, the day's price change, news sentiment, and a details popup with the same write-up as the card. Column headings sort the table. Sector names come from Yahoo and are cached. The card clock is still when the condition was met. "New" uses the time the alert was first saved.
 
@@ -82,7 +82,7 @@ The Settings tab stores the price percent and the sentiment threshold in `app_se
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `TICKER_ALERT_PRICE_MOVE_THRESHOLD` | Absolute return versus the prior close, used until Settings is saved | `0.03` |
+| `TICKER_ALERT_PRICE_MOVE_THRESHOLD` | Absolute return versus the prior close for a stock, or versus the price 24 hours earlier for a market that trades all day. Used until Settings is saved | `0.03` |
 | `TICKER_ALERT_VOLUME_SPIKE_THRESHOLD` | Volume divided by the recent average. Not a Settings control | `2.0` |
 | `TICKER_ALERT_SENTIMENT_THRESHOLD` | How far a 0–100 FinBERT score must sit from 50, used until Settings is saved | `25` |
 | `TICKER_ALERT_NEWS_LOOKBACK_HOURS` | A headline older than this is ignored, even on its own trading day | `72` |

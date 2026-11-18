@@ -19,6 +19,11 @@ def normalize_symbol(raw: str) -> str:
     return text
 
 
+def trades_all_day(symbol: str) -> bool:
+    """Yahoo crypto quotes, such as BTC-USD, keep printing after the stock close."""
+    return symbol.upper().endswith("-USD")
+
+
 def known_universe_symbol(symbol: str) -> bool:
     """True when the local ticker list already contains this symbol."""
     global _UNIVERSE

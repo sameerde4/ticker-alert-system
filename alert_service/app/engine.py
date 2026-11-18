@@ -169,15 +169,26 @@ def price_summary(
     *,
     price_move_threshold: float,
     volume_spike_threshold: float,
+    trailing_24h: bool = False,
 ) -> str:
-    sentence = (
-        f"{symbol} closed at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
-        f"from the prior close of {_money(prior_close)}. "
-        f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
-        "versus the prior close."
-    )
+    if trailing_24h:
+        comparison = (
+            f"{symbol} is at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
+            f"from {_money(prior_close)} 24 hours before this check. "
+            f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
+            "over the last 24 hours."
+        )
+    else:
+        comparison = (
+            f"{symbol} closed at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
+            f"from the prior close of {_money(prior_close)}. "
+            f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
+            "versus the prior close."
+        )
+    if trailing_24h:
+        return comparison + " Volume uses the cash-session average, so the spike rule was not applied."
     if ratio is None:
-        return sentence + " Volume was not available, so the spike rule was not applied."
+        return comparison + " Volume was not available, so the spike rule was not applied."
     if spiked:
         volume = (
             f" Volume was {ratio:.2f}x the recent average, which also clears the "
@@ -188,7 +199,7 @@ def price_summary(
             f" Volume was {ratio:.2f}x the recent average, under the "
             f"{volume_spike_threshold:.1f}x spike rule."
         )
-    return sentence + volume
+    return comparison + volume
 
 
 def news_summary(
@@ -253,6 +264,7 @@ def evaluate_symbol(
     sentiment_threshold: float,
     news_lookback_hours: int,
     fusion_window_hours: int,
+    trailing_24h: dict[str, float] | None = None,
 ) -> list[AlertDraft]:
     """Build the one alert a symbol should show for this check.
 
@@ -264,7 +276,41 @@ def evaluate_symbol(
     price_draft: AlertDraft | None = None
     change: float | None = None
     session_day = eastern_date(now)
-    if len(ordered) >= 2:
+    latest_close: float | None = None
+    prior_close: float | None = None
+    if trailing_24h is not None:
+        latest_close = float(trailing_24h["price"])
+        prior_close = float(trailing_24h["prior_price"])
+        change = price_change_pct(latest_close, prior_close)
+        if change is not None and abs(change) >= price_move_threshold:
+            price_draft = AlertDraft(
+                kind="price",
+                symbol=symbol,
+                bar_date=session_day,
+                headline_id=None,
+                price_change_pct=change,
+                latest_close=latest_close,
+                prior_close=prior_close,
+                volume_ratio=None,
+                volume_spike=False,
+                sentiment_score=None,
+                headline_title=None,
+                summary=price_summary(
+                    symbol,
+                    change,
+                    latest_close,
+                    prior_close,
+                    None,
+                    False,
+                    price_move_threshold=price_move_threshold,
+                    volume_spike_threshold=volume_spike_threshold,
+                    trailing_24h=True,
+                ),
+                triggered_at=_as_utc(now),
+                price_move_threshold=price_move_threshold,
+                sentiment_threshold=sentiment_threshold,
+            )
+    elif len(ordered) >= 2:
         latest = ordered[-1]
         prior = ordered[-2]
         change = price_change_pct(float(latest["close"]), float(prior["close"]))
@@ -310,7 +356,16 @@ def evaluate_symbol(
         sentiment_threshold,
         lambda published: published >= news_cutoff and headline_session(published) == session_day,
     )
-    session_change = change if ordered and ordered[-1]["dt"] == session_day else None
+    session_change = change if trailing_24h is not None or (ordered and ordered[-1]["dt"] == session_day) else None
+    if trailing_24h is not None:
+        shown_latest = latest_close
+        shown_prior = prior_close
+    elif session_change is not None and len(ordered) >= 2:
+        shown_latest = float(ordered[-1]["close"])
+        shown_prior = float(ordered[-2]["close"])
+    else:
+        shown_latest = None
+        shown_prior = None
     news_draft: AlertDraft | None = None
     if news_items:
         articles = tuple(article_view(item) for item in news_items)
@@ -321,8 +376,8 @@ def evaluate_symbol(
             bar_date=price_draft.bar_date if price_draft else session_day,
             headline_id=None,
             price_change_pct=session_change,
-            latest_close=float(ordered[-1]["close"]) if session_change is not None else None,
-            prior_close=float(ordered[-2]["close"]) if session_change is not None and len(ordered) >= 2 else None,
+            latest_close=shown_latest,
+            prior_close=shown_prior,
             volume_ratio=None,
             volume_spike=False,
             sentiment_score=news_score,
@@ -361,10 +416,14 @@ def evaluate_symbol(
                     "news": news_draft.summary,
                     "synthesis": synthesis,
                 },
-                triggered_at=condition_met_at(
-                    kind="news_price",
-                    bar_date=price_draft.bar_date,
-                    headlines=news_items,
+                triggered_at=(
+                    max(_as_utc(now), earliest_published(news_items))
+                    if trailing_24h is not None
+                    else condition_met_at(
+                        kind="news_price",
+                        bar_date=price_draft.bar_date,
+                        headlines=news_items,
+                    )
                 ),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
