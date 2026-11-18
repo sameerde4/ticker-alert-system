@@ -16,6 +16,9 @@ def test_health_and_ui_without_a_database():
     assert "sessionStorage" not in page.text
     assert "function homeWatermark" in page.text
     assert "homeOpenedAt" in page.text
+    assert "scrollbar-gutter: stable" in page.text
+    assert "overflow-x: clip" in page.text
+    assert ".tab-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }" in page.text
     universe = client.get("/ui/symbol_universe.json")
     assert universe.status_code == 200
     payload = universe.json()

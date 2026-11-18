@@ -20,8 +20,10 @@
       --fusion: #d4af37;
     }
     * { box-sizing: border-box; }
+    html { scrollbar-gutter: stable; }
     body {
       margin: 0;
+      overflow-x: clip;
       font-family: "Iowan Old Style", Palatino, Georgia, serif;
       background: var(--bg);
       color: var(--text);
@@ -37,13 +39,15 @@
     h1 { margin: 0; font-weight: 600; letter-spacing: 0.01em; justify-self: start; }
     h1 span { color: var(--gold); }
     h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: 0.01em; }
-    .tab-panel { display: flex; flex-direction: column; gap: 16px; }
+    .tab-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }
     .rules { margin: 0; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; }
     .rules .linkish { font: inherit; letter-spacing: 0; text-transform: none; }
     .card {
       display: flex;
       flex-direction: column;
       gap: 12px;
+      width: 100%;
+      min-width: 0;
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -223,7 +227,7 @@
     .scorer-choice { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
     .scorer-choice legend { font-size: 14px; font-weight: 650; padding: 0; }
     #scorer-form { max-width: 720px; }
-    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    .table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
     table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
     table.history th, table.history td { white-space: nowrap; }
     table.history thead th {
