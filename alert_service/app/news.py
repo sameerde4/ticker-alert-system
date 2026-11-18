@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
 from .sentiment import _parse_pub_date, _strip_html
@@ -29,31 +30,70 @@ _NAME_STOP = frozenset(
 )
 
 
-def fetch_headlines(symbol: str) -> list[dict[str, Any]]:
-    """Return scored headlines for one symbol. Empty when the vendor returns nothing.
+_NEWS_PAGE = 40
+_NEWS_LIMIT = 200
+
+
+def fetch_headlines(symbol: str, *, count: int = 15, through: date | None = None) -> list[dict[str, Any]]:
+    """Return headlines for one symbol. Empty when the vendor returns nothing.
 
     Quote news is preferred. A headline is kept only when the title names the
     ticker or the company, because Yahoo also tags unrelated market stories.
+    ``through`` pages the quote list until a story is on or before that date,
+    or until Yahoo has no older page. A live check leaves it unset and takes
+    the newest page only.
     """
     try:
         import yfinance as yf
     except Exception as exc:  # pragma: no cover
         raise RuntimeError("yfinance is not installed. Install requirements first.") from exc
 
-    ticker_raw: list[Any] = []
+    tokens = company_tokens(symbol, yf)
+    if through is None:
+        ticker_raw = _safe_ticker_news(yf, symbol, count)
+        search_raw = [] if parse_yahoo_news_items(ticker_raw) else _safe_search_news(yf, symbol)
+        return choose_headline_items(symbol, ticker_raw, search_raw, mention_tokens=tokens)
+
+    asked = _NEWS_PAGE
+    chosen: list[dict[str, Any]] = []
+    while asked <= _NEWS_LIMIT:
+        ticker_raw = _safe_ticker_news(yf, symbol, asked)
+        parsed = parse_yahoo_news_items(ticker_raw)
+        if not parsed:
+            return choose_headline_items(symbol, [], _safe_search_news(yf, symbol), mention_tokens=tokens)
+        chosen = choose_headline_items(symbol, ticker_raw, [], mention_tokens=tokens)
+        if not _need_older_headlines(_oldest_session(parsed), through, len(ticker_raw), asked):
+            break
+        asked += _NEWS_PAGE
+    return chosen
+
+
+def _need_older_headlines(oldest: date | None, through: date, received: int, asked: int) -> bool:
+    """True when this page is full and every story is newer than ``through``."""
+    if asked >= _NEWS_LIMIT or received < asked or oldest is None:
+        return False
+    return oldest > through
+
+
+def _oldest_session(items: list[dict[str, Any]]) -> date | None:
+    from .engine import headline_session
+
+    days = [headline_session(item["published_at"]) for item in items if item.get("published_at")]
+    return min(days) if days else None
+
+
+def _safe_ticker_news(yf: Any, symbol: str, count: int) -> list[Any]:
     try:
-        ticker_raw = _ticker_news_raw(yf, symbol)
+        return _ticker_news_raw(yf, symbol, count)
     except Exception:
-        ticker_raw = []
-    search_raw: list[Any] = []
-    if not parse_yahoo_news_items(ticker_raw):
-        try:
-            search_raw = _search_news_raw(yf, symbol)
-        except Exception:
-            search_raw = []
-    return choose_headline_items(
-        symbol, ticker_raw, search_raw, mention_tokens=company_tokens(symbol, yf)
-    )
+        return []
+
+
+def _safe_search_news(yf: Any, symbol: str) -> list[Any]:
+    try:
+        return _search_news_raw(yf, symbol)
+    except Exception:
+        return []
 
 
 def company_tokens(symbol: str, yf: Any | None = None) -> set[str]:
@@ -95,16 +135,13 @@ def _title_mentions(title: str, tokens: set[str]) -> bool:
     return any(token in text for token in tokens if token)
 
 
-def _ticker_news_raw(yf: Any, symbol: str) -> list[Any]:
+def _ticker_news_raw(yf: Any, symbol: str, count: int) -> list[Any]:
     ticker = yf.Ticker(symbol)
-    raw = getattr(ticker, "news", None) or []
-    if raw:
-        return list(raw)
     get_news = getattr(ticker, "get_news", None)
     if not callable(get_news):
-        return []
+        return list(getattr(ticker, "news", None) or [])
     try:
-        raw = get_news(count=15)
+        raw = get_news(count=count)
     except TypeError:
         raw = get_news()
     return list(raw or [])

@@ -9,9 +9,9 @@ from typing import Any
 import asyncpg
 
 from .config import settings
-from .engine import EASTERN, eastern_date, evaluate_symbol, headline_session
+from .engine import EASTERN, cash_session_open, eastern_date, evaluate_symbol, headline_session
 from .news import fetch_headlines
-from .prices import fetch_daily_bars, fetch_last_24h
+from .prices import fetch_daily_bars, fetch_last_24h, fetch_open_to_last
 from .symbols import trades_all_day
 from .scoring import attach_scores
 from .sectors import ensure_symbol_sectors
@@ -77,8 +77,11 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 conn, symbol, headlines, "finbert"
             )
             trailing = None
+            live = None
             if trades_all_day(symbol):
                 trailing = await asyncio.to_thread(fetch_last_24h, symbol, now=moment)
+            elif cash_session_open(moment):
+                live = await asyncio.to_thread(fetch_open_to_last, symbol, now=moment)
             drafts = evaluate_symbol(
                 symbol=symbol,
                 bars=stored_bars,
@@ -91,6 +94,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 news_lookback_hours=settings.news_lookback_hours,
                 fusion_window_hours=settings.fusion_window_hours,
                 trailing_24h=trailing,
+                live_session=live,
             )
             today = eastern_date(moment)
             drafts = [draft for draft in drafts if draft.bar_date == today]
@@ -181,8 +185,10 @@ def rebuild_start(today: date, days: int) -> date:
 async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None = None) -> dict[str, Any]:
     """Delete every saved alert, then rerun the current rules over the last ``days`` calendar days.
 
-    Each watchlist symbol is checked once per trading session in that window. Headlines
-    already stored are kept and joined with whatever Yahoo returns now.
+    Each watchlist symbol is checked once per trading session in that window. Yahoo's
+    quote news is paged back through the first day of the window, and each story is
+    scored for the trading day it was published. A past day is judged as of 8:00 PM
+    Eastern, so that day's headlines fall inside the news lookback.
     """
     moment = now or datetime.now(UTC)
     today = eastern_date(moment)
@@ -199,16 +205,21 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
     for symbol in symbols:
         try:
             bars = await asyncio.to_thread(fetch_daily_bars, symbol, lookback_days=fetch_days)
-            headlines = await asyncio.to_thread(fetch_headlines, symbol)
+            headlines = await asyncio.to_thread(fetch_headlines, symbol, through=start)
         except Exception as exc:
             errors.append({"symbol": symbol, "error": str(exc)})
             continue
+        in_window = [
+            item
+            for item in headlines
+            if start <= headline_session(item["published_at"]) <= today
+        ]
         async with pool.acquire() as conn:
             if bars:
                 await upsert_bars(conn, symbol, bars)
             stored_bars = await load_bars(conn, symbol)
             stored_news = await _headlines_for_rules(
-                conn, symbol, headlines, "finbert"
+                conn, symbol, in_window, "finbert"
             )
             sessions: set[date] = set()
             for bar in stored_bars:

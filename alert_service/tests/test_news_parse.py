@@ -52,3 +52,57 @@ def test_quote_news_drops_stories_that_only_tag_the_ticker():
         mention_tokens={"AAPL", "APPLE"},
     )
     assert [item["title"] for item in chosen] == ["Apple outage hits the App Store"]
+
+
+def test_older_pages_are_requested_until_the_rebuild_window():
+    from datetime import date
+
+    from app.news import _need_older_headlines
+
+    window = date(2026, 11, 13)
+    assert _need_older_headlines(date(2026, 11, 17), window, received=40, asked=40)
+    assert not _need_older_headlines(date(2026, 11, 13), window, received=40, asked=40)
+    assert not _need_older_headlines(date(2026, 11, 17), window, received=12, asked=40)
+    assert not _need_older_headlines(date(2026, 11, 17), window, received=200, asked=200)
+    assert not _need_older_headlines(None, window, received=40, asked=40)
+
+
+def test_a_windowed_fetch_pages_past_today(monkeypatch):
+    from datetime import UTC, date, datetime, timedelta
+
+    from app.news import fetch_headlines
+
+    calls = []
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        @property
+        def info(self):
+            return {"shortName": "Lumentum"}
+
+        def get_news(self, count=10, tab="news"):
+            calls.append(count)
+            start = datetime(2026, 11, 18, 0, 0, tzinfo=UTC)
+            rows = []
+            for index in range(count):
+                when = start - timedelta(hours=index)
+                rows.append(
+                    {
+                        "content": {
+                            "title": f"LITE story {index}",
+                            "pubDate": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "provider": {"displayName": "Wire"},
+                        }
+                    }
+                )
+            return rows
+
+    monkeypatch.setattr("yfinance.Ticker", FakeTicker)
+    items = fetch_headlines("LITE", through=date(2026, 11, 13))
+    assert calls == [40, 80]
+    assert items
+    from app.engine import headline_session
+
+    assert min(headline_session(item["published_at"]) for item in items) <= date(2026, 11, 13)
