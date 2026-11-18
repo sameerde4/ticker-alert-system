@@ -27,23 +27,83 @@
       color: var(--text);
     }
     header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+    main { padding: 12px 0 28px; }
     header {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      padding: 18px 0 4px;
+      padding: 18px 0 0;
     }
     h1 { margin: 0; font-weight: 600; letter-spacing: 0.01em; justify-self: start; }
     h1 span { color: var(--gold); }
-    .rules { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+    h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: 0.01em; }
+    .tab-panel { display: flex; flex-direction: column; gap: 16px; }
+    .rules { margin: 0; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; }
+    .rules .linkish { font: inherit; letter-spacing: 0; text-transform: none; }
     .card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: 16px;
-      margin: 16px 0;
+      padding: 16px 18px;
+      margin: 0;
     }
     form, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .symbol-suggest { position: relative; display: inline-flex; }
+    .symbol-suggest-frame {
+      position: absolute;
+      left: 0;
+      top: calc(100% + 4px);
+      z-index: 30;
+      min-width: 100%;
+      width: max-content;
+      max-width: min(28rem, calc(100vw - 32px));
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+    .symbol-suggest-list { max-height: 240px; overflow: hidden; }
+    .symbol-suggest-list.is-scroll-y { overflow-y: auto; }
+    .symbol-suggest-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      width: 100%;
+      margin: 0;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--text);
+      font: 14px/1.3 ui-sans-serif, system-ui, sans-serif;
+      font-weight: 400;
+      text-align: left;
+      cursor: pointer;
+    }
+    .symbol-suggest-item:hover,
+    .symbol-suggest-item.is-active { background: rgba(212, 175, 55, 0.14); }
+    .symbol-suggest-item .sym { font-weight: 700; color: var(--gold); letter-spacing: 0.02em; }
+    .symbol-suggest-item .meta { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+    .symbol-suggest-item .name {
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .symbol-suggest-item .exch {
+      flex: 0 0 auto;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
     input, button {
       font: 15px/1.2 ui-sans-serif, system-ui, sans-serif;
       border-radius: 8px;
@@ -63,7 +123,7 @@
       font-weight: 650;
     }
     button.ghost { background: transparent; color: var(--text); }
-    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .chip {
       font-family: ui-sans-serif, system-ui, sans-serif;
       background: var(--elevated);
@@ -76,18 +136,28 @@
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(243, 239, 228, 0.08); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
     .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
-    .badge.price { background: rgba(61, 220, 151, 0.15); color: var(--up); }
-    .badge.news { background: rgba(126, 182, 255, 0.15); color: var(--news); }
-    .badge.fusion, .badge.news_price { background: rgba(212, 175, 55, 0.18); color: var(--fusion); }
+    .badge.up { background: rgba(61, 220, 151, 0.15); color: var(--up); }
+    .badge.down { background: rgba(255, 107, 107, 0.15); color: var(--down); }
+    .badge.mixed { background: rgba(212, 175, 55, 0.18); color: var(--gold); }
     h3.section { margin: 12px 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); font-family: ui-sans-serif, system-ui, sans-serif; }
-    .empty, .status { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .hint, .empty, .status {
+      margin: 0;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .status:empty { display: none; }
     .status.error { color: var(--down); }
     .alert {
       border-top: 1px solid rgba(243, 239, 228, 0.08);
-      padding: 14px 4px;
+      padding: 14px 0;
       font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
     }
-    .alert:first-child { border-top: 0; }
+    .alert:first-child { border-top: 0; padding-top: 0; }
+    .alert:last-child { padding-bottom: 0; }
     .alert-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
     .symbol, a.symbol-link { font-weight: 700; }
     a.symbol-link { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
@@ -102,7 +172,9 @@
     .articles { list-style: none; margin: 0; padding: 0; }
     .articles li { margin: 8px 0; }
     .articles a { color: var(--gold); }
+    .published { color: var(--muted); font-size: 13px; margin-left: 6px; }
     .reason { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .reason .score { font-weight: 700; }
     .tabs {
       display: flex;
       gap: 8px;
@@ -139,17 +211,17 @@
       border-color: var(--line);
     }
     .tab-panel[hidden] { display: none; }
-    .settings-form { display: grid; gap: 14px; max-width: 460px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .settings-form { display: grid; gap: 12px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .settings-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .settings-actions .status { flex: 1 1 180px; }
     .field { display: grid; gap: 6px; }
     .field span { font-size: 14px; font-weight: 650; }
     .field input { width: 160px; min-width: 0; }
-    .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
     .choice { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 650; }
     .choice input { width: auto; min-width: 0; padding: 0; }
     .scorer-choice { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
     .scorer-choice legend { font-size: 14px; font-weight: 650; padding: 0; }
     #scorer-form { max-width: 720px; }
-    h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
     table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
     table.history th, table.history td { white-space: nowrap; }
@@ -279,10 +351,16 @@
   </header>
   <main>
     <section id="homeTab" class="tab-panel">
-    <p class="rules" id="rules">Loading rules…</p>
+    <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesAfter"></span></p>
     <section class="card">
+      <h2>Watchlist</h2>
       <form id="add-form">
-        <input id="symbol" name="symbol" placeholder="Ticker, e.g. AAPL" autocomplete="off" />
+        <span class="symbol-suggest">
+          <input id="symbol" name="symbol" placeholder="Ticker or company name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="symbolSuggestList" />
+          <div class="symbol-suggest-frame" hidden>
+            <div class="symbol-suggest-list" id="symbolSuggestList" hidden></div>
+          </div>
+        </span>
         <button type="submit">Add to watchlist</button>
         <button type="button" id="run" class="ghost">Run check</button>
       </form>
@@ -290,6 +368,7 @@
       <p class="status" id="status"></p>
     </section>
     <section class="card">
+      <h2>Recent</h2>
       <p class="hint" id="homeScope" hidden>Since you last opened the app.</p>
       <div id="alerts"></div>
       <p class="empty" id="empty">No alerts yet. Add a ticker and run a check.</p>
@@ -329,34 +408,14 @@
           </label>
           <label class="field">
             <span>Sentiment score threshold</span>
-            <input id="sentimentThreshold" type="number" min="0.01" max="1" step="0.01" inputmode="decimal" required />
-            <p class="hint">A headline opens a news alert when its absolute score reaches this value. Default is 0.34. Both scorers use this same cutoff.</p>
+            <input id="sentimentThreshold" type="number" min="1" max="50" step="1" inputmode="numeric" required />
+            <p class="hint">The FinBERT score runs from 0 to 100. 50 is neutral. A headline opens a news alert when it is at least this far from 50. Default is 25, so 75 or higher is positive enough and 25 or lower is negative enough.</p>
           </label>
           <div class="settings-actions">
             <button type="submit" id="saveSettings">Save</button>
             <button type="button" id="resetSettings" class="ghost">Reset to default</button>
+            <p class="status" id="settingsStatus"></p>
           </div>
-          <p class="status" id="settingsStatus"></p>
-        </form>
-      </section>
-      <section class="card">
-        <h2>Sentiment scoring</h2>
-        <form id="scorer-form" class="settings-form">
-          <fieldset class="scorer-choice">
-            <legend>Headline scorer</legend>
-            <label class="choice">
-              <input type="radio" name="sentimentScorer" value="finbert" />
-              FinBERT
-            </label>
-            <p class="hint">FinBERT is the ProsusAI/finbert model. The first check downloads its weights. After that, PyTorch scores headlines on this computer. It is not a hosted analysis API, so there is no daily request cap. Each headline is cut off at 512 tokens. The model returns a probability for positive, negative, and neutral. The stored score is the positive probability minus the negative probability, from −1 to 1. The alert line names the winning class and those three probabilities.</p>
-            <label class="choice">
-              <input type="radio" name="sentimentScorer" value="custom" />
-              Custom scoring
-            </label>
-            <p class="hint">Custom scoring is the finance word list copied from Vajra Astra. It does not load a model. Each word is looked up for a signed weight. A negation in the previous three words flips that word. The score is the average weight of the matched words, multiplied by the number of hits divided by 3, and capped at ±1. One mild hit stays near ±0.33. The alert line names the matched words.</p>
-          </fieldset>
-          <p class="hint">A check uses only the selected scorer. The two scores are never averaged. Both use the same absolute threshold. The next check rescores every saved headline and can replace today’s alert.</p>
-          <p class="status" id="scorerStatus"></p>
         </form>
       </section>
       <section class="card">
@@ -370,8 +429,8 @@
           </label>
           <div class="settings-actions">
             <button type="submit" id="rebuildHistory">Wipe and rebuild</button>
+            <p class="status" id="rebuildStatus"></p>
           </div>
-          <p class="status" id="rebuildStatus"></p>
         </form>
       </section>
     </section>
@@ -386,6 +445,25 @@
       <div class="modal-body" id="detailBody"></div>
     </div>
   </div>
+  <div id="finbertModal" class="modal" hidden>
+    <button type="button" class="modal-backdrop" id="finbertBackdrop" aria-label="Close FinBERT explanation"></button>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="finbertTitle">
+      <div class="modal-header">
+        <h3 id="finbertTitle">FinBERT</h3>
+        <button type="button" class="modal-close" id="finbertClose" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <h3 class="section">What it is</h3>
+        <p class="summary">FinBERT is the ProsusAI/finbert language model, trained on financial sentences. It reads one headline and estimates how likely that headline is positive, negative, or neutral.</p>
+        <h3 class="section">How the score is made</h3>
+        <p class="summary">The first check downloads the model weights. After that, PyTorch runs the model on this computer. It is not a hosted analysis API, so there is no daily request cap. Each headline is cut off at 512 tokens. The model returns three probabilities. The score shown in the app is out of 100: 0 is strongly negative, 50 is neutral, and 100 is strongly positive. It is 50 plus 50 times the positive probability minus the negative probability. Confidence is the winning probability. The line under each headline also lists positive, negative, and neutral as percentages.</p>
+        <h3 class="section">How a check uses it</h3>
+        <p class="summary">Every headline is scored with FinBERT. A headline joins that day’s news alert only when its score is at least the threshold away from 50. The default threshold is 25, so a score of 75 or 25 qualifies and a score of 60 does not. The alert’s combined score is the average of those headlines, still out of 100. The next check rescores the saved headlines. Settings changes the threshold. It does not change the model.</p>
+        <h3 class="section">Why the default threshold is 25</h3>
+        <p class="summary">25 points from 50 is the same gate as a 0.50 gap between the positive and negative probabilities. A slight lean, such as 60 out of 100, stays out. The older 0.34 cutoff belonged to a word list, where one mild word topped out near 0.33. That number is not a FinBERT confidence level.</p>
+      </div>
+    </div>
+  </div>
   <script>
     const KIND_LABELS = { price: "price", news: "news", news_price: "news + price" };
     let displayTimeZone = "America/New_York";
@@ -396,6 +474,7 @@
     const historyBody = document.querySelector("#historyBody");
     const historyEmpty = document.querySelector("#historyEmpty");
     const detailModal = document.querySelector("#detailModal");
+    const finbertModal = document.querySelector("#finbertModal");
     const homeScope = document.querySelector("#homeScope");
     const HOME_WATERMARK_KEY = "tickerAlertHomeWatermark";
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
@@ -458,15 +537,27 @@
     }
 
     function scoreClass(value) {
-      if (value > 0.15) return "up";
-      if (value < -0.15) return "down";
-      return "mixed";
+      const number = Number(value);
+      if (Number.isNaN(number) || number === 50) return "mixed";
+      return number > 50 ? "up" : "down";
+    }
+
+    function signedClass(value) {
+      return scoreClass(value);
+    }
+
+    function badgeClass(alert) {
+      if (alert.kind === "price") return "badge " + signedClass(alert.price_change_pct);
+      if (alert.kind === "news") return "badge " + signedClass(alert.sentiment_score);
+      const price = signedClass(alert.price_change_pct);
+      const news = signedClass(alert.sentiment_score);
+      return "badge " + (price === news ? price : "mixed");
     }
 
     function formatScore(value) {
       const number = Number(value);
-      const sign = number > 0 ? "+" : "";
-      return sign + number.toFixed(2);
+      if (value == null || Number.isNaN(number)) return "—";
+      return Math.round(number).toString();
     }
 
     function formatWhen(iso) {
@@ -494,14 +585,34 @@
       card.append(heading, paragraph);
     }
 
+    function articleBreakdown(article) {
+      const line = document.createElement("span");
+      line.className = "reason";
+      if (article.confidence == null || article.positive_pct == null) {
+        line.textContent = article.reason || "";
+        return line;
+      }
+      const percent = (value) => Number(value).toFixed(1) + "%";
+      const score = document.createElement("span");
+      score.className = "score " + scoreClass(article.sentiment_score);
+      score.textContent = "Sentiment score " + formatScore(article.sentiment_score) + "/100";
+      line.append(
+        score,
+        document.createTextNode(
+          " · Confidence " + percent(article.confidence)
+          + " (Positive " + percent(article.positive_pct)
+          + ", negative " + percent(article.negative_pct)
+          + ", neutral " + percent(article.neutral_pct) + ")"
+        ),
+      );
+      return line;
+    }
+
     function articleList(articles) {
       const list = document.createElement("ul");
       list.className = "articles";
       for (const article of articles) {
         const item = document.createElement("li");
-        const score = document.createElement("span");
-        score.className = "score " + scoreClass(article.sentiment_score);
-        score.textContent = formatScore(article.sentiment_score) + " ";
         const title = article.url ? document.createElement("a") : document.createElement("span");
         title.textContent = article.title;
         if (article.url) {
@@ -511,10 +622,10 @@
         }
         const source = document.createElement("span");
         source.textContent = article.source ? " (" + article.source + ")" : "";
-        const reason = document.createElement("span");
-        reason.className = "reason";
-        reason.textContent = article.reason || "";
-        item.append(score, title, source, reason);
+        const published = document.createElement("span");
+        published.className = "published";
+        published.textContent = article.published_at ? " · " + formatWhen(article.published_at) : "";
+        item.append(title, source, published, articleBreakdown(article));
         list.append(item);
       }
       return list;
@@ -536,7 +647,7 @@
         if (alert.sentiment_score != null) {
           const score = document.createElement("p");
           score.className = "combined " + scoreClass(alert.sentiment_score);
-          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score);
+          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score) + "/100";
           card.append(score);
         }
         if ((alert.articles || []).length) card.append(articleList(alert.articles));
@@ -549,7 +660,7 @@
         if (alert.sentiment_score != null) {
           const score = document.createElement("p");
           score.className = "combined " + scoreClass(alert.sentiment_score);
-          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score);
+          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score) + "/100";
           card.append(score);
         }
         if ((alert.articles || []).length) card.append(articleList(alert.articles));
@@ -586,7 +697,7 @@
         const head = document.createElement("div");
         head.className = "alert-head";
         const badge = document.createElement("span");
-        badge.className = "badge " + alert.kind;
+        badge.className = badgeClass(alert);
         badge.textContent = KIND_LABELS[alert.kind] || alert.kind;
         const symbol = symbolLink(alert.symbol);
         const when = document.createElement("span");
@@ -646,7 +757,7 @@
         sector.textContent = alert.sector || "—";
         const type = document.createElement("td");
         const badge = document.createElement("span");
-        badge.className = "badge " + alert.kind;
+        badge.className = badgeClass(alert);
         badge.textContent = KIND_LABELS[alert.kind] || alert.kind;
         type.append(badge);
         const when = document.createElement("td");
@@ -683,7 +794,7 @@
         parts.push("price change " + (Number(alert.price_move_threshold) * 100).toFixed(1) + "%");
       }
       if (alert.sentiment_threshold != null) {
-        parts.push("sentiment score " + Number(alert.sentiment_threshold).toFixed(2));
+        parts.push("sentiment score " + Math.round(Number(alert.sentiment_threshold)) + " points from 50");
       }
       if (!parts.length) return "";
       return "When this alert fired, the settings were " + parts.join(" and ") + ".";
@@ -738,11 +849,212 @@
 
     function applyRulesLine(rules) {
       const move = (Number(rules.price_move_threshold) * 100).toFixed(1);
-      const sentiment = Number(rules.sentiment_threshold).toFixed(2);
-      const scorer = rules.sentiment_scorer === "custom" ? "custom scoring" : "FinBERT";
-      document.querySelector("#rules").textContent =
-        `One alert per symbol per day: price at ${move}% versus the prior close, news when |sentiment| is at least ${sentiment} using ${scorer}, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
+      const sentiment = Math.round(Number(rules.sentiment_threshold));
+      document.querySelector("#rulesBefore").textContent =
+        `One alert per symbol per day: price at ${move}% versus the prior close, news when the `;
+      document.querySelector("#rulesAfter").textContent =
+        ` score is at least ${sentiment} points from 50, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
     }
+
+    function openFinbert() {
+      finbertModal.hidden = false;
+      document.querySelector("#finbertClose").focus();
+    }
+
+    function closeFinbert() {
+      finbertModal.hidden = true;
+    }
+
+    let symbolUniverseEntries = [];
+    let symbolUniverseLoad = null;
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function companyNameTokens(name) {
+      return String(name || "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    }
+
+    function typedTickerBypassesSuggestions(typed, matches) {
+      const query = String(typed || "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{1,5}(?:[.-][A-Z0-9]{1,4})?$/.test(query)) return false;
+      const rows = Array.isArray(matches) ? matches : [];
+      if (rows.some((row) => String(row.symbol || "").toUpperCase() === query)) return false;
+      const best = rows.reduce((bestScore, row) => Math.max(bestScore, Number(row && row.score) || 0), 0);
+      return best < 72;
+    }
+
+    async function ensureSymbolUniverseLoaded() {
+      if (symbolUniverseEntries.length) return symbolUniverseEntries;
+      if (symbolUniverseLoad) return symbolUniverseLoad;
+      symbolUniverseLoad = (async () => {
+        try {
+          const response = await fetch("/ui/symbol_universe.json");
+          if (!response.ok) throw new Error("symbol universe unavailable");
+          const payload = await response.json();
+          symbolUniverseEntries = Array.isArray(payload.symbols) ? payload.symbols : [];
+        } catch (err) {
+          symbolUniverseEntries = [];
+        }
+        return symbolUniverseEntries;
+      })();
+      return symbolUniverseLoad;
+    }
+
+    function rankSymbolUniverseMatches(query, limit = 8) {
+      const typed = String(query || "").trim().toUpperCase();
+      if (!typed) return [];
+      const scored = [];
+      for (const entry of symbolUniverseEntries) {
+        const symbol = String(entry.symbol || "").toUpperCase();
+        if (!symbol) continue;
+        const name = String(entry.name || "");
+        const nameUpper = name.toUpperCase();
+        const nameWords = companyNameTokens(nameUpper);
+        const aliases = (entry.aliases || []).map((alias) => String(alias || "").toUpperCase()).filter(Boolean);
+        let score = 0;
+        if (symbol === typed) score = 100;
+        else if (symbol.startsWith(typed)) score = 90 - Math.min(symbol.length, 40);
+        else if (aliases.some((alias) => alias === typed)) score = 85;
+        else if (aliases.some((alias) => alias.startsWith(typed))) score = 75;
+        else if (typed.length >= 2 && nameUpper.startsWith(typed)) score = 80 - Math.min(nameUpper.length, 40) * 0.05;
+        else if (typed.length >= 2 && nameWords.some((word) => word.startsWith(typed))) score = 72 - Math.min(typed.length, 12);
+        else if (typed.length >= 3 && nameWords.some((word) => word.includes(typed))) score = 55;
+        else if (typed.length >= 3 && nameUpper.includes(typed)) score = 45;
+        else continue;
+        scored.push({
+          symbol,
+          name,
+          exchange: String(entry.exchange || "").trim().toUpperCase(),
+          score,
+        });
+      }
+      scored.sort((left, right) => right.score - left.score || left.symbol.localeCompare(right.symbol));
+      return scored.slice(0, limit);
+    }
+
+    function bindSymbolSuggestInput(inputEl, opts = {}) {
+      const wrap = inputEl.closest(".symbol-suggest");
+      const frameEl = wrap.querySelector(".symbol-suggest-frame");
+      const listEl = wrap.querySelector(".symbol-suggest-list");
+      let activeIdx = -1;
+      let currentMatches = [];
+      const onEnter = typeof opts.onEnter === "function" ? opts.onEnter : null;
+
+      const hide = () => {
+        frameEl.hidden = true;
+        listEl.hidden = true;
+        listEl.innerHTML = "";
+        inputEl.setAttribute("aria-expanded", "false");
+        activeIdx = -1;
+        currentMatches = [];
+      };
+
+      const render = (matches) => {
+        currentMatches = Array.isArray(matches) ? matches : [];
+        activeIdx = currentMatches.length ? 0 : -1;
+        if (!currentMatches.length) {
+          hide();
+          return;
+        }
+        listEl.innerHTML = currentMatches.map((match, idx) => `
+          <button type="button" class="symbol-suggest-item${idx === activeIdx ? " is-active" : ""}" data-symbol="${escapeHtml(match.symbol)}" data-idx="${idx}">
+            <span class="sym">${escapeHtml(match.symbol)}</span>
+            <span class="meta">
+              <span class="name">${escapeHtml(match.name || "")}</span>
+              ${match.exchange ? `<span class="exch">${escapeHtml(match.exchange)}</span>` : ""}
+            </span>
+          </button>
+        `).join("");
+        listEl.hidden = false;
+        frameEl.hidden = false;
+        inputEl.setAttribute("aria-expanded", "true");
+        requestAnimationFrame(() => {
+          listEl.classList.toggle("is-scroll-y", listEl.scrollHeight > listEl.clientHeight + 1);
+        });
+      };
+
+      const applyActive = () => {
+        listEl.querySelectorAll(".symbol-suggest-item").forEach((button, idx) => {
+          button.classList.toggle("is-active", idx === activeIdx);
+        });
+      };
+
+      const choose = (symbol) => {
+        if (!symbol) return false;
+        inputEl.value = symbol;
+        hide();
+        return true;
+      };
+
+      const refresh = async () => {
+        await ensureSymbolUniverseLoaded();
+        if (document.activeElement !== inputEl) return;
+        render(rankSymbolUniverseMatches(inputEl.value));
+      };
+
+      inputEl.addEventListener("input", () => { refresh().catch(() => {}); });
+      inputEl.addEventListener("focus", () => { refresh().catch(() => {}); });
+      inputEl.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          if (!wrap.contains(document.activeElement)) hide();
+        }, 120);
+      });
+      listEl.addEventListener("mousedown", (event) => {
+        const button = event.target.closest(".symbol-suggest-item");
+        if (!button) return;
+        event.preventDefault();
+        const symbol = button.getAttribute("data-symbol");
+        choose(symbol);
+        if (onEnter) onEnter(symbol);
+      });
+      inputEl.addEventListener("keydown", (event) => {
+        const listOpen = !frameEl.hidden;
+        if (event.key === "ArrowDown" && listOpen && currentMatches.length) {
+          event.preventDefault();
+          activeIdx = Math.min(currentMatches.length - 1, activeIdx + 1);
+          applyActive();
+          return;
+        }
+        if (event.key === "ArrowUp" && listOpen && currentMatches.length) {
+          event.preventDefault();
+          activeIdx = Math.max(0, activeIdx - 1);
+          applyActive();
+          return;
+        }
+        if (event.key === "Escape") {
+          if (listOpen) hide();
+          return;
+        }
+        if (event.key !== "Enter") return;
+        const typed = (inputEl.value || "").trim().toUpperCase();
+        const keepTyped = typedTickerBypassesSuggestions(typed, currentMatches);
+        if (!keepTyped && listOpen && currentMatches.length && activeIdx >= 0) {
+          const pick = currentMatches[activeIdx];
+          if (pick) {
+            event.preventDefault();
+            choose(pick.symbol);
+            if (onEnter) onEnter(pick.symbol);
+          }
+          return;
+        }
+        if (keepTyped) hide();
+        if (onEnter && typed) {
+          event.preventDefault();
+          onEnter(typed);
+        }
+      });
+    }
+
+    const symbolInput = document.querySelector("#symbol");
+    bindSymbolSuggestInput(symbolInput, {
+      onEnter() { document.querySelector("#add-form").requestSubmit(); },
+    });
 
     document.querySelector("#add-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -778,11 +1090,7 @@
     function fillSettingsForm(rules) {
       if (!rules) return;
       document.querySelector("#pricePercent").value = (rules.price_move_threshold * 100).toFixed(1);
-      document.querySelector("#sentimentThreshold").value = Number(rules.sentiment_threshold).toFixed(2);
-      const selected = rules.sentiment_scorer === "custom" ? "custom" : "finbert";
-      document.querySelectorAll("input[name=sentimentScorer]").forEach((input) => {
-        input.checked = input.value === selected;
-      });
+      document.querySelector("#sentimentThreshold").value = Math.round(Number(rules.sentiment_threshold));
     }
 
     function setSettingsStatus(text, isError) {
@@ -840,8 +1148,13 @@
 
     document.querySelector("#detailClose").addEventListener("click", closeDetail);
     document.querySelector("#detailBackdrop").addEventListener("click", closeDetail);
+    document.querySelector("#finbertExplain").addEventListener("click", openFinbert);
+    document.querySelector("#finbertClose").addEventListener("click", closeFinbert);
+    document.querySelector("#finbertBackdrop").addEventListener("click", closeFinbert);
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !detailModal.hidden) closeDetail();
+      if (event.key !== "Escape") return;
+      if (!finbertModal.hidden) closeFinbert();
+      else if (!detailModal.hidden) closeDetail();
     });
 
     document.querySelector("#rebuild-form").addEventListener("submit", async (event) => {
@@ -874,31 +1187,6 @@
         status.textContent = err.message;
         status.className = "status error";
       }
-    });
-
-    document.querySelectorAll("input[name=sentimentScorer]").forEach((input) => {
-      input.addEventListener("change", async () => {
-        const status = document.querySelector("#scorerStatus");
-        status.textContent = "Saving…";
-        status.className = "status";
-        try {
-          const saved = await readJson(await fetch("/v1/settings/scorer", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sentiment_scorer: input.value }),
-          }));
-          currentRules = saved;
-          fillSettingsForm(saved);
-          applyRulesLine(saved);
-          status.textContent = saved.sentiment_scorer === "custom"
-            ? "Custom scoring will run on the next check."
-            : "FinBERT will run on the next check.";
-        } catch (err) {
-          status.textContent = err.message;
-          status.className = "status error";
-          fillSettingsForm(currentRules);
-        }
-      });
     });
 
     document.querySelector("#resetSettings").addEventListener("click", async () => {

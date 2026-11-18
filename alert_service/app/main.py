@@ -22,19 +22,12 @@ from .config import (
 )
 from .db import db
 from .sectors import ensure_symbol_sectors
-from .scoring import DEFAULT_SCORER, normalize_scorer
-from .store import (
-    add_symbol,
-    get_alert_rules,
-    list_alerts,
-    list_watchlist,
-    remove_symbol,
-    save_alert_rules,
-    save_sentiment_scorer,
-)
+from .store import add_symbol, get_alert_rules, list_alerts, list_watchlist, remove_symbol, save_alert_rules
 from .symbols import normalize_symbol
 
-_UI = Path(__file__).resolve().parents[1] / "ui" / "index.html"
+_UI_DIR = Path(__file__).resolve().parents[1] / "ui"
+_UI = _UI_DIR / "index.html"
+_SYMBOL_UNIVERSE = _UI_DIR / "symbol_universe.json"
 
 
 @asynccontextmanager
@@ -65,22 +58,17 @@ class AlertRulesIn(BaseModel):
     sentiment_threshold: float
 
 
-class ScorerIn(BaseModel):
-    sentiment_scorer: str
-
-
 def _settings_payload(rules: dict[str, float | str]) -> dict[str, float | int | str]:
     return {
         "price_move_threshold": rules["price_move_threshold"],
         "volume_spike_threshold": settings.volume_spike_threshold,
         "sentiment_threshold": rules["sentiment_threshold"],
-        "sentiment_scorer": rules["sentiment_scorer"],
+        "sentiment_scorer": "finbert",
         "news_lookback_hours": settings.news_lookback_hours,
         "fusion_window_hours": settings.fusion_window_hours,
         "display_timezone": settings.display_timezone,
         "price_move_threshold_default": DEFAULT_PRICE_MOVE_THRESHOLD,
         "sentiment_threshold_default": DEFAULT_SENTIMENT_THRESHOLD,
-        "sentiment_scorer_default": DEFAULT_SCORER,
     }
 
 
@@ -101,20 +89,15 @@ async def ui() -> FileResponse:
     return FileResponse(_UI)
 
 
+@app.get("/ui/symbol_universe.json")
+async def symbol_universe() -> FileResponse:
+    return FileResponse(_SYMBOL_UNIVERSE, media_type="application/json")
+
+
 @app.get("/v1/settings")
 async def public_settings() -> dict[str, float | int | str]:
     async with _pool().acquire() as conn:
         return _settings_payload(await get_alert_rules(conn))
-
-
-@app.put("/v1/settings/scorer")
-async def put_scorer(body: ScorerIn) -> dict[str, float | int | str]:
-    try:
-        scorer = normalize_scorer(body.sentiment_scorer)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    async with _pool().acquire() as conn:
-        return _settings_payload(await save_sentiment_scorer(conn, scorer))
 
 
 @app.put("/v1/settings")
