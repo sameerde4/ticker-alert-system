@@ -144,7 +144,11 @@
     .field span { font-size: 14px; font-weight: 650; }
     .field input { width: 160px; min-width: 0; }
     .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
-    .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .choice { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 650; }
+    .choice input { width: auto; min-width: 0; padding: 0; }
+    .scorer-choice { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .scorer-choice legend { font-size: 14px; font-weight: 650; padding: 0; }
+    #scorer-form { max-width: 720px; }
     h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
     table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
@@ -326,13 +330,33 @@
           <label class="field">
             <span>Sentiment score threshold</span>
             <input id="sentimentThreshold" type="number" min="0.01" max="1" step="0.01" inputmode="decimal" required />
-            <p class="hint">A headline opens a news alert when its absolute score reaches this value. Default is 0.34. One mild word tops out near 0.33.</p>
+            <p class="hint">A headline opens a news alert when its absolute score reaches this value. Default is 0.34. Both scorers use this same cutoff.</p>
           </label>
           <div class="settings-actions">
             <button type="submit" id="saveSettings">Save</button>
             <button type="button" id="resetSettings" class="ghost">Reset to default</button>
           </div>
           <p class="status" id="settingsStatus"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Sentiment scoring</h2>
+        <form id="scorer-form" class="settings-form">
+          <fieldset class="scorer-choice">
+            <legend>Headline scorer</legend>
+            <label class="choice">
+              <input type="radio" name="sentimentScorer" value="finbert" />
+              FinBERT
+            </label>
+            <p class="hint">FinBERT is the ProsusAI/finbert model. The first check downloads its weights. After that, PyTorch scores headlines on this computer. It is not a hosted analysis API, so there is no daily request cap. Each headline is cut off at 512 tokens. The model returns a probability for positive, negative, and neutral. The stored score is the positive probability minus the negative probability, from −1 to 1. The alert line names the winning class and those three probabilities.</p>
+            <label class="choice">
+              <input type="radio" name="sentimentScorer" value="custom" />
+              Custom scoring
+            </label>
+            <p class="hint">Custom scoring is the finance word list copied from Vajra Astra. It does not load a model. Each word is looked up for a signed weight. A negation in the previous three words flips that word. The score is the average weight of the matched words, multiplied by the number of hits divided by 3, and capped at ±1. One mild hit stays near ±0.33. The alert line names the matched words.</p>
+          </fieldset>
+          <p class="hint">A check uses only the selected scorer. The two scores are never averaged. Both use the same absolute threshold. The next check rescores every saved headline and can replace today’s alert.</p>
+          <p class="status" id="scorerStatus"></p>
         </form>
       </section>
       <section class="card">
@@ -715,8 +739,9 @@
     function applyRulesLine(rules) {
       const move = (Number(rules.price_move_threshold) * 100).toFixed(1);
       const sentiment = Number(rules.sentiment_threshold).toFixed(2);
+      const scorer = rules.sentiment_scorer === "custom" ? "custom scoring" : "FinBERT";
       document.querySelector("#rules").textContent =
-        `One alert per symbol per day: price at ${move}% versus the prior close, news when |sentiment| is at least ${sentiment}, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
+        `One alert per symbol per day: price at ${move}% versus the prior close, news when |sentiment| is at least ${sentiment} using ${scorer}, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
     }
 
     document.querySelector("#add-form").addEventListener("submit", async (event) => {
@@ -754,6 +779,10 @@
       if (!rules) return;
       document.querySelector("#pricePercent").value = (rules.price_move_threshold * 100).toFixed(1);
       document.querySelector("#sentimentThreshold").value = Number(rules.sentiment_threshold).toFixed(2);
+      const selected = rules.sentiment_scorer === "custom" ? "custom" : "finbert";
+      document.querySelectorAll("input[name=sentimentScorer]").forEach((input) => {
+        input.checked = input.value === selected;
+      });
     }
 
     function setSettingsStatus(text, isError) {
@@ -845,6 +874,31 @@
         status.textContent = err.message;
         status.className = "status error";
       }
+    });
+
+    document.querySelectorAll("input[name=sentimentScorer]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        const status = document.querySelector("#scorerStatus");
+        status.textContent = "Saving…";
+        status.className = "status";
+        try {
+          const saved = await readJson(await fetch("/v1/settings/scorer", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sentiment_scorer: input.value }),
+          }));
+          currentRules = saved;
+          fillSettingsForm(saved);
+          applyRulesLine(saved);
+          status.textContent = saved.sentiment_scorer === "custom"
+            ? "Custom scoring will run on the next check."
+            : "FinBERT will run on the next check.";
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "status error";
+          fillSettingsForm(currentRules);
+        }
+      });
     });
 
     document.querySelector("#resetSettings").addEventListener("click", async () => {
