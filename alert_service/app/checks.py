@@ -16,6 +16,7 @@ from .symbols import trades_all_day
 from .scoring import attach_scores
 from .sectors import ensure_symbol_sectors
 from .perplexity import complete_reasoning
+from .perplexity_catalog import known_model
 from .store import (
     clear_symbol_day,
     delete_all_alerts,
@@ -25,12 +26,14 @@ from .store import (
     load_bars,
     load_headlines,
     perplexity_api_key,
+    perplexity_model,
     upsert_alert,
     upsert_bars,
     upsert_headlines,
 )
 
 MAX_REBUILD_DAYS = 40
+_REASON_BATCH = 8
 
 
 async def _headlines_for_rules(conn, symbol: str, incoming: list[dict[str, Any]] | None, scorer: str):
@@ -194,12 +197,32 @@ async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str
         return drafts, "rules", None
     async with pool.acquire() as conn:
         saved = await perplexity_api_key(conn)
+        model = known_model(await perplexity_model(conn))
     key = saved or settings.perplexity_api_key.strip()
     if not key:
         return drafts, "rules", None
-    updated, error = await asyncio.to_thread(complete_reasoning, key, drafts)
-    if error:
-        return drafts, "rules", error
+    updated: list[Any] = []
+    errors: list[str] = []
+    # One response has to hold two sentences per alert. A five-day rebuild is too
+    # many for a single reply, so the call is split and each batch keeps its own result.
+    for start in range(0, len(drafts), _REASON_BATCH):
+        batch = drafts[start : start + _REASON_BATCH]
+        part, error = await asyncio.to_thread(complete_reasoning, key, batch, model)
+        by_key = {(draft.symbol, draft.bar_date): draft for draft in part}
+        updated.extend(by_key.get((draft.symbol, draft.bar_date), draft) for draft in batch)
+        if error:
+            errors.append(error)
+    missed = [draft for draft in updated if "model_label" not in draft.sections]
+    if missed and len(missed) < len(updated):
+        part, error = await asyncio.to_thread(complete_reasoning, key, missed, model)
+        by_key = {(draft.symbol, draft.bar_date): draft for draft in part}
+        updated = [by_key.get((draft.symbol, draft.bar_date), draft) for draft in updated]
+        if error:
+            errors.append(error)
+    if errors and not any("model_label" in draft.sections for draft in updated):
+        return updated, "rules", errors[0]
+    if errors:
+        return updated, "perplexity", errors[0]
     return updated, "perplexity", None
 
 

@@ -59,7 +59,9 @@ def reasoning_payload(drafts: list[AlertDraft]) -> dict[str, Any]:
     }
 
 
-def apply_reasoning(drafts: list[AlertDraft], parsed: dict[str, Any] | None) -> list[AlertDraft]:
+def apply_reasoning(
+    drafts: list[AlertDraft], parsed: dict[str, Any] | None, model: str | None = None
+) -> list[AlertDraft]:
     """Replace summaries that Perplexity returned. Unmatched alerts keep the rule sentence."""
     if not parsed:
         return drafts
@@ -75,24 +77,26 @@ def apply_reasoning(drafts: list[AlertDraft], parsed: dict[str, Any] | None) -> 
     updated = []
     for draft in drafts:
         text = by_key.get((draft.symbol.upper(), _date_text(draft.bar_date)))
-        updated.append(_with_summary(draft, text) if text else draft)
+        updated.append(_with_summary(draft, text, model) if text else draft)
     return updated
 
 
 def complete_reasoning(
-    api_key: str, drafts: list[AlertDraft]
+    api_key: str, drafts: list[AlertDraft], model: str | None = None
 ) -> tuple[list[AlertDraft], str | None]:
     """Call Perplexity. On failure, return the original drafts and a short error."""
     key = api_key.strip()
     if not key or not drafts:
         return drafts, None
+    from .perplexity_catalog import resolve_model
+
     payload = reasoning_payload(drafts)
     body = {
-        "model": settings.perplexity_model,
+        "model": resolve_model(model or settings.perplexity_model),
         "instructions": _INSTRUCTIONS,
         "input": json.dumps(payload),
         "temperature": 0.2,
-        "max_output_tokens": 1200,
+        "max_output_tokens": 4000,
         "tools": [],
         "response_format": {
             "type": "json_schema",
@@ -125,7 +129,7 @@ def complete_reasoning(
         parsed = _parse_json(text)
     except json.JSONDecodeError:
         return drafts, "Perplexity did not return JSON."
-    return apply_reasoning(drafts, parsed), None
+    return apply_reasoning(drafts, parsed, model), None
 
 
 def _alert_facts(draft: AlertDraft) -> dict[str, Any]:
@@ -158,12 +162,17 @@ def _headline_facts(article: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _with_summary(draft: AlertDraft, summary: str) -> AlertDraft:
+def _with_summary(draft: AlertDraft, summary: str, model: str | None = None) -> AlertDraft:
+    from .perplexity_catalog import known_model, model_label
+
     sections = dict(draft.sections)
     if draft.summary:
         sections["rules"] = draft.summary
     if draft.kind == "news_price":
         sections["synthesis"] = summary
+    if model:
+        sections["model"] = known_model(model)
+        sections["model_label"] = model_label(model)
     return replace(draft, summary=summary, sections=sections)
 
 
