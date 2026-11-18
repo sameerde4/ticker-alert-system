@@ -79,8 +79,11 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "Dots in the field mean a key is saved." in page.text
     assert "••••••••••••" in page.text
     assert "key !== SAVED_KEY_DOTS" in page.text
-    assert "togetherModel" in page.text
-    assert "togetherModel" in page.text
+    assert "function showSavedKey" in page.text
+    assert "function togetherModel" in page.text
+    assert "sections.model_label" in page.text
+    assert "width: 22ch" in page.text
+    assert "width: 36ch" in page.text
     assert "wrote Together." not in page.text
     assert "The percent still applies" not in page.text
     assert "<h2>Watchlist</h2>" in page.text

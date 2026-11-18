@@ -262,6 +262,31 @@ def test_the_model_name_is_stored_on_together_without_rewriting_price_or_news():
     assert sections["model_label"] == "ChatGPT · Balanced · openai/gpt-5.4-mini"
 
 
+def test_a_news_only_reply_keeps_the_rule_sentence_and_names_the_model():
+    updated = apply_reasoning(
+        [_draft("AAPL", "news")],
+        {"alerts": [{"symbol": "AAPL", "bar_date": "2026-11-16", "summary": "Apple news only."}]},
+        "google/gemini-3.6-flash",
+    )
+    sections = updated[0].sections
+    assert updated[0].summary == "Apple news only."
+    assert sections["rules"] == "AAPL rule sentence."
+    assert "synthesis" not in sections
+    assert sections["model"] == "google/gemini-3.6-flash"
+    assert sections["model_label"] == "Gemini · Balanced · google/gemini-3.6-flash"
+
+
+def test_a_reply_without_a_model_does_not_invent_a_label():
+    updated = apply_reasoning(
+        [_draft("AVGO")],
+        {"alerts": [{"symbol": "AVGO", "bar_date": "2026-11-16", "summary": "AVGO fell."}]},
+    )
+    assert updated[0].summary == "AVGO fell."
+    assert updated[0].sections["rules"] == "AVGO rule sentence."
+    assert "model" not in updated[0].sections
+    assert "model_label" not in updated[0].sections
+
+
 def test_one_failed_batch_keeps_its_rule_sentences(monkeypatch):
     def fake(key, drafts, model=None):
         if len(drafts) > 1:
