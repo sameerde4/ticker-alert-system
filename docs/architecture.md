@@ -44,7 +44,7 @@ The revised target keeps both engines and one feature list. Spark lands historic
 | Minute bars on Kafka, scored by the registered forest | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
 | Slice join, with news-only and price-only | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
-| Perplexity, two sentences, after the decision | Perplexity when a key is saved. Otherwise deterministic sentences, plus the thresholds saved on the alert |
+| Perplexity, two sentences, after the decision | Perplexity when a key is saved, using the model chosen in Settings. The model name is shown under Together. Otherwise deterministic sentences, plus the thresholds saved on the alert |
 | S3 lake, Spark training, model registry | Admin rebuild of the last 1–40 calendar days from Yahoo bars and stored headlines. Current settings are applied again, and previous alerts are deleted |
 | One alert per symbol per day | One row per symbol per day |
 

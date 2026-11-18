@@ -61,3 +61,11 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "docs/proposal-pipeline-audit.md" in service
     assert "This process does not run the Kafka, Flink, or Spark stack" in service
     assert "A saved Perplexity key writes the two-sentence alert reasoning" in service
+    assert "five ChatGPT, five OpenAI, or five Gemini" in service
+    assert "at most eight alerts" in service
+    assert "the field shows dots" in readme
+    assert "at most eight alerts in one reply" in readme
+    architecture = _text(DOCS / "architecture.md")
+    assert "The model name is shown under Together" in architecture
+    assert "batches of eight" in sources
+    assert "Together shows the name of the model that wrote it" in _text(DOCS / "proposal-pipeline-audit.md")

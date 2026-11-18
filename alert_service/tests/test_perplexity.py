@@ -2,14 +2,16 @@
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import date
 
 from fastapi.testclient import TestClient
 
 from app.checks import _reason
 from app.engine import AlertDraft
-from app.main import app
+from app.main import _settings_payload, app
 from app.perplexity import apply_reasoning, complete_reasoning, reasoning_payload
+from app.perplexity_catalog import known_model, model_groups, model_label, resolve_model
 
 
 def _draft(symbol: str, kind: str = "news_price") -> AlertDraft:
@@ -130,15 +132,19 @@ def test_a_successful_call_sends_the_json_schema_and_not_the_key(monkeypatch):
         return _Response()
 
     monkeypatch.setattr("app.perplexity.request.urlopen", fake_urlopen)
-    updated, error = complete_reasoning("pplx-secret", [_draft("AVGO")])
+    updated, error = complete_reasoning("pplx-secret", [_draft("AVGO")], "gpt-5.4-mini")
     assert error is None
     assert captured["url"] == "https://api.perplexity.ai/v1/agent"
     assert captured["auth"] == "Bearer pplx-secret"
+    assert captured["body"]["model"] == "openai/gpt-5.4-mini"
+    assert captured["body"]["max_output_tokens"] == 4000
     assert captured["body"]["response_format"]["json_schema"]["name"] == "alert_reasoning"
     sent = json.loads(captured["body"]["input"])
     assert sent["alerts"][0]["symbol"] == "AVGO"
     assert "pplx-secret" not in captured["body"]["input"]
     assert updated[0].summary.startswith("Broadcom fell")
+    assert updated[0].sections["model"] == "gpt-5.4-mini"
+    assert updated[0].sections["model_label"] == "OpenAI · Balanced · gpt-5.4-mini"
 
 
 class _Acquire:
@@ -166,8 +172,9 @@ class _Pool:
 def test_a_check_sends_the_saved_key_with_the_decided_alerts(monkeypatch):
     seen = {}
 
-    def fake(key, drafts):
+    def fake(key, drafts, model=None):
         seen["key"] = key
+        seen["model"] = model
         seen["symbols"] = [draft.symbol for draft in drafts]
         return drafts, None
 
@@ -175,8 +182,52 @@ def test_a_check_sends_the_saved_key_with_the_decided_alerts(monkeypatch):
     drafts, reasoning, error = asyncio.run(_reason(_Pool("pplx-saved"), [_draft("AVGO"), _draft("LITE")]))
     assert reasoning == "perplexity"
     assert error is None
-    assert seen == {"key": "pplx-saved", "symbols": ["AVGO", "LITE"]}
+    assert seen["key"] == "pplx-saved"
+    assert seen["symbols"] == ["AVGO", "LITE"]
+    assert seen["model"] == "openai/gpt-5.4-mini"
     assert drafts[0].symbol == "AVGO"
+
+
+def test_a_large_check_asks_for_reasoning_in_batches(monkeypatch):
+    seen = []
+
+    def fake(key, drafts, model=None):
+        seen.append([draft.symbol for draft in drafts])
+        return drafts, None
+
+    monkeypatch.setattr("app.checks.complete_reasoning", fake)
+    drafts = [_draft(f"S{index}") for index in range(9)]
+    updated, reasoning, error = asyncio.run(_reason(_Pool("pplx-saved"), drafts))
+    assert reasoning == "perplexity"
+    assert error is None
+    assert seen == [[f"S{index}" for index in range(8)], ["S8"]]
+    assert len(updated) == 9
+
+
+def test_a_dropped_alert_is_sent_again(monkeypatch):
+    calls = []
+
+    def fake(key, drafts, model=None):
+        from dataclasses import replace
+
+        calls.append([draft.symbol for draft in drafts])
+        if len(drafts) > 1:
+            first = replace(
+                drafts[0],
+                summary="AVGO rewritten.",
+                sections={**drafts[0].sections, "model_label": "ChatGPT"},
+            )
+            return [first], None
+        kept = drafts[0]
+        return [replace(kept, summary="LITE rewritten.", sections={**kept.sections, "model_label": "ChatGPT"})], None
+
+    monkeypatch.setattr("app.checks.complete_reasoning", fake)
+    updated, reasoning, error = asyncio.run(_reason(_Pool("pplx-saved"), [_draft("AVGO"), _draft("LITE")]))
+    assert reasoning == "perplexity"
+    assert error is None
+    assert calls == [["AVGO", "LITE"], ["LITE"]]
+    assert updated[0].summary == "AVGO rewritten."
+    assert updated[1].summary == "LITE rewritten."
 
 
 def test_a_check_without_a_key_keeps_the_rule_sentence(monkeypatch):
@@ -190,6 +241,73 @@ def test_a_check_without_a_key_keeps_the_rule_sentence(monkeypatch):
     assert reasoning == "rules"
     assert error is None
     assert drafts[0].summary == "AVGO rule sentence."
+
+
+def test_the_model_name_is_stored_on_together_without_rewriting_price_or_news():
+    draft = replace(
+        _draft("AVGO"),
+        sections={"price": "price text", "news": "news text", "synthesis": "AVGO rule sentence."},
+    )
+    updated = apply_reasoning(
+        [draft],
+        {"alerts": [{"symbol": "AVGO", "bar_date": "2026-11-16", "summary": "AVGO fell."}]},
+        "openai/gpt-5.4-mini",
+    )
+    sections = updated[0].sections
+    assert sections["price"] == "price text"
+    assert sections["news"] == "news text"
+    assert sections["synthesis"] == "AVGO fell."
+    assert sections["rules"] == "AVGO rule sentence."
+    assert sections["model"] == "openai/gpt-5.4-mini"
+    assert sections["model_label"] == "ChatGPT · Balanced · openai/gpt-5.4-mini"
+
+
+def test_one_failed_batch_keeps_its_rule_sentences(monkeypatch):
+    def fake(key, drafts, model=None):
+        if len(drafts) > 1:
+            return drafts, "timed out"
+        done = replace(
+            drafts[0],
+            summary="done",
+            sections={**drafts[0].sections, "model_label": "ChatGPT"},
+        )
+        return [done], None
+
+    monkeypatch.setattr("app.checks.complete_reasoning", fake)
+    drafts = [_draft(f"S{index}") for index in range(9)]
+    updated, reasoning, error = asyncio.run(_reason(_Pool("pplx-saved"), drafts))
+    assert reasoning == "perplexity"
+    assert error == "timed out"
+    assert updated[0].summary == "S0 rule sentence."
+    assert updated[-1].summary == "done"
+
+
+def test_public_settings_list_the_models_and_hide_the_key():
+    payload = _settings_payload(
+        {"price_move_threshold": 0.03, "sentiment_threshold": 25.0},
+        perplexity_key_saved=True,
+        perplexity_model_id="openai/gpt-5.4-mini",
+    )
+    assert "perplexity_api_key" not in payload
+    assert payload["perplexity_key_saved"] is True
+    assert payload["perplexity_model"] == "openai/gpt-5.4-mini"
+    groups = {group["group"]: len(group["models"]) for group in payload["perplexity_models"]}
+    assert groups == {"ChatGPT": 5, "OpenAI": 5, "Gemini": 5}
+
+
+def test_the_saved_label_names_the_dropdown_group():
+    assert model_label("openai/gpt-5.4-mini") == "ChatGPT · Balanced · openai/gpt-5.4-mini"
+    assert model_label("gpt-5.4-mini") == "OpenAI · Balanced · gpt-5.4-mini"
+    assert model_label("google/gemini-3.1-pro-preview") == "Gemini · Premium · google/gemini-3.1-pro-preview"
+
+
+def test_the_model_dropdown_has_five_chatgpt_openai_and_gemini_choices():
+    groups = {group["group"]: group["models"] for group in model_groups()}
+    assert [len(groups[name]) for name in ("ChatGPT", "OpenAI", "Gemini")] == [5, 5, 5]
+    assert known_model("gpt-5.4-mini") == "gpt-5.4-mini"
+    assert resolve_model("gpt-5.4-mini") == "openai/gpt-5.4-mini"
+    assert resolve_model("google/gemini-3.6-flash") == "google/gemini-3.6-flash"
+    assert resolve_model("not-a-model") == "openai/gpt-5.4-mini"
 
 
 def test_a_blank_perplexity_key_is_rejected_before_the_database():
