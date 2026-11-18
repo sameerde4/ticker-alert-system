@@ -13,9 +13,9 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | Watchlist of tickers, with a local symbol and company-name search. A suggestion fills the box. Add rejects a symbol that is not on that list and that Yahoo does not quote | **As-built** |
 | Yahoo daily bars into `daily_bars` | **As-built** |
 | Yahoo headlines scored with local FinBERT on a 0–100 scale, with confidence and a class breakdown | **As-built** |
-| Price alert: a stock's percent change versus the prior close, or the last 24 hours for a market that trades all day, with a volume-spike flag on stocks | **As-built** |
+| Price alert: while the market is open, the latest price versus the open; after the close, the close versus the prior close; the last 24 hours for a market that trades all day. A volume-spike flag is on the completed stock close | **As-built** |
 | News alert: absolute sentiment at or beyond the configured threshold, on that headline's trading day | **As-built** |
-| News plus price only when both rules fire for the same trading day | **As-built** |
+| News plus price only when the headline's price slice clears the same percent rule. Otherwise news with no price, or price with no headline lined up | **As-built** |
 | Plain-English summary from the alert fields, including the thresholds in force when it fired | **As-built** |
 | Home inbox of alerts since the app was last opened, plus a sortable alert history | **As-built** |
 | Saved price and sentiment thresholds | **As-built** |
@@ -29,7 +29,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | LLM explanation of an alert | **Target** |
 | Slack or email notification | **Target** |
 
-A normal check writes only the current Eastern trading day. The admin rebuild is the historical pass we can run now: it deletes saved alerts and reapplies the current rules to each session in the chosen window. It is not the proposal's training lake. Yahoo does not return a full headline archive, so a rebuild can rescore price history and only the headlines already stored or still on Yahoo's recent list.
+A normal check writes only the current Eastern trading day. The admin rebuild is the historical pass we can run now: it deletes saved alerts and reapplies the current rules to each session in the chosen window. It is not the proposal's training lake. Yahoo's quote-news list is newest first and can run out before the first day of a long window, especially for a busy ticker. A rebuild pages that list back through the window and scores each story for the trading day it was published. Sessions with no remaining headline stay price-only.
 
 ## Proposal audit
 
@@ -58,9 +58,9 @@ The deck never defines the window, the symbol match, or what happens when only o
 
 | Proposal | This app |
 |---|---|
-| Tick stream, anomaly within seconds | One daily close versus the prior close for stocks. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on stocks, not a separate detector |
+| Tick stream, anomaly within seconds | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
-| Correlation window, unspecified | Same Eastern trading day. Weekend stories stay with Friday. A next-morning story does not attach to the prior close |
+| Correlation window, unspecified | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
 | Alert only when both sides meet | Price only, news only, or news + price |
 | LLM summary | Deterministic sentences, plus the thresholds saved on the alert |
 | Historical lake and backtesting | Admin rebuild of the last 1–40 calendar days from Yahoo bars and stored headlines. Current settings are applied again, and previous alerts are deleted |
@@ -82,7 +82,7 @@ flowchart TB
     end
 
     subgraph rules [Alert rules]
-        BARS --> PRICE{Abs move versus prior close, or the last 24 hours}
+        BARS --> PRICE{Latest versus the open while the market is open, otherwise the close versus the prior close, or the last 24 hours}
         PRICE -->|at or beyond threshold| PA[Price alert]
         PRICE --> VOL[Volume versus recent average]
         VOL --> PA
@@ -243,7 +243,7 @@ sequenceDiagram
 
 ## Local schema
 
-`watchlist` holds the symbols a check will refresh. `symbols` caches the Yahoo sector name. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction and the FinBERT sentiment threshold. The default threshold is 25 points from 50. `alerts.kind` is `price`, `news`, or `news_price`.
+`watchlist` holds the symbols a check will refresh. `symbols` caches the history label: a Yahoo sector for a stock, the fund category for an ETF or mutual fund, and Crypto for a coin or a digital-asset fund. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction and the FinBERT sentiment threshold. The default threshold is 25 points from 50. `alerts.kind` is `price`, `news`, or `news_price`.
 
 One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
 

@@ -16,15 +16,19 @@ A headline is stored when its title names the ticker or the company's first dist
 
 | Alert | Rule | Default |
 |---|---|---|
-| Price | One alert for the day when a stock close clears the move rule versus the prior close. A 24-hour market such as BTC-USD uses the price change over the 24 hours before the check. A volume spike is noted for stocks when volume is at least 2× the recent average | 3% |
+| Price | While the market is open, one alert when the latest price clears the move rule versus the opening price. After the close, the close versus the prior close. A 24-hour market such as BTC-USD uses the price change over the 24 hours before the check. A volume spike is noted for stocks on the completed close, when volume is at least 2× the recent average | 3% |
 | News | One alert for that trading day when a headline's 0–100 FinBERT score is at least 25 points from 50. Each headline keeps its score, confidence, breakdown, and link. The alert score is the average | 25 points from 50 |
-| News + price | One alert for that trading day when the close and the same day's headlines both clear their rules | same rules |
+| News + price | One alert when a headline's slice clears the same percent rule. Before 9:30 AM Eastern the slice is the overnight gap. From 9:30 AM to 4:00 PM it is the open-to-latest move, which is the open-to-close move after the market closes. After 4:00 PM it is the close versus the prior close. A 24-hour market uses the four hours after the headline. The words "candidate reason" are used only on this card. A headline whose slice is flat stays news, with the price left blank. A close with no headline in the slice that moved stays a price card that says no headline lined up | same rules |
 
 A live check measures a symbol ending in `-USD`, such as BTC-USD, from hourly Yahoo prices: the latest price at the moment of the check, and the price 24 hours earlier. Those hourly prints are not saved as daily bars. Rebuild history still replays daily closes, so it does not reconstruct that rolling window.
 
-A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound still drops anything older than that. The admin rebuild on the Settings page deletes saved alerts and reruns these rules for each session in the last 1–40 calendar days.
+A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound still drops anything older than that. The admin rebuild on the Settings page deletes saved alerts and reruns these rules for each session in the last 1–40 calendar days. For that pass, Yahoo quote news is paged until a story is on or before the first day, or the list runs out. Each past session is judged as of 8:00 PM Eastern, so a headline published that day is scored for that day.
 
-The card time is when the condition was met, in US Eastern. A stock price move uses the 4:00 PM close because the feed is a daily bar. A 24-hour market uses the time the check measured the last 24 hours. News uses the earliest qualifying headline from that trading day. When both fire, the time is the later of those two. The symbol on a card, in the history table, and in the details title links to `https://finance.yahoo.com/quote/{symbol}`.
+A headline and a price share a card only when the headline's slice clears the same percent rule. That card calls the headline a candidate reason. A strong headline on a flat slice stays a news card, and the price change is left off. A close that moved, with no headline in the slice that moved, stays a price card that says no headline lined up. Sharing an Eastern day is not that claim.
+
+Alert History fills a blank sector from the same Yahoo profile. A stock uses `sector`. An ETF or mutual fund uses the category of the product it targets (`category`, or the fund overview when the quote profile leaves that blank). A cryptocurrency, and a fund in the Digital Assets category, is labeled Crypto.
+
+The card time is when the condition was met, in US Eastern. During market hours a stock price move uses the time of the check and the change from the open. After 4:00 PM it uses the close. A 24-hour market uses the time the check measured the last 24 hours. News uses the earliest qualifying headline from that trading day. When both fire, the time is the later of those two. The details title shows the symbol, the alert type, and that time on one line. The symbol on a card, in the history table, and in the details title links to `https://finance.yahoo.com/quote/{symbol}`.
 
 ## Target sources
 
