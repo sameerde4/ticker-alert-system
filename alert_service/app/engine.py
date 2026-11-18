@@ -5,7 +5,7 @@ The rules run on stored daily bars and scored headlines. They do not call a vend
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -63,6 +63,72 @@ def eastern_date(moment: datetime) -> date:
 def session_close(bar_date: date) -> datetime:
     """US cash-session close on the East Coast. Daily bars do not carry an intraday tick."""
     return datetime.combine(bar_date, time(16, 0), tzinfo=EASTERN)
+
+
+def cash_session_open(now: datetime) -> bool:
+    """True from 9:30 AM to 4:00 PM Eastern on a weekday."""
+    moment = _as_utc(now).astimezone(EASTERN)
+    if moment.weekday() >= 5:
+        return False
+    clock = moment.timetz().replace(tzinfo=None)
+    return time(9, 30) <= clock < time(16, 0)
+
+
+def headline_price_slice(published: datetime) -> str:
+    """Which part of the session a stock headline can explain.
+
+    Before 9:30 AM Eastern the story can explain the overnight gap. From 9:30 to
+    4:00 PM it can explain the regular session. After the close, and on the weekend,
+    it can explain that session's close versus the prior close.
+    """
+    local = _as_utc(published).astimezone(EASTERN)
+    if local.weekday() >= 5:
+        return "close"
+    if local.time() < time(9, 30):
+        return "gap"
+    if local.time() < time(16, 0):
+        return "session"
+    return "close"
+
+
+SLICE_LABEL = {
+    "gap": "the overnight gap, from the prior close to the open",
+    "session": "the regular session, from the open to the 4:00 PM close",
+    "close": "the close versus the prior close",
+    "headline": "the four hours after the headline",
+    "live": "the regular session so far, from the open to the latest price",
+}
+
+
+def move_after_headline(
+    points: list[tuple[datetime, float]],
+    published: datetime,
+    now: datetime,
+    *,
+    hours: int = 4,
+) -> tuple[float, float, float, datetime] | None:
+    """Price change from the print at a headline to the print up to four hours later."""
+    start_at = _as_utc(published)
+    end_limit = min(_as_utc(now), start_at + timedelta(hours=hours))
+    usable: list[tuple[datetime, float]] = []
+    for stamp, price in points:
+        when = _as_utc(stamp)
+        if when <= end_limit and price > 0:
+            usable.append((when, float(price)))
+    if not usable:
+        return None
+    earlier = [item for item in usable if item[0] <= start_at]
+    if not earlier:
+        return None
+    start_stamp, start_px = max(earlier, key=lambda item: item[0])
+    later = [item for item in usable if item[0] >= start_stamp + timedelta(minutes=30)]
+    if not later:
+        return None
+    end_stamp, end_px = max(later, key=lambda item: item[0])
+    change = price_change_pct(end_px, start_px)
+    if change is None:
+        return None
+    return change, end_px, start_px, end_stamp
 
 
 def headline_session(published: datetime) -> date:
@@ -170,14 +236,30 @@ def price_summary(
     price_move_threshold: float,
     volume_spike_threshold: float,
     trailing_24h: bool = False,
+    from_open: bool = False,
+    move_label: str | None = None,
 ) -> str:
-    if trailing_24h:
+    if move_label:
+        comparison = (
+            f"{symbol} moved {_direction(change)} {_fmt_pct(change)}, "
+            f"from {_money(prior_close)} to {_money(latest_close)}, over {move_label}. "
+            f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule."
+        )
+    elif trailing_24h:
         comparison = (
             f"{symbol} is at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
             f"from {_money(prior_close)} 24 hours before this check. "
             f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
             "over the last 24 hours."
         )
+    elif from_open:
+        comparison = (
+            f"{symbol} is at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
+            f"from the open of {_money(prior_close)}. "
+            f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
+            "from the open while the market is open."
+        )
+        return comparison + " The volume spike is measured at the close."
     else:
         comparison = (
             f"{symbol} closed at {_money(latest_close)}, {_direction(change)} {_fmt_pct(change)} "
@@ -185,6 +267,8 @@ def price_summary(
             f"This fired because the move is at or beyond the {price_move_threshold * 100:.1f}% rule "
             "versus the prior close."
         )
+    if move_label:
+        return comparison
     if trailing_24h:
         return comparison + " Volume uses the cash-session average, so the spike rule was not applied."
     if ratio is None:
@@ -230,9 +314,9 @@ def news_summary(
     return text
 
 
-def together_summary(symbol: str, change: float, news_score: float) -> str:
-    """How the price move and the news score sit next to each other."""
-    price_side = f"the close moved {_direction(change)} {_fmt_pct(change)}"
+def together_summary(symbol: str, change: float, news_score: float, move_label: str) -> str:
+    """How a headline sits next to the price slice it can explain."""
+    price_side = f"the move was {_direction(change)} {_fmt_pct(change)}"
     news_side = f"news sentiment is {_score(news_score)} ({_tone(news_score)})"
     if change > 0 and news_score > 57.5 or change < 0 and news_score < 42.5:
         relation = "The two sides agree in direction."
@@ -241,8 +325,9 @@ def together_summary(symbol: str, change: float, news_score: float) -> str:
     else:
         relation = "The news side is mixed, so it does not clearly confirm or contradict the price move."
     return (
-        f"Both the price rule and the news rule fired for {symbol}, so this is one news + price alert "
-        f"for the day. On price, {price_side}. On news, {news_side}. {relation}"
+        f"Both the price rule and the news rule fired for {symbol}, so this is one news + price alert. "
+        f"The headline is a candidate reason for {move_label}. On price, {price_side}. "
+        f"On news, {news_side}. {relation}"
     )
 
 
@@ -265,6 +350,7 @@ def evaluate_symbol(
     news_lookback_hours: int,
     fusion_window_hours: int,
     trailing_24h: dict[str, float] | None = None,
+    live_session: dict[str, float] | None = None,
 ) -> list[AlertDraft]:
     """Build the one alert a symbol should show for this check.
 
@@ -305,6 +391,38 @@ def evaluate_symbol(
                     price_move_threshold=price_move_threshold,
                     volume_spike_threshold=volume_spike_threshold,
                     trailing_24h=True,
+                ),
+                triggered_at=_as_utc(now),
+                price_move_threshold=price_move_threshold,
+                sentiment_threshold=sentiment_threshold,
+            )
+    elif live_session is not None:
+        latest_close = float(live_session["price"])
+        prior_close = float(live_session["open"])
+        change = price_change_pct(latest_close, prior_close)
+        if change is not None and abs(change) >= price_move_threshold:
+            price_draft = AlertDraft(
+                kind="price",
+                symbol=symbol,
+                bar_date=session_day,
+                headline_id=None,
+                price_change_pct=change,
+                latest_close=latest_close,
+                prior_close=prior_close,
+                volume_ratio=None,
+                volume_spike=False,
+                sentiment_score=None,
+                headline_title=None,
+                summary=price_summary(
+                    symbol,
+                    change,
+                    latest_close,
+                    prior_close,
+                    None,
+                    False,
+                    price_move_threshold=price_move_threshold,
+                    volume_spike_threshold=volume_spike_threshold,
+                    from_open=True,
                 ),
                 triggered_at=_as_utc(now),
                 price_move_threshold=price_move_threshold,
@@ -356,84 +474,222 @@ def evaluate_symbol(
         sentiment_threshold,
         lambda published: published >= news_cutoff and headline_session(published) == session_day,
     )
-    session_change = change if trailing_24h is not None or (ordered and ordered[-1]["dt"] == session_day) else None
-    if trailing_24h is not None:
-        shown_latest = latest_close
-        shown_prior = prior_close
-    elif session_change is not None and len(ordered) >= 2:
-        shown_latest = float(ordered[-1]["close"])
-        shown_prior = float(ordered[-2]["close"])
-    else:
-        shown_latest = None
-        shown_prior = None
-    news_draft: AlertDraft | None = None
-    if news_items:
-        articles = tuple(article_view(item) for item in news_items)
+    measured = _headline_windows(
+        news_items,
+        ordered=ordered,
+        session_day=session_day,
+        trailing_24h=trailing_24h,
+        live_session=live_session,
+        now=now,
+    )
+    clearing = [row for row in measured if abs(row["change"]) >= price_move_threshold]
+    if clearing:
+        clearing.sort(key=lambda row: abs(row["change"]), reverse=True)
+        chosen_change = clearing[0]["change"]
+        chosen_name = clearing[0]["name"]
+        matched = [row for row in clearing if row["name"] == chosen_name]
+        articles = tuple(article_view(row["item"]) for row in matched)
         news_score = combined_sentiment([article["sentiment_score"] for article in articles])
-        news_draft = AlertDraft(
-            kind="news",
-            symbol=symbol,
-            bar_date=price_draft.bar_date if price_draft else session_day,
-            headline_id=None,
-            price_change_pct=session_change,
-            latest_close=shown_latest,
-            prior_close=shown_prior,
-            volume_ratio=None,
-            volume_spike=False,
-            sentiment_score=news_score,
-            headline_title=None,
-            summary=news_summary(
+        move_label = SLICE_LABEL["live"] if live_session is not None and chosen_name == "session" else SLICE_LABEL[chosen_name]
+        end_px = matched[0]["end"] if chosen_name != "close" else float(matched[0]["end"])
+        start_px = matched[0]["start"]
+        # The close slice keeps the daily price write-up, including the volume note.
+        if chosen_name == "close" and price_draft is not None:
+            price_text = price_draft.summary
+            shown_change = price_draft.price_change_pct if price_draft.price_change_pct is not None else chosen_change
+            shown_end = price_draft.latest_close if price_draft.latest_close is not None else end_px
+            shown_start = price_draft.prior_close if price_draft.prior_close is not None else start_px
+            volume_ratio_value = price_draft.volume_ratio
+            volume_spike_value = price_draft.volume_spike
+        else:
+            shown_change = chosen_change
+            shown_end = end_px
+            shown_start = start_px
+            volume_ratio_value = None
+            volume_spike_value = False
+            price_text = price_summary(
                 symbol,
-                list(articles),
-                sentiment_threshold=sentiment_threshold,
-                news_lookback_hours=news_lookback_hours,
-            ),
-            articles=articles,
-            triggered_at=earliest_published(news_items),
-            price_move_threshold=price_move_threshold,
+                shown_change,
+                shown_end,
+                shown_start,
+                None,
+                False,
+                price_move_threshold=price_move_threshold,
+                volume_spike_threshold=volume_spike_threshold,
+                move_label=move_label,
+            )
+        news_text = news_summary(
+            symbol,
+            list(articles),
             sentiment_threshold=sentiment_threshold,
+            news_lookback_hours=news_lookback_hours,
         )
-
-    if price_draft is not None and news_draft is not None and change is not None:
-        synthesis = together_summary(symbol, change, float(news_draft.sentiment_score if news_draft.sentiment_score is not None else 50.0))
+        synthesis = together_summary(symbol, shown_change, news_score, move_label)
+        left_out = len(news_items) - len(matched)
+        if left_out:
+            synthesis += (
+                f" {left_out} other headline(s) from a different part of the day were left off, "
+                "because they line up with a different price."
+            )
+        known_at = max(row["known_at"] for row in matched)
         return [
             AlertDraft(
                 kind="news_price",
                 symbol=symbol,
-                bar_date=price_draft.bar_date,
+                bar_date=session_day,
                 headline_id=None,
-                price_change_pct=price_draft.price_change_pct,
-                latest_close=price_draft.latest_close,
-                prior_close=price_draft.prior_close,
-                volume_ratio=price_draft.volume_ratio,
-                volume_spike=price_draft.volume_spike,
-                sentiment_score=news_draft.sentiment_score,
+                price_change_pct=shown_change,
+                latest_close=shown_end,
+                prior_close=shown_start,
+                volume_ratio=volume_ratio_value,
+                volume_spike=volume_spike_value,
+                sentiment_score=news_score,
                 headline_title=None,
                 summary=synthesis,
-                articles=news_draft.articles,
-                sections={
-                    "price": price_draft.summary,
-                    "news": news_draft.summary,
-                    "synthesis": synthesis,
-                },
-                triggered_at=(
-                    max(_as_utc(now), earliest_published(news_items))
-                    if trailing_24h is not None
-                    else condition_met_at(
-                        kind="news_price",
-                        bar_date=price_draft.bar_date,
-                        headlines=news_items,
-                    )
-                ),
+                articles=articles,
+                sections={"price": price_text, "news": news_text, "synthesis": synthesis},
+                triggered_at=known_at,
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
             )
         ]
+
+    if price_draft is not None and news_items:
+        articles = tuple(article_view(item) for item in news_items)
+        note = " No headline lined up with this move."
+        return [
+            replace(
+                price_draft,
+                summary=price_draft.summary + note,
+                articles=articles,
+            )
+        ]
     if price_draft is not None:
         return [price_draft]
-    if news_draft is not None:
-        return [news_draft]
+    if news_items:
+        articles = tuple(article_view(item) for item in news_items)
+        news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        return [
+            AlertDraft(
+                kind="news",
+                symbol=symbol,
+                bar_date=session_day,
+                headline_id=None,
+                price_change_pct=None,
+                latest_close=None,
+                prior_close=None,
+                volume_ratio=None,
+                volume_spike=False,
+                sentiment_score=news_score,
+                headline_title=None,
+                summary=news_summary(
+                    symbol,
+                    list(articles),
+                    sentiment_threshold=sentiment_threshold,
+                    news_lookback_hours=news_lookback_hours,
+                ),
+                articles=articles,
+                triggered_at=earliest_published(news_items),
+                price_move_threshold=price_move_threshold,
+                sentiment_threshold=sentiment_threshold,
+            )
+        ]
     return []
+
+
+def _headline_windows(
+    headlines: list[dict[str, Any]],
+    *,
+    ordered: list[dict[str, Any]],
+    session_day: date,
+    trailing_24h: dict[str, Any] | None,
+    live_session: dict[str, float] | None,
+    now: datetime,
+) -> list[dict[str, Any]]:
+    """One measured price window for each headline that has prices to compare."""
+    if live_session is not None:
+        moves = _live_slices(ordered, session_day, live_session)
+    elif trailing_24h is None:
+        moves = _session_slices(ordered, session_day)
+    else:
+        moves = None
+    points = list((trailing_24h or {}).get("points") or [])
+    measured = []
+    for item in headlines:
+        if trailing_24h is not None:
+            window = move_after_headline(points, item["published_at"], now)
+            if window is None:
+                continue
+            change, end_px, start_px, known_at = window
+            measured.append(
+                {
+                    "item": item,
+                    "name": "headline",
+                    "change": change,
+                    "end": end_px,
+                    "start": start_px,
+                    "known_at": known_at,
+                }
+            )
+            continue
+        if moves is None:
+            continue
+        name = headline_price_slice(item["published_at"])
+        change, end_px, start_px = moves[name]
+        if change is None:
+            continue
+        bar_date = session_day if live_session is not None else ordered[-1]["dt"]
+        if name == "gap":
+            known_at = datetime.combine(bar_date, time(9, 30), tzinfo=EASTERN)
+        elif live_session is not None and name == "session":
+            known_at = now
+        else:
+            known_at = session_close(bar_date)
+        known_at = max(_as_utc(known_at), _as_utc(item["published_at"]))
+        measured.append(
+            {
+                "item": item,
+                "name": name,
+                "change": change,
+                "end": end_px,
+                "start": start_px,
+                "known_at": known_at,
+            }
+        )
+    return measured
+
+
+def _live_slices(
+    ordered: list[dict[str, Any]], session_day: date, live: dict[str, float]
+) -> dict[str, tuple[float | None, float, float]]:
+    """Gap from the prior close, and the session so far from the open to the latest price."""
+    open_px = float(live["open"])
+    last = float(live["price"])
+    completed = [row for row in ordered if row["dt"] < session_day]
+    prior_px = float(completed[-1]["close"]) if completed else None
+    gap = price_change_pct(open_px, prior_px) if prior_px is not None else None
+    baseline = prior_px if prior_px is not None else open_px
+    return {
+        "gap": (gap, open_px, baseline),
+        "session": (price_change_pct(last, open_px), last, open_px),
+        "close": (None, last, baseline),
+    }
+
+
+def _session_slices(
+    ordered: list[dict[str, Any]], session_day: date
+) -> dict[str, tuple[float | None, float, float]] | None:
+    if len(ordered) < 2 or ordered[-1]["dt"] != session_day:
+        return None
+    today = ordered[-1]
+    prior_px = float(ordered[-2]["close"])
+    open_px = float(today.get("open") or today["close"])
+    close_px = float(today["close"])
+    return {
+        "gap": (price_change_pct(open_px, prior_px), open_px, prior_px),
+        "session": (price_change_pct(close_px, open_px), close_px, open_px),
+        "close": (price_change_pct(close_px, prior_px), close_px, prior_px),
+    }
 
 
 def _qualifying_headlines(headlines, sentiment_threshold: float, in_window) -> list[dict[str, Any]]:

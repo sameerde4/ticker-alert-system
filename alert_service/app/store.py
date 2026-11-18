@@ -398,11 +398,14 @@ async def save_sector(conn: asyncpg.Connection, symbol: str, sector: str | None)
 
 
 async def _fill_missing_price_changes(conn: asyncpg.Connection, alerts: list[dict[str, Any]]) -> None:
-    """News-only rows store a move when the check had bars. Older rows borrow the day's close."""
+    """Older price rows with a blank move borrow that day's close. A news card leaves the price blank on purpose."""
     symbols = [
         alert["symbol"]
         for alert in alerts
-        if alert.get("price_change_pct") is None and alert.get("bar_date") and alert.get("symbol")
+        if alert.get("kind") != "news"
+        and alert.get("price_change_pct") is None
+        and alert.get("bar_date")
+        and alert.get("symbol")
     ]
     if not symbols:
         return
@@ -419,7 +422,7 @@ async def _fill_missing_price_changes(conn: asyncpg.Connection, alerts: list[dic
     for row in rows:
         series.setdefault(row["symbol"], []).append((row["dt"], float(row["close"])))
     for alert in alerts:
-        if alert.get("price_change_pct") is not None:
+        if alert.get("kind") == "news" or alert.get("price_change_pct") is not None:
             continue
         bar_date = alert.get("bar_date")
         if isinstance(bar_date, str):

@@ -1,8 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.engine import evaluate_symbol, headline_session
-from app.prices import price_versus_24h
+from app.engine import cash_session_open, evaluate_symbol, headline_price_slice, headline_session
+from app.prices import open_to_last, price_versus_24h, sector_label
 from app.symbols import known_universe_symbol, trades_all_day
 
 NOW = datetime(2026, 11, 17, 21, 30, tzinfo=UTC)
@@ -11,9 +11,9 @@ NOW = datetime(2026, 11, 17, 21, 30, tzinfo=UTC)
 def _bars(latest_close, prior_close, latest_volume=2_000_000, prior_volume=1_000_000):
     today = NOW.date()
     return [
-        {"dt": today - timedelta(days=2), "close": prior_close, "volume": prior_volume},
-        {"dt": today - timedelta(days=1), "close": prior_close, "volume": prior_volume},
-        {"dt": today, "close": latest_close, "volume": latest_volume},
+        {"dt": today - timedelta(days=2), "open": prior_close, "close": prior_close, "volume": prior_volume},
+        {"dt": today - timedelta(days=1), "open": prior_close, "close": prior_close, "volume": prior_volume},
+        {"dt": today, "open": prior_close, "close": latest_close, "volume": latest_volume},
     ]
 
 
@@ -61,7 +61,9 @@ def test_news_alert_without_a_price_move():
     drafts = _evaluate(_bars(100, 100), [_headline()])
     assert [d.kind for d in drafts] == ["news"]
     assert drafts[0].sentiment_score == 17
-    assert drafts[0].price_change_pct == 0.0
+    assert drafts[0].price_change_pct is None
+    assert drafts[0].latest_close is None
+    assert "candidate reason" not in drafts[0].summary
     assert "Combined sentiment is 17/100" in drafts[0].summary
     assert "plunge" in drafts[0].articles[0]["reason"]
     assert drafts[0].articles[0]["published_at"] == (NOW - timedelta(hours=2)).isoformat()
@@ -98,6 +100,7 @@ def test_price_and_news_become_one_alert():
     alert = drafts[0]
     assert alert.sentiment_score == 17
     assert "news + price" in alert.sections["synthesis"]
+    assert "candidate reason" in alert.summary
     assert alert.triggered_at == datetime(2026, 11, 17, 16, 0, tzinfo=ZoneInfo("America/New_York"))
     assert "+4.00%" in alert.sections["price"]
     assert "Combined sentiment is 17/100" in alert.sections["news"]
@@ -141,7 +144,8 @@ def test_next_morning_story_stays_on_its_own_day():
     )
     assert [draft.kind for draft in drafts] == ["news"]
     assert drafts[0].bar_date == today
-    assert drafts[0].price_change_pct == 0.0
+    assert drafts[0].price_change_pct is None
+    assert "candidate reason" not in drafts[0].summary
     assert drafts[0].sentiment_score == 75
 
 
@@ -234,11 +238,12 @@ def test_a_stock_without_todays_bar_does_not_invent_a_price_alert():
     assert _evaluate(bars, []) == []
 
 
-def test_around_the_clock_news_and_price_use_the_check_time():
+def test_around_the_clock_news_and_price_use_the_hours_after_the_headline():
+    published = NOW - timedelta(hours=2)
     drafts = evaluate_symbol(
         symbol="BTC-USD",
         bars=[],
-        headlines=[_headline(published_at=NOW - timedelta(hours=2))],
+        headlines=[_headline(published_at=published)],
         now=NOW,
         price_move_threshold=0.03,
         volume_spike_threshold=2.0,
@@ -246,11 +251,287 @@ def test_around_the_clock_news_and_price_use_the_check_time():
         sentiment_threshold=25,
         news_lookback_hours=72,
         fusion_window_hours=48,
-        trailing_24h={"price": 105, "prior_price": 100},
+        trailing_24h={
+            "price": 105,
+            "prior_price": 100,
+            "points": [
+                (published - timedelta(hours=1), 100),
+                (published, 100),
+                (NOW, 105),
+            ],
+        },
     )
     assert [draft.kind for draft in drafts] == ["news_price"]
-    assert drafts[0].triggered_at == NOW
     assert drafts[0].price_change_pct == 0.05
+    assert "four hours after the headline" in drafts[0].summary
+    assert drafts[0].triggered_at == NOW
+
+
+def test_a_crypto_headline_does_not_borrow_the_trailing_day():
+    published = NOW - timedelta(hours=2)
+    drafts = evaluate_symbol(
+        symbol="BTC-USD",
+        bars=[],
+        headlines=[_headline(published_at=published)],
+        now=NOW,
+        price_move_threshold=0.03,
+        volume_spike_threshold=2.0,
+        volume_lookback=20,
+        sentiment_threshold=25,
+        news_lookback_hours=72,
+        fusion_window_hours=48,
+        trailing_24h={
+            "price": 110,
+            "prior_price": 100,
+            "points": [
+                (published, 100),
+                (NOW, 100),
+            ],
+        },
+    )
+    assert [draft.kind for draft in drafts] == ["price"]
+    assert drafts[0].price_change_pct == 0.10
+    assert "No headline lined up with this move." in drafts[0].summary
+    assert "candidate reason" not in drafts[0].summary
+    assert drafts[0].articles[0]["title"] == "Shares plunge after guidance cut"
+
+
+def test_a_premarket_headline_lines_up_with_the_overnight_gap():
+    eastern = ZoneInfo("America/New_York")
+    today = NOW.astimezone(eastern).date()
+    bars = _bars(100, 100)
+    bars[-1]["open"] = 105
+    bars[-1]["close"] = 105
+    published = datetime(today.year, today.month, today.day, 8, 15, tzinfo=eastern)
+    drafts = _evaluate(bars, [_headline(published_at=published, sentiment_score=80)])
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert drafts[0].price_change_pct == 0.05
+    assert "overnight gap" in drafts[0].summary
+
+
+def test_a_midday_headline_does_not_explain_the_overnight_gap():
+    eastern = ZoneInfo("America/New_York")
+    today = NOW.astimezone(eastern).date()
+    bars = _bars(106, 100)
+    bars[-1]["open"] = 106
+    published = datetime(today.year, today.month, today.day, 13, 0, tzinfo=eastern)
+    drafts = _evaluate(bars, [_headline(published_at=published, sentiment_score=80, title="Shares surge at noon")])
+    assert [draft.kind for draft in drafts] == ["price"]
+    assert drafts[0].price_change_pct == 0.06
+    assert "No headline lined up with this move." in drafts[0].summary
+    assert "candidate reason" not in drafts[0].summary
+    assert "overnight gap" not in drafts[0].summary
+
+
+def test_an_after_close_headline_lines_up_with_the_close():
+    eastern = ZoneInfo("America/New_York")
+    today = NOW.astimezone(eastern).date()
+    published = datetime(today.year, today.month, today.day, 16, 40, tzinfo=eastern)
+    drafts = _evaluate(_bars(104, 100), [_headline(published_at=published)])
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert "close versus the prior close" in drafts[0].summary
+    assert drafts[0].price_change_pct == 0.04
+
+
+def test_headline_price_slice_follows_the_eastern_clock():
+    eastern = ZoneInfo("America/New_York")
+    assert headline_price_slice(datetime(2026, 11, 17, 8, 0, tzinfo=eastern)) == "gap"
+    assert headline_price_slice(datetime(2026, 11, 17, 9, 30, tzinfo=eastern)) == "session"
+    assert headline_price_slice(datetime(2026, 11, 17, 16, 1, tzinfo=eastern)) == "close"
+    assert headline_price_slice(datetime(2026, 11, 14, 11, 0, tzinfo=eastern)) == "close"
+
+
+def test_sector_label_uses_the_stock_sector_fund_category_or_crypto():
+    assert sector_label({"quoteType": "EQUITY", "sector": "Technology"}, "NVDA") == "Technology"
+    assert sector_label({"quoteType": "CRYPTOCURRENCY"}, "BTC-USD") == "Crypto"
+    assert sector_label({}, "ETH-USD") == "Crypto"
+    assert sector_label({"quoteType": "ETF", "category": "Technology"}, "SMH") == "Technology"
+    assert sector_label({"quoteType": "ETF", "category": "Large Blend"}, "SPY") == "Large Blend"
+    assert sector_label({"quoteType": "MUTUALFUND", "category": "Large Blend"}, "VFIAX") == "Large Blend"
+    assert sector_label({"quoteType": "ETF", "category": "Digital Assets"}, "IBIT") == "Crypto"
+    assert sector_label({"quoteType": "ETF"}, "SMH") is None
+    assert sector_label({}, "AAPL") is None
+
+
+def test_a_past_evening_scores_that_days_headlines():
+    eastern = ZoneInfo("America/New_York")
+    day = datetime(2026, 11, 13, tzinfo=eastern)
+    session = day.date()
+    prior = session - timedelta(days=1)
+    drafts = evaluate_symbol(
+        symbol="LITE",
+        bars=[
+            {"dt": prior, "open": 100, "close": 100, "volume": 1_000_000},
+            {"dt": session, "open": 100, "close": 90, "volume": 1_000_000},
+        ],
+        headlines=[
+            _headline(
+                title="Lumentum sinks after outlook cut",
+                published_at=datetime(2026, 11, 13, 11, 0, tzinfo=eastern),
+                sentiment_score=10,
+            )
+        ],
+        now=datetime(2026, 11, 13, 20, 0, tzinfo=eastern),
+        price_move_threshold=0.03,
+        volume_spike_threshold=2.0,
+        volume_lookback=20,
+        sentiment_threshold=25,
+        news_lookback_hours=72,
+        fusion_window_hours=48,
+    )
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert drafts[0].bar_date == session
+    assert drafts[0].sentiment_score == 10
+    assert drafts[0].price_change_pct == -0.1
+
+
+def test_cash_session_is_the_weekday_regular_hours():
+    eastern = ZoneInfo("America/New_York")
+    assert cash_session_open(datetime(2026, 11, 17, 9, 30, tzinfo=eastern))
+    assert cash_session_open(datetime(2026, 11, 17, 11, 0, tzinfo=eastern))
+    assert cash_session_open(datetime(2026, 11, 17, 15, 59, tzinfo=eastern))
+    assert not cash_session_open(datetime(2026, 11, 17, 9, 29, tzinfo=eastern))
+    assert not cash_session_open(datetime(2026, 11, 17, 16, 0, tzinfo=eastern))
+    assert not cash_session_open(datetime(2026, 11, 14, 11, 0, tzinfo=eastern))
+
+
+def test_open_to_last_uses_the_opening_print():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 11, 0, tzinfo=eastern)
+    points = [
+        (datetime(2026, 11, 17, 8, 0, tzinfo=eastern), 90.0, 91.0),
+        (datetime(2026, 11, 17, 9, 30, tzinfo=eastern), 100.0, 101.0),
+        (datetime(2026, 11, 17, 10, 45, tzinfo=eastern), 104.0, 106.0),
+    ]
+    assert open_to_last(points, now) == {"price": 106.0, "open": 100.0}
+    assert open_to_last(points, datetime(2026, 11, 17, 14, 0, tzinfo=eastern)) is None
+    assert open_to_last(points, datetime(2026, 11, 17, 16, 5, tzinfo=eastern)) is None
+    assert open_to_last(points, datetime(2026, 11, 14, 11, 0, tzinfo=eastern)) is None
+    yesterday = [
+        (datetime(2026, 11, 16, 10, 0, tzinfo=eastern), 80.0, 80.0),
+        (datetime(2026, 11, 17, 10, 40, tzinfo=eastern), 100.0, 104.0),
+    ]
+    assert open_to_last(yesterday, now) == {"price": 104.0, "open": 100.0}
+
+
+def _live(now, **overrides):
+    args = dict(
+        symbol="AAPL",
+        bars=[
+            {"dt": now.date() - timedelta(days=1), "open": 100, "close": 100, "volume": 1_000_000},
+            {"dt": now.date(), "open": 100, "close": 101, "volume": 1_000_000},
+        ],
+        headlines=[],
+        now=now,
+        price_move_threshold=0.03,
+        volume_spike_threshold=2.0,
+        volume_lookback=20,
+        sentiment_threshold=25,
+        news_lookback_hours=72,
+        fusion_window_hours=48,
+        live_session={"price": 106, "open": 100},
+    )
+    args.update(overrides)
+    return evaluate_symbol(**args)
+
+
+def test_a_live_session_alerts_from_the_open_before_the_close():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 11, 0, tzinfo=eastern)
+    drafts = _live(now)
+    assert [draft.kind for draft in drafts] == ["price"]
+    assert drafts[0].price_change_pct == 0.06
+    assert drafts[0].triggered_at == now.astimezone(UTC)
+    assert "from the open of $100.00" in drafts[0].summary
+    assert "prior close" not in drafts[0].summary
+
+
+def test_a_small_move_from_the_open_does_not_borrow_the_partial_close():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 11, 0, tzinfo=eastern)
+    today = now.date()
+    drafts = _live(
+        now,
+        bars=[
+            {"dt": today - timedelta(days=1), "open": 100, "close": 100, "volume": 1_000_000},
+            {"dt": today, "open": 109, "close": 110, "volume": 1_000_000},
+        ],
+        live_session={"price": 110, "open": 109},
+    )
+    assert drafts == []
+
+
+def test_a_down_move_from_the_open_is_timed_at_the_check():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 14, 15, tzinfo=eastern)
+    drafts = _live(now, live_session={"price": 94, "open": 100})
+    assert [draft.kind for draft in drafts] == ["price"]
+    assert drafts[0].price_change_pct == -0.06
+    assert drafts[0].triggered_at == now.astimezone(UTC)
+    assert "down -6.00%" in drafts[0].summary
+
+
+def test_a_premarket_headline_uses_the_gap_while_the_session_is_open():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 11, 0, tzinfo=eastern)
+    today = now.date()
+    drafts = _live(
+        now,
+        bars=[
+            {"dt": today - timedelta(days=1), "open": 100, "close": 100, "volume": 1_000_000},
+        ],
+        live_session={"price": 111, "open": 110},
+        headlines=[
+            _headline(
+                title="Apple jumps before the open",
+                published_at=datetime(2026, 11, 17, 8, 0, tzinfo=eastern),
+                sentiment_score=90,
+            )
+        ],
+    )
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert "overnight gap" in drafts[0].summary
+    assert drafts[0].price_change_pct == 0.1
+
+
+def test_the_larger_live_slice_wins_when_the_gap_and_the_session_both_clear():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 12, 0, tzinfo=eastern)
+    today = now.date()
+    drafts = _live(
+        now,
+        bars=[{"dt": today - timedelta(days=1), "open": 100, "close": 100, "volume": 1_000_000}],
+        live_session={"price": 130, "open": 110},
+        headlines=[
+            _headline(
+                title="Apple jumps before the open",
+                published_at=datetime(2026, 11, 17, 8, 0, tzinfo=eastern),
+                sentiment_score=90,
+            ),
+            _headline(
+                id="22222222-2222-2222-2222-222222222222",
+                title="Apple extends the gain after the open",
+                published_at=datetime(2026, 11, 17, 11, 0, tzinfo=eastern),
+                sentiment_score=88,
+            ),
+        ],
+    )
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert "regular session so far" in drafts[0].summary
+    assert abs(drafts[0].price_change_pct - (130 / 110 - 1)) < 1e-9
+
+
+def test_a_midday_headline_can_match_the_move_from_the_open():
+    eastern = ZoneInfo("America/New_York")
+    now = datetime(2026, 11, 17, 12, 0, tzinfo=eastern)
+    published = datetime(2026, 11, 17, 11, 0, tzinfo=eastern)
+    drafts = _live(
+        now,
+        headlines=[_headline(title="Apple slides after a supply note", published_at=published, sentiment_score=10)],
+    )
+    assert [draft.kind for draft in drafts] == ["news_price"]
+    assert "regular session so far" in drafts[0].summary
+    assert drafts[0].triggered_at == now.astimezone(UTC)
 
 
 def test_continuous_markets_and_the_local_symbol_list():

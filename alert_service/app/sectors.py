@@ -1,4 +1,4 @@
-"""Cache Yahoo sector labels so alert history does not look them up on every view."""
+"""Cache sector labels so alert history does not look them up on every view."""
 
 from __future__ import annotations
 
