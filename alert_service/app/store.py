@@ -9,6 +9,7 @@ from typing import Any
 import asyncpg
 
 from .config import DEFAULT_PRICE_MOVE_THRESHOLD, DEFAULT_SENTIMENT_THRESHOLD, settings
+from .perplexity_catalog import known_model
 from .scoring import DEFAULT_SCORER, normalize_scorer
 from .engine import AlertDraft
 
@@ -105,6 +106,18 @@ async def perplexity_api_key(conn: asyncpg.Connection) -> str:
     return str(row["perplexity_api_key"] or "").strip()
 
 
+async def perplexity_model(conn: asyncpg.Connection) -> str:
+    """The saved model, rewritten to an id the Perplexity agent accepts."""
+    row = await conn.fetchrow("SELECT perplexity_model FROM app_settings WHERE id")
+    raw = ""
+    if row is not None:
+        try:
+            raw = row["perplexity_model"]
+        except (KeyError, IndexError):
+            raw = ""
+    return known_model(str(raw or "") or settings.perplexity_model)
+
+
 async def save_perplexity_api_key(conn: asyncpg.Connection, api_key: str) -> bool:
     """Store a key. Returns whether a key is now saved. An empty string clears it."""
     cleaned = api_key.strip()
@@ -121,6 +134,26 @@ async def save_perplexity_api_key(conn: asyncpg.Connection, api_key: str) -> boo
         cleaned,
     )
     return bool(cleaned)
+
+
+async def save_perplexity_model(conn: asyncpg.Connection, model_id: str) -> str:
+    """Store the dropdown choice. Returns the id that will be sent to Perplexity."""
+    chosen = known_model(model_id)
+    await conn.execute(
+        """
+        INSERT INTO app_settings (
+          id, price_move_threshold, sentiment_threshold, perplexity_model
+        )
+        VALUES (TRUE, $1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET
+          perplexity_model = EXCLUDED.perplexity_model,
+          updated_at = NOW()
+        """,
+        settings.price_move_threshold,
+        settings.sentiment_threshold,
+        chosen,
+    )
+    return chosen
 
 
 async def save_sentiment_scorer(conn: asyncpg.Connection, scorer: str) -> dict[str, float | str]:

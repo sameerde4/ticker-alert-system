@@ -22,15 +22,18 @@ from .config import (
 )
 from .db import db
 from .sectors import ensure_symbol_sectors
+from .perplexity_catalog import known_model, model_groups
 from .store import (
     add_symbol,
     get_alert_rules,
     list_alerts,
     list_watchlist,
     perplexity_api_key,
+    perplexity_model,
     remove_symbol,
     save_alert_rules,
     save_perplexity_api_key,
+    save_perplexity_model,
 )
 from .prices import yahoo_lists_symbol
 from .symbols import known_universe_symbol, normalize_symbol
@@ -71,11 +74,12 @@ class AlertRulesIn(BaseModel):
 class PerplexityKeyIn(BaseModel):
     perplexity_api_key: str | None = None
     clear_perplexity_api_key: bool = False
+    perplexity_model: str | None = None
 
 
 def _settings_payload(
-    rules: dict[str, float | str], *, perplexity_key_saved: bool
-) -> dict[str, float | int | str | bool]:
+    rules: dict[str, float | str], *, perplexity_key_saved: bool, perplexity_model_id: str
+) -> dict[str, object]:
     return {
         "price_move_threshold": rules["price_move_threshold"],
         "volume_spike_threshold": settings.volume_spike_threshold,
@@ -87,14 +91,17 @@ def _settings_payload(
         "price_move_threshold_default": DEFAULT_PRICE_MOVE_THRESHOLD,
         "sentiment_threshold_default": DEFAULT_SENTIMENT_THRESHOLD,
         "perplexity_key_saved": perplexity_key_saved,
+        "perplexity_model": perplexity_model_id,
+        "perplexity_models": model_groups(),
     }
 
 
-async def _public_settings() -> dict[str, float | int | str | bool]:
+async def _public_settings() -> dict[str, object]:
     async with _pool().acquire() as conn:
         rules = await get_alert_rules(conn)
         saved = bool(await perplexity_api_key(conn) or settings.perplexity_api_key.strip())
-    return _settings_payload(rules, perplexity_key_saved=saved)
+        chosen = await perplexity_model(conn)
+    return _settings_payload(rules, perplexity_key_saved=saved, perplexity_model_id=chosen)
 
 
 def _pool():
@@ -120,12 +127,12 @@ async def symbol_universe() -> FileResponse:
 
 
 @app.get("/v1/settings")
-async def public_settings() -> dict[str, float | int | str | bool]:
+async def public_settings() -> dict[str, object]:
     return await _public_settings()
 
 
 @app.put("/v1/settings")
-async def put_settings(body: AlertRulesIn) -> dict[str, float | int | str | bool]:
+async def put_settings(body: AlertRulesIn) -> dict[str, object]:
     try:
         price = price_fraction_from_percent(body.price_move_percent)
         sentiment = sentiment_threshold_value(body.sentiment_threshold)
@@ -137,22 +144,29 @@ async def put_settings(body: AlertRulesIn) -> dict[str, float | int | str | bool
 
 
 @app.put("/v1/settings/perplexity")
-async def put_perplexity_key(body: PerplexityKeyIn) -> dict[str, float | int | str | bool]:
+async def put_perplexity_key(body: PerplexityKeyIn) -> dict[str, object]:
+    key: str | None
     if body.clear_perplexity_api_key:
         key = ""
     elif body.perplexity_api_key and body.perplexity_api_key.strip():
         key = body.perplexity_api_key.strip()
         if len(key) > 512 or any(char.isspace() for char in key):
             raise HTTPException(status_code=400, detail="Enter the Perplexity API key with no spaces.")
+    elif body.perplexity_model and body.perplexity_model.strip():
+        key = None
     else:
         raise HTTPException(status_code=400, detail="Enter a Perplexity API key, or clear the saved key.")
+    chosen = known_model(body.perplexity_model) if body.perplexity_model else None
     async with _pool().acquire() as conn:
-        await save_perplexity_api_key(conn, key)
+        if key is not None:
+            await save_perplexity_api_key(conn, key)
+        if chosen is not None:
+            await save_perplexity_model(conn, chosen)
     return await _public_settings()
 
 
 @app.post("/v1/settings/reset")
-async def reset_settings() -> dict[str, float | int | str | bool]:
+async def reset_settings() -> dict[str, object]:
     async with _pool().acquire() as conn:
         await save_alert_rules(
             conn,

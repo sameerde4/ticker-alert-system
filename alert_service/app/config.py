@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     display_timezone: str = "America/New_York"
     # Saved in the database from Settings. This env value is used only when that column is empty.
     perplexity_api_key: str = ""
-    perplexity_model: str = "perplexity/sonar"
+    perplexity_model: str = "openai/gpt-5.4-mini"
     perplexity_timeout_s: float = 45
 
 
