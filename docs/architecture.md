@@ -2,7 +2,7 @@
 
 Local decision-support service that turns a watchlist into one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
 
-The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, and a model registry for anomaly thresholds. This repository documents that target and runs a smaller path that matches the Vajra Astra shape: FastAPI, PostgreSQL, Yahoo daily bars, and the keyword sentiment scorer.
+The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, and a model registry for anomaly thresholds. This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, and a choice between FinBERT and the keyword sentiment scorer.
 
 There is no shared package with Vajra Astra Capital. Common logic lives in this repo as its own copy.
 
@@ -12,7 +12,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 |---|---|
 | Watchlist of tickers | **As-built** |
 | Yahoo daily bars into `daily_bars` | **As-built** |
-| Yahoo headlines scored with the keyword lexicon | **As-built** |
+| Yahoo headlines scored with FinBERT or the keyword lexicon. The Settings tab chooses one. FinBERT is the default | **As-built** |
 | Price alert: percent change versus the prior close, with a volume-spike flag | **As-built** |
 | News alert: absolute sentiment at or beyond the configured threshold, on that headline's trading day | **As-built** |
 | News plus price only when both rules fire for the same trading day | **As-built** |
@@ -23,7 +23,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | Symbol links to the Yahoo Finance quote, from Home, History, and the details title | **As-built** |
 | Live tick websocket (Alpaca / Databento) | **Target** |
 | Kafka topics and Flink windowed VWAP / volume z-score | **Target** |
-| FinBERT inference | **Target** |
+| FinBERT inference on each headline, locally, during a check | **As-built**. Not a live score stream |
 | Isolation Forest training on the historical lake | **Target** |
 | Correlation of a tick anomaly and a sentiment score inside a sub-minute window | **Target** |
 | LLM explanation of an alert | **Target** |
@@ -59,7 +59,7 @@ The deck never defines the window, the symbol match, or what happens when only o
 | Proposal | This app |
 |---|---|
 | Tick stream, anomaly within seconds | One daily close versus the prior close. A volume spike is a note, not a separate detector |
-| FinBERT score stream | Keyword score, default absolute threshold 0.34 |
+| FinBERT score stream | FinBERT on each headline during a check, or the keyword lexicon. The Settings tab picks one. There is no score stream |
 | Correlation window, unspecified | Same Eastern trading day. Weekend stories stay with Friday. A next-morning story does not attach to the prior close |
 | Alert only when both sides meet | Price only, news only, or news + price |
 | LLM summary | Deterministic sentences, plus the thresholds saved on the alert |
@@ -77,7 +77,7 @@ flowchart TB
         RUN --> PX[Yahoo daily bars]
         RUN --> NW[Yahoo headlines]
         PX --> BARS[(daily_bars)]
-        NW --> SCORE[Keyword sentiment -1 to 1]
+        NW --> SCORE[FinBERT or the keyword lexicon]
         SCORE --> NEWS[(headlines)]
     end
 
@@ -243,6 +243,8 @@ sequenceDiagram
 
 ## Local schema
 
-`watchlist` holds the symbols a check will refresh. `symbols` caches the Yahoo sector name. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction and the sentiment threshold. `alerts.kind` is `price`, `news`, or `news_price`.
+`watchlist` holds the symbols a check will refresh. `symbols` caches the Yahoo sector name. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction, the sentiment threshold, and `sentiment_scorer` (`finbert` or `custom`). `alerts.kind` is `price`, `news`, or `news_price`.
 
 One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
+
+`sentiment_scorer` is `finbert` or `custom`. FinBERT loads ProsusAI/finbert on this machine and stores positive minus negative. Custom scoring uses the keyword lexicon and stores that lexicon score. A check rescores saved headlines with the selected scorer only.

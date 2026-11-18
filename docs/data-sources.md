@@ -6,9 +6,9 @@
 |---|---|---|
 | Daily OHLCV | Yahoo Finance through `yfinance` | `daily_bars` |
 | Headlines | Yahoo quote news, then Yahoo Search when quote news is empty | `headlines` |
-| Sentiment | Keyword lexicon with a 3-token negation window, score in [-1, 1] | `headlines.sentiment_score` |
+| Sentiment | The selected scorer, score in [-1, 1]. FinBERT is the default. Custom scoring is the keyword lexicon | `headlines.sentiment_score` |
 
-The sentiment scorer is a local copy of the same weighted lexicon used for company-news scoring in Vajra Astra. This repo does not import that code.
+FinBERT is the ProsusAI/finbert model, loaded locally with PyTorch. The first use downloads the weights. Later scoring does not call a hosted analysis API. The model returns positive, negative, and neutral probabilities. The stored score is positive minus negative. Custom scoring is a local copy of the weighted lexicon used for company-news scoring in Vajra Astra. A negation in the previous three tokens flips a matched word, and the score is damped by `hits / 3`. A check uses one scorer for every headline and never averages the two. This repo does not import Vajra Astra.
 
 A single mild keyword caps near ±0.33 because the score is scaled by `hits / 3`. The default news threshold is 0.34, so one mild word does not open an alert. A strong word such as "plunge" does.
 
@@ -28,4 +28,4 @@ The card time is when the condition was met, in US Eastern. A price move uses th
 
 ## Target sources
 
-The class design adds a live tick websocket (Alpaca or Databento), a newswire, historical OHLCV and labeled headlines in object storage, FinBERT in place of the keyword scorer, and an Isolation Forest trained on the curated lake. Those feeds are not connected in this slice.
+The class design adds a live tick websocket (Alpaca or Databento), a newswire, historical OHLCV and labeled headlines in object storage, and an Isolation Forest trained on the curated lake. Those feeds are not connected. FinBERT itself does run here, on each headline during a check, from weights stored on this machine. The class deck’s FinBERT was a live score stream, which this slice does not have.

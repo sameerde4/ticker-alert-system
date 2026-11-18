@@ -6,6 +6,8 @@ FastAPI process for the Ticker Alert System. Setup, the migration, and the run c
 |---|---|
 | `app/engine.py` | Price, news, and fusion rules |
 | `app/sentiment.py` | Keyword sentiment lexicon |
+| `app/finbert.py` | Local ProsusAI/finbert score, positive minus negative |
+| `app/scoring.py` | Selects FinBERT or the lexicon. Does not average them |
 | `app/prices.py` | Yahoo daily bars |
 | `app/news.py` | Yahoo headlines |
 | `app/checks.py` | One watchlist pass, and the admin rebuild of recent sessions |
