@@ -3,7 +3,7 @@ import pytest
 from datetime import date
 
 from app.checks import rebuild_start
-from app.config import price_fraction_from_percent, sentiment_threshold_value
+from app.config import DEFAULT_SENTIMENT_THRESHOLD, price_fraction_from_percent, sentiment_threshold_value
 
 
 def test_rebuild_window_includes_today():
@@ -33,7 +33,8 @@ def test_price_percent_rejects_zero_and_over_one_hundred():
         price_fraction_from_percent(101)
 
 
-def test_sentiment_threshold_stays_on_the_score_scale():
-    assert sentiment_threshold_value(0.34) == pytest.approx(0.34)
+def test_sentiment_threshold_is_points_from_neutral():
+    assert sentiment_threshold_value(25) == pytest.approx(25)
+    assert DEFAULT_SENTIMENT_THRESHOLD == pytest.approx(25)
     with pytest.raises(ValueError):
-        sentiment_threshold_value(1.5)
+        sentiment_threshold_value(51)

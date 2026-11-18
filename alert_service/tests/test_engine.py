@@ -21,7 +21,7 @@ def _headline(**overrides):
         "title": "Shares plunge after guidance cut",
         "source": "Reuters",
         "published_at": NOW - timedelta(hours=2),
-        "sentiment_score": -0.67,
+        "sentiment_score": 17,
     }
     item.update(overrides)
     return item
@@ -36,7 +36,7 @@ def _evaluate(bars, headlines):
         price_move_threshold=0.03,
         volume_spike_threshold=2.0,
         volume_lookback=20,
-        sentiment_threshold=0.34,
+        sentiment_threshold=25,
         news_lookback_hours=72,
         fusion_window_hours=48,
     )
@@ -58,10 +58,11 @@ def test_price_alert_includes_volume_spike():
 def test_news_alert_without_a_price_move():
     drafts = _evaluate(_bars(100, 100), [_headline()])
     assert [d.kind for d in drafts] == ["news"]
-    assert drafts[0].sentiment_score == -0.67
+    assert drafts[0].sentiment_score == 17
     assert drafts[0].price_change_pct == 0.0
-    assert "Combined sentiment is -0.67" in drafts[0].summary
+    assert "Combined sentiment is 17/100" in drafts[0].summary
     assert "plunge" in drafts[0].articles[0]["reason"]
+    assert drafts[0].articles[0]["published_at"] == (NOW - timedelta(hours=2)).isoformat()
     assert drafts[0].triggered_at == NOW - timedelta(hours=2)
 
 
@@ -71,38 +72,38 @@ def test_mixed_headlines_become_one_news_alert():
         title="Shares surge to a record",
         source="Bloomberg",
         url="https://example.com/surge",
-        sentiment_score=0.5,
+        sentiment_score=75,
         published_at=NOW - timedelta(hours=1),
     )
     drafts = _evaluate(
         _bars(100, 100),
-        [_headline(url="https://example.com/plunge", sentiment_score=-0.5), positive],
+        [_headline(url="https://example.com/plunge", sentiment_score=25), positive],
     )
     news = [d for d in drafts if d.kind == "news"]
     assert len(news) == 1
-    assert news[0].sentiment_score == 0.0
+    assert news[0].sentiment_score == 50
     assert "disagree" in news[0].summary
     assert [article["url"] for article in news[0].articles] == [
         "https://example.com/surge",
         "https://example.com/plunge",
     ]
-    assert [article["sentiment_score"] for article in news[0].articles] == [0.5, -0.5]
+    assert [article["sentiment_score"] for article in news[0].articles] == [75, 25]
 
 
 def test_price_and_news_become_one_alert():
     drafts = _evaluate(_bars(104, 100), [_headline()])
     assert [d.kind for d in drafts] == ["news_price"]
     alert = drafts[0]
-    assert alert.sentiment_score == -0.67
+    assert alert.sentiment_score == 17
     assert "news + price" in alert.sections["synthesis"]
     assert alert.triggered_at == datetime(2026, 11, 17, 16, 0, tzinfo=ZoneInfo("America/New_York"))
     assert "+4.00%" in alert.sections["price"]
-    assert "Combined sentiment is -0.67" in alert.sections["news"]
+    assert "Combined sentiment is 17/100" in alert.sections["news"]
     assert alert.summary == alert.sections["synthesis"]
 
 
 def test_old_headline_does_not_fuse_or_alert():
-    old = _headline(published_at=NOW - timedelta(days=10), sentiment_score=-0.9)
+    old = _headline(published_at=NOW - timedelta(days=10), sentiment_score=5)
     drafts = _evaluate(_bars(104, 100), [old])
     assert [d.kind for d in drafts] == ["price"]
 
@@ -110,7 +111,7 @@ def test_old_headline_does_not_fuse_or_alert():
 def test_alert_remembers_the_rules_that_fired_it():
     drafts = _evaluate(_bars(104, 100), [_headline()])
     assert drafts[0].price_move_threshold == 0.03
-    assert drafts[0].sentiment_threshold == 0.34
+    assert drafts[0].sentiment_threshold == 25
 
 
 def test_previous_session_is_left_alone():
@@ -134,12 +135,12 @@ def test_next_morning_story_stays_on_its_own_day():
     published = datetime(today.year, today.month, today.day, 9, 17, tzinfo=eastern)
     drafts = _evaluate(
         bars,
-        [_headline(title="Lumentum gains 4% as optical stocks jump", published_at=published, sentiment_score=0.5)],
+        [_headline(title="Lumentum gains 4% as optical stocks jump", published_at=published, sentiment_score=75)],
     )
     assert [draft.kind for draft in drafts] == ["news"]
     assert drafts[0].bar_date == today
     assert drafts[0].price_change_pct == 0.0
-    assert drafts[0].sentiment_score == 0.5
+    assert drafts[0].sentiment_score == 75
 
 
 def test_headline_session_uses_the_eastern_publish_day():
@@ -153,6 +154,6 @@ def test_headline_session_uses_the_eastern_publish_day():
 
 
 def test_mild_sentiment_stays_below_the_news_threshold():
-    mild = _headline(sentiment_score=0.2, title="Company hosts an investor day")
+    mild = _headline(sentiment_score=60, title="Company hosts an investor day")
     drafts = _evaluate(_bars(100, 100), [mild])
     assert drafts == []

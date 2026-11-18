@@ -36,7 +36,7 @@ async def _headlines_for_rules(conn, symbol: str, incoming: list[dict[str, Any]]
         pending = []
         for item in incoming:
             copy = dict(item)
-            copy.setdefault("sentiment_score", 0.0)
+            copy.setdefault("sentiment_score", 50.0)
             pending.append(copy)
         await upsert_headlines(conn, symbol, pending)
     stored = await load_headlines(conn, symbol)
@@ -73,7 +73,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 await upsert_bars(conn, symbol, bars)
             stored_bars = await load_bars(conn, symbol)
             stored_news = await _headlines_for_rules(
-                conn, symbol, headlines, str(rules["sentiment_scorer"])
+                conn, symbol, headlines, "finbert"
             )
             drafts = evaluate_symbol(
                 symbol=symbol,
@@ -121,7 +121,7 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
         async with pool.acquire() as conn:
             bars = await load_bars(conn, symbol)
             headlines = await _headlines_for_rules(
-                conn, symbol, None, str(rules["sentiment_scorer"])
+                conn, symbol, None, "finbert"
             )
             saved_days = await list_alert_days(conn, symbol)
         by_day = {row["bar_date"]: row for row in saved_days}
@@ -203,7 +203,7 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
                 await upsert_bars(conn, symbol, bars)
             stored_bars = await load_bars(conn, symbol)
             stored_news = await _headlines_for_rules(
-                conn, symbol, headlines, str(rules["sentiment_scorer"])
+                conn, symbol, headlines, "finbert"
             )
             sessions: set[date] = set()
             for bar in stored_bars:

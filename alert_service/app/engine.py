@@ -123,30 +123,38 @@ def _money(value: float) -> str:
 
 def combined_sentiment(scores: list[float]) -> float:
     if not scores:
-        return 0.0
+        return 50.0
     return sum(scores) / len(scores)
 
 
 def _tone(score: float) -> str:
-    if score >= 0.15:
+    if score >= 57.5:
         return "bullish"
-    if score <= -0.15:
+    if score <= 42.5:
         return "bearish"
     return "mixed"
 
 
 def _score(value: float) -> str:
-    return f"{value:+.2f}"
+    return f"{value:.0f}/100"
 
 
 def article_view(item: dict[str, Any]) -> dict[str, Any]:
     title = str(item.get("title") or "")
     body = item.get("body") or ""
+    published = item.get("published_at")
+    if isinstance(published, datetime):
+        published = published.isoformat()
     return {
         "title": title,
         "url": item.get("url"),
         "source": item.get("source"),
+        "published_at": published,
         "sentiment_score": float(item["sentiment_score"]),
+        "confidence": item.get("confidence"),
+        "positive_pct": item.get("positive_pct"),
+        "negative_pct": item.get("negative_pct"),
+        "neutral_pct": item.get("neutral_pct"),
         "reason": item.get("reason") or explain_matches(f"{title} {body}"),
     }
 
@@ -196,15 +204,15 @@ def news_summary(
     story = "headline" if count == 1 else "headlines"
     text = (
         f"{symbol} news alert covers {count} {story} published on this trading day. "
-        f"Each cleared the {sentiment_threshold:.2f} absolute-sentiment rule on its own. "
+        f"Each cleared the {sentiment_threshold:.0f}-point distance from 50 on its own. "
         f"Combined sentiment is {_score(combined)} ({_tone(combined)}), the average of the headline scores."
     )
-    positive = sum(1 for score in scores if score > 0)
-    negative = sum(1 for score in scores if score < 0)
+    positive = sum(1 for score in scores if score > 50)
+    negative = sum(1 for score in scores if score < 50)
     if positive and negative:
         text += (
             f" The headlines disagree ({positive} positive, {negative} negative), so the average "
-            "can sit near zero even though every story was strong enough to alert."
+            "can sit near 50 even though every story was strong enough to alert."
         )
     elif count > 1:
         text += " The headlines agree in direction."
@@ -215,9 +223,9 @@ def together_summary(symbol: str, change: float, news_score: float) -> str:
     """How the price move and the news score sit next to each other."""
     price_side = f"the close moved {_direction(change)} {_fmt_pct(change)}"
     news_side = f"news sentiment is {_score(news_score)} ({_tone(news_score)})"
-    if change > 0 and news_score > 0.15 or change < 0 and news_score < -0.15:
+    if change > 0 and news_score > 57.5 or change < 0 and news_score < 42.5:
         relation = "The two sides agree in direction."
-    elif change > 0 and news_score < -0.15 or change < 0 and news_score > 0.15:
+    elif change > 0 and news_score < 42.5 or change < 0 and news_score > 57.5:
         relation = "The two sides disagree: the price move and the news tone point in opposite directions."
     else:
         relation = "The news side is mixed, so it does not clearly confirm or contradict the price move."
@@ -332,7 +340,7 @@ def evaluate_symbol(
         )
 
     if price_draft is not None and news_draft is not None and change is not None:
-        synthesis = together_summary(symbol, change, float(news_draft.sentiment_score or 0.0))
+        synthesis = together_summary(symbol, change, float(news_draft.sentiment_score if news_draft.sentiment_score is not None else 50.0))
         return [
             AlertDraft(
                 kind="news_price",
@@ -373,7 +381,7 @@ def _qualifying_headlines(headlines, sentiment_threshold: float, in_window) -> l
     kept = []
     for item in headlines:
         score = float(item["sentiment_score"])
-        if abs(score) < sentiment_threshold:
+        if abs(score - 50.0) < sentiment_threshold:
             continue
         if not in_window(_as_utc(item["published_at"])):
             continue

@@ -3,7 +3,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_PRICE_MOVE_THRESHOLD = 0.03
-DEFAULT_SENTIMENT_THRESHOLD = 0.34
+DEFAULT_SENTIMENT_THRESHOLD = 25.0
 
 
 def price_fraction_from_percent(percent: float) -> float:
@@ -14,9 +14,9 @@ def price_fraction_from_percent(percent: float) -> float:
 
 
 def sentiment_threshold_value(score: float) -> float:
-    """Absolute keyword score that opens a news alert."""
-    if score != score or score <= 0 or score > 1:
-        raise ValueError("Sentiment threshold must be greater than 0 and at most 1.")
+    """How far a 0–100 FinBERT score must sit from 50 before it opens a news alert."""
+    if score != score or score <= 0 or score > 50:
+        raise ValueError("Sentiment threshold must be greater than 0 and at most 50.")
     return float(score)
 
 
