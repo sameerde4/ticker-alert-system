@@ -35,8 +35,18 @@ def test_health_and_ui_without_a_database():
     assert "is already on the watchlist." in page.text
     assert "Enter a ticker." in page.text
     assert "requestSubmit" not in page.text
-    for column in ("symbol", "sector", "type", "when", "price", "sentiment"):
+    for column in ("symbol", "sector", "type", "when"):
         assert f'data-sort="{column}"' in page.text
+    head = page.text.split('<table class="history">', 1)[1].split("</thead>", 1)[0]
+    assert head.index('data-sort="symbol"') < head.index('data-sort="sector"') < head.index('data-sort="when"') < head.index('data-sort="type"')
+    assert ">Alert details</button>" in head
+    assert ">Type</button>" not in head
+    assert "Combined news sentiment " not in page.text
+    assert 'metric.textContent = formatScore(alert.sentiment_score) + "/100"' in page.text
+    assert "kind-news" in page.text and "kind-price" in page.text and "kind-fusion" in page.text
+    assert 'KIND_LABELS[alert.kind] || alert.kind) + " · "' in page.text
+    assert "Good news" not in page.text
+    assert "Bad price" not in page.text
 
 
 def test_watchlist_reports_database_down():
@@ -54,9 +64,15 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "Wipe and rebuild" in page.text
     assert "finbertExplain" in page.text
     rules = page.text.split('id="rules"', 1)[1].split("</p>", 1)[0]
-    assert rules.index('id="rulesBefore"') < rules.index('id="finbertExplain"') < rules.index('id="rulesAfter"')
-    assert "news when the `;" in page.text
-    assert "score is at least ${sentiment} points from 50, or news + price" in page.text
+    assert rules.index('id="rulesBefore"') < rules.index('id="finbertExplain"') < rules.index('id="priceExplain"') < rules.index('id="rulesAfter"')
+    assert "matches the price move" in page.text
+    assert "price at ${move}% from the open during market hours, or from the prior close after the close, news when the " in page.text
+    assert "or both when a headline " in page.text
+    assert "When a headline matches the price move" in page.text
+    assert "The price rule" in page.text
+    assert "While the market is open, a stock is compared with its opening price" in page.text
+    assert "does not wait for the close" in page.text
+    assert "The percent still applies" not in page.text
     assert "<h2>Watchlist</h2>" in page.text
     assert "<h2>Recent</h2>" in page.text
     assert "Sentiment score " in page.text

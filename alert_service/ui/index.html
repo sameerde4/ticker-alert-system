@@ -144,6 +144,9 @@
     .badge.up { background: rgba(61, 220, 151, 0.15); color: var(--up); }
     .badge.down { background: rgba(255, 107, 107, 0.15); color: var(--down); }
     .badge.mixed { background: rgba(212, 175, 55, 0.18); color: var(--gold); }
+    .badge.kind-price { background: rgba(94, 200, 197, 0.18); color: #7ee0dc; }
+    .badge.kind-news { background: rgba(126, 182, 255, 0.2); color: #9ec4ff; }
+    .badge.kind-fusion { background: rgba(192, 132, 252, 0.2); color: #d2b0ff; }
     h3.section { margin: 12px 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); font-family: ui-sans-serif, system-ui, sans-serif; }
     .hint, .empty, .status {
       margin: 0;
@@ -229,7 +232,10 @@
     #scorer-form { max-width: 720px; }
     .table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
     table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
-    table.history th, table.history td { white-space: nowrap; }
+    table.history th, table.history td { white-space: nowrap; vertical-align: middle; }
+    table.history td.alert-summary { white-space: normal; }
+    .alert-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+    .alert-bit { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
     table.history thead th {
       background: var(--elevated);
       border-bottom: 1px solid var(--line);
@@ -309,7 +315,7 @@
       gap: 10px;
       padding: 16px 16px 8px;
     }
-    .modal-header h3 { margin: 0; font-size: 20px; }
+    .modal-header h3 { margin: 0; flex: 1; min-width: 0; font-size: 20px; line-height: 1.3; }
     .modal-close {
       margin-left: auto;
       background: transparent;
@@ -356,7 +362,7 @@
   </header>
   <main>
     <section id="homeTab" class="tab-panel">
-    <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesAfter"></span></p>
+    <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesMiddle"></span><button type="button" class="linkish" id="priceExplain">matches the price move</button><span id="rulesAfter"></span></p>
     <section class="card">
       <h2>Watchlist</h2>
       <form id="add-form">
@@ -389,11 +395,8 @@
               <tr>
                 <th data-sort="symbol" aria-sort="none"><button type="button" class="sort-btn">Symbol</button></th>
                 <th data-sort="sector" aria-sort="none"><button type="button" class="sort-btn">Sector</button></th>
-                <th data-sort="type" aria-sort="none"><button type="button" class="sort-btn">Type</button></th>
                 <th data-sort="when" aria-sort="descending"><button type="button" class="sort-btn">When</button></th>
-                <th class="num" data-sort="price" aria-sort="none"><button type="button" class="sort-btn">Price change</button></th>
-                <th class="num" data-sort="sentiment" aria-sort="none"><button type="button" class="sort-btn">News sentiment</button></th>
-                <th class="details">Details</th>
+                <th data-sort="type" aria-sort="none"><button type="button" class="sort-btn">Alert details</button></th>
               </tr>
             </thead>
             <tbody id="historyBody"></tbody>
@@ -409,7 +412,7 @@
           <label class="field">
             <span>Price alert percentage</span>
             <input id="pricePercent" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" required />
-            <p class="hint">A close that moves at least this far from the prior close opens a price alert. Default is 3%.</p>
+            <p class="hint">While the market is open, the latest price is compared with the opening price. After the close, a stock is compared with the prior close. A market that trades all day uses the last 24 hours. A headline is included when it was published during the part of the day that moved. Default is 3%.</p>
           </label>
           <label class="field">
             <span>Sentiment score threshold</span>
@@ -425,7 +428,7 @@
       </section>
       <section class="card">
         <h2>Rebuild history</h2>
-        <p class="hint">Admin test tool. Deletes every saved alert, then reruns the current price and sentiment rules for each watchlist symbol over the last X calendar days, including today. Price uses each session’s close. Headlines are the stories already stored plus the recent list Yahoo returns now, and each story stays on its publish day.</p>
+        <p class="hint">Admin test tool. Deletes every saved alert, then reruns the current price and sentiment rules for each watchlist symbol over the last X calendar days, including today. Price uses each session’s close. Headlines published on a day in that window are scored for that day, including days before today.</p>
         <form id="rebuild-form" class="settings-form">
           <label class="field">
             <span>Days to rebuild</span>
@@ -448,6 +451,25 @@
         <button type="button" class="modal-close" id="detailClose" aria-label="Close">×</button>
       </div>
       <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+  <div id="priceModal" class="modal" hidden>
+    <button type="button" class="modal-backdrop" id="priceBackdrop" aria-label="Close price explanation"></button>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="priceTitle">
+      <div class="modal-header">
+        <h3 id="priceTitle">When a headline matches the price move</h3>
+        <button type="button" class="modal-close" id="priceClose" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <h3 class="section">The price rule</h3>
+        <p class="summary">A price alert uses the percent in Settings. The default is 3%. While the market is open, a stock is compared with its opening price, so a check during the day does not wait for the close. After 4:00 PM it is the close compared with the prior close. For a symbol that trades all day, such as BTC-USD, it is the change over the 24 hours before the check.</p>
+        <h3 class="section">The part of the day</h3>
+        <p class="summary">A headline can explain only the price that was in progress when it was published, in US Eastern. Before 9:30 AM that is the overnight gap, from the prior close to the open. From 9:30 AM to 4:00 PM it is the regular session, from the open to the latest price, which becomes the 4:00 PM close after the market closes. After 4:00 PM, and a weekend story kept with Friday, it is the close versus the prior close. For a 24-hour market it is the four hours after the headline.</p>
+        <h3 class="section">A candidate reason</h3>
+        <p class="summary">The card calls the headline a candidate reason when that part of the day clears the same percent. A story published at noon does not explain a gap from before the open. A premarket story does not explain the move from the open to the close.</p>
+        <h3 class="section">News and price on their own</h3>
+        <p class="summary">When the headline is strong and that part of the day is under the percent, the card is news only and shows no price change. When the close clears the percent and no headline was published during that part of the day, the card is price only and says no headline lined up with this move.</p>
+      </div>
     </div>
   </div>
   <div id="finbertModal" class="modal" hidden>
@@ -480,6 +502,7 @@
     const historyEmpty = document.querySelector("#historyEmpty");
     const detailModal = document.querySelector("#detailModal");
     const finbertModal = document.querySelector("#finbertModal");
+    const priceModal = document.querySelector("#priceModal");
     const homeScope = document.querySelector("#homeScope");
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
     let homeOpenedAt = null;
@@ -545,15 +568,17 @@
       return number > 50 ? "up" : "down";
     }
 
-    function signedClass(value) {
-      return scoreClass(value);
+    function priceClass(value) {
+      const number = Number(value);
+      if (value == null || Number.isNaN(number) || number === 0) return "mixed";
+      return number > 0 ? "up" : "down";
     }
 
     function badgeClass(alert) {
-      if (alert.kind === "price") return "badge " + signedClass(alert.price_change_pct);
-      if (alert.kind === "news") return "badge " + signedClass(alert.sentiment_score);
-      const price = signedClass(alert.price_change_pct);
-      const news = signedClass(alert.sentiment_score);
+      if (alert.kind === "price") return "badge " + priceClass(alert.price_change_pct);
+      if (alert.kind === "news") return "badge " + scoreClass(alert.sentiment_score);
+      const price = priceClass(alert.price_change_pct);
+      const news = scoreClass(alert.sentiment_score);
       return "badge " + (price === news ? price : "mixed");
     }
 
@@ -712,6 +737,22 @@
       }
     }
 
+    function kindPill(kind) {
+      const pill = document.createElement("span");
+      const tone = kind === "news_price" ? "fusion" : (kind === "price" ? "price" : "news");
+      pill.className = "badge kind-" + tone;
+      pill.textContent = KIND_LABELS[kind] || kind || "";
+      return pill;
+    }
+
+    function historyDetailsButton(alert) {
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "linkish";
+      link.textContent = "Details";
+      link.addEventListener("click", () => openDetail(alert));
+      return link;
+    }
     function historyValue(alert, key) {
       if (key === "symbol") return alert.symbol || "";
       if (key === "sector") return alert.sector || "";
@@ -720,8 +761,6 @@
         const time = new Date(alert.triggered_at || alert.updated_at || 0).getTime();
         return Number.isNaN(time) ? null : time;
       }
-      if (key === "price") return alert.price_change_pct == null ? null : Number(alert.price_change_pct);
-      if (key === "sentiment") return alert.sentiment_score == null ? null : Number(alert.sentiment_score);
       return "";
     }
 
@@ -756,35 +795,29 @@
         symbol.append(symbolLink(alert.symbol));
         const sector = document.createElement("td");
         sector.textContent = alert.sector || "—";
-        const type = document.createElement("td");
-        const badge = document.createElement("span");
-        badge.className = badgeClass(alert);
-        badge.textContent = KIND_LABELS[alert.kind] || alert.kind;
-        type.append(badge);
         const when = document.createElement("td");
         when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
         when.title = "When the condition was met";
-        const move = document.createElement("td");
-        move.className = "num";
-        move.textContent = formatMove(alert.price_change_pct);
-        if (alert.price_change_pct > 0) move.classList.add("up");
-        if (alert.price_change_pct < 0) move.classList.add("down");
-        const sentiment = document.createElement("td");
-        sentiment.className = "num";
-        if (alert.sentiment_score == null) {
-          sentiment.textContent = "—";
-        } else {
-          sentiment.textContent = formatScore(alert.sentiment_score);
-          sentiment.classList.add(scoreClass(alert.sentiment_score));
+        const summary = document.createElement("td");
+        summary.className = "alert-summary";
+        const line = document.createElement("div");
+        line.className = "alert-summary-row";
+        line.append(kindPill(alert.kind));
+        if (alert.kind !== "price" && alert.sentiment_score != null) {
+          const metric = document.createElement("span");
+          metric.className = "alert-bit score " + scoreClass(alert.sentiment_score);
+          metric.textContent = formatScore(alert.sentiment_score) + "/100";
+          line.append(metric);
         }
-        const details = document.createElement("td");
-        const link = document.createElement("button");
-        link.type = "button";
-        link.className = "linkish";
-        link.textContent = "Details";
-        link.addEventListener("click", () => openDetail(alert));
-        details.append(link);
-        row.append(symbol, sector, type, when, move, sentiment, details);
+        if (alert.kind !== "news" && alert.price_change_pct != null) {
+          const metric = document.createElement("span");
+          metric.className = "alert-bit score " + priceClass(alert.price_change_pct);
+          metric.textContent = formatMove(alert.price_change_pct);
+          line.append(metric);
+        }
+        line.append(historyDetailsButton(alert));
+        summary.append(line);
+        row.append(symbol, sector, when, summary);
         historyBody.append(row);
       }
     }
@@ -804,18 +837,16 @@
     function openDetail(alert) {
       if (!alert) return;
       const title = document.querySelector("#detailTitle");
+      const when = document.createElement("span");
+      when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
+      when.title = "When the condition was met";
       title.replaceChildren(
         symbolLink(alert.symbol),
-        document.createTextNode(" · " + (KIND_LABELS[alert.kind] || alert.kind)),
+        document.createTextNode(" · " + (KIND_LABELS[alert.kind] || alert.kind) + " · "),
+        when,
       );
       const body = document.querySelector("#detailBody");
       body.replaceChildren();
-      const when = document.createElement("p");
-      when.className = "when";
-      when.style.marginLeft = "0";
-      when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
-      when.title = "When the condition was met";
-      body.append(when);
       const rules = rulesAtFire(alert);
       if (rules) {
         const note = document.createElement("p");
@@ -852,9 +883,20 @@
       const move = (Number(rules.price_move_threshold) * 100).toFixed(1);
       const sentiment = Math.round(Number(rules.sentiment_threshold));
       document.querySelector("#rulesBefore").textContent =
-        `One alert per symbol per day: price at ${move}% versus the prior close, news when the `;
+        `One alert per symbol per day: price at ${move}% from the open during market hours, or from the prior close after the close, news when the `;
+      document.querySelector("#rulesMiddle").textContent =
+        ` score is at least ${sentiment} points from 50, or both when a headline `;
       document.querySelector("#rulesAfter").textContent =
-        ` score is at least ${sentiment} points from 50, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
+        ". The time is when the condition was met, in US Eastern.";
+    }
+
+    function openPrice() {
+      priceModal.hidden = false;
+      document.querySelector("#priceClose").focus();
+    }
+
+    function closePrice() {
+      priceModal.hidden = true;
     }
 
     function openFinbert() {
@@ -1135,7 +1177,7 @@
         if (historySort.key === key) {
           historySort.dir = historySort.dir === "asc" ? "desc" : "asc";
         } else {
-          const numeric = key === "when" || key === "price" || key === "sentiment";
+          const numeric = key === "when";
           historySort = { key, dir: numeric ? "desc" : "asc" };
         }
         renderHistory(latestAlerts);
@@ -1144,12 +1186,16 @@
 
     document.querySelector("#detailClose").addEventListener("click", closeDetail);
     document.querySelector("#detailBackdrop").addEventListener("click", closeDetail);
+    document.querySelector("#priceExplain").addEventListener("click", openPrice);
+    document.querySelector("#priceClose").addEventListener("click", closePrice);
+    document.querySelector("#priceBackdrop").addEventListener("click", closePrice);
     document.querySelector("#finbertExplain").addEventListener("click", openFinbert);
     document.querySelector("#finbertClose").addEventListener("click", closeFinbert);
     document.querySelector("#finbertBackdrop").addEventListener("click", closeFinbert);
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
-      if (!finbertModal.hidden) closeFinbert();
+      if (!priceModal.hidden) closePrice();
+      else if (!finbertModal.hidden) closeFinbert();
       else if (!detailModal.hidden) closeDetail();
     });
 
