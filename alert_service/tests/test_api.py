@@ -31,6 +31,19 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     page = client.get("/ui")
     assert "Rebuild history" in page.text
     assert "Wipe and rebuild" in page.text
+    assert "Sentiment scoring" in page.text
+    assert "FinBERT" in page.text
+    assert "Custom scoring" in page.text
+    assert "positive probability minus the negative" in page.text
+    assert "not a hosted analysis API" in page.text
+    assert "previous three words" in page.text
+    assert "never averaged" in page.text
+
+
+def test_unknown_scorer_is_rejected_before_the_database():
+    client = TestClient(app)
+    response = client.put("/v1/settings/scorer", json={"sentiment_scorer": "both"})
+    assert response.status_code == 400
 
 
 def test_bad_symbol_is_rejected_before_the_database():

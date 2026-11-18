@@ -18,7 +18,7 @@ def test_parse_modern_yahoo_content_and_score():
     assert len(items) == 1
     assert items[0]["source"] == "Reuters"
     assert items[0]["url"] == "https://example.com/aapl"
-    assert items[0]["sentiment_score"] < 0
+    assert "sentiment_score" not in items[0]
 
 
 def test_parse_skips_items_without_a_time():
