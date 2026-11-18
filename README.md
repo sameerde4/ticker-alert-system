@@ -16,7 +16,7 @@ A headline belongs to the Eastern trading day it was published. Saturday and Sun
 
 Each alert keeps the price and sentiment thresholds from when it fired. Those values are shown in the details popup. Changing the settings can replace today's alert on the next check. Earlier days stay as they were saved.
 
-Settings has the price percent, the sentiment threshold, and a separate sentiment-scoring choice. FinBERT is the default. The model weights download once from Hugging Face, and later checks score headlines on this computer. Custom scoring is the Vajra Astra keyword lexicon and does not load a model. A check uses only the selected scorer. The two scores are never averaged. Save and Reset to default change the two thresholds, and the Home rules line follows them. Switching the scorer takes effect on the next check, which rescores every saved headline. Volume stays an environment setting. Rebuild history is an admin tool on that same page: it deletes every saved alert, then reruns the current rules for each watchlist symbol over the last 1–40 calendar days, including today. Price history can be recomputed from daily closes. Headlines are only the stories already stored plus the recent list Yahoo returns now.
+Settings stores the price percent and the FinBERT threshold. FinBERT is the only headline scorer. The model weights download once, and later checks score headlines on this computer. The first FinBERT in the Home rules line opens an explanation of the model, the 0–100 score, the confidence, and the 25-point default. The Watchlist box suggests a ticker or company name from a local list of about 5,400 symbols. Under each headline, the sentiment score is bold and colored, then confidence, then the positive, negative, and neutral shares in brackets. Save and Reset to default change the two thresholds, and the Home rules line follows them. The next check rescores every saved headline. Volume stays an environment setting. Rebuild history is an admin tool on that same page: it deletes every saved alert, then reruns the current rules for each watchlist symbol over the last 1–40 calendar days, including today. Price history can be recomputed from daily closes. Headlines are only the stories already stored plus the recent list Yahoo returns now.
 
 This is a separate repository from Vajra Astra Capital. Shared ideas (FastAPI, PostgreSQL migrations, Yahoo bars, the keyword sentiment lexicon) are copied here. Nothing imports the other repo.
 
@@ -54,7 +54,7 @@ for f in db/migrations/*.sql; do
 done
 ```
 
-The files are `001_init.sql` through `008_sentiment_scorer.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, and the selected headline scorer (`finbert` or `custom`).
+The files are `001_init.sql` through `010_finbert_score_out_of_100.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, and the FinBERT score on a 0–100 scale with a 25-point gate around 50.
 
 ## Run
 
@@ -84,6 +84,6 @@ The Settings tab stores the price percent and the sentiment threshold in `app_se
 |---|---|---|
 | `TICKER_ALERT_PRICE_MOVE_THRESHOLD` | Absolute return versus the prior close, used until Settings is saved | `0.03` |
 | `TICKER_ALERT_VOLUME_SPIKE_THRESHOLD` | Volume divided by the recent average. Not a Settings control | `2.0` |
-| `TICKER_ALERT_SENTIMENT_THRESHOLD` | Absolute keyword score, used until Settings is saved | `0.34` |
+| `TICKER_ALERT_SENTIMENT_THRESHOLD` | How far a 0–100 FinBERT score must sit from 50, used until Settings is saved | `25` |
 | `TICKER_ALERT_NEWS_LOOKBACK_HOURS` | A headline older than this is ignored, even on its own trading day | `72` |
 | `TICKER_ALERT_FUSION_WINDOW_HOURS` | Unused by the same-day rule. Kept so an older env file still loads | `48` |

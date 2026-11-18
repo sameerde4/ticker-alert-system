@@ -6,11 +6,9 @@
 |---|---|---|
 | Daily OHLCV | Yahoo Finance through `yfinance` | `daily_bars` |
 | Headlines | Yahoo quote news, then Yahoo Search when quote news is empty | `headlines` |
-| Sentiment | The selected scorer, score in [-1, 1]. FinBERT is the default. Custom scoring is the keyword lexicon | `headlines.sentiment_score` |
+| Sentiment | Local FinBERT. Score is 0–100 (50 neutral). Confidence is the winning class probability | `headlines.sentiment_score`, plus confidence and class shares on the alert |
 
-FinBERT is the ProsusAI/finbert model, loaded locally with PyTorch. The first use downloads the weights. Later scoring does not call a hosted analysis API. The model returns positive, negative, and neutral probabilities. The stored score is positive minus negative. Custom scoring is a local copy of the weighted lexicon used for company-news scoring in Vajra Astra. A negation in the previous three tokens flips a matched word, and the score is damped by `hits / 3`. A check uses one scorer for every headline and never averages the two. This repo does not import Vajra Astra.
-
-A single mild keyword caps near ±0.33 because the score is scaled by `hits / 3`. The default news threshold is 0.34, so one mild word does not open an alert. A strong word such as "plunge" does.
+FinBERT is the ProsusAI/finbert model, loaded locally with PyTorch. The first use downloads the weights. Later scoring does not call a hosted analysis API. The model returns positive, negative, and neutral probabilities. The score shown in the app is 0 to 100: 50 plus 50 times positive minus negative. Confidence is the winning class probability. A headline joins a news alert when that score is at least 25 points from 50. The alert score is the average of the headlines that clear that gate.
 
 A headline is stored when its title names the ticker or the company's first distinctive name word (Yahoo `shortName`, so `AAPL` also matches "Apple"). Yahoo often tags unrelated market stories with the symbol. Those are not alerts. Class-share tickers are stored in Yahoo form: `BRK.B` becomes `BRK-B`.
 
@@ -19,7 +17,7 @@ A headline is stored when its title names the ticker or the company's first dist
 | Alert | Rule | Default |
 |---|---|---|
 | Price | One alert for the day when only the close clears the move rule. A volume spike is noted when volume is at least 2× the recent average | 3% |
-| News | One alert for that trading day when headlines published that day clear the threshold. Each headline keeps its score and link. The alert score is the average | 0.34 |
+| News | One alert for that trading day when a headline's 0–100 FinBERT score is at least 25 points from 50. Each headline keeps its score, confidence, breakdown, and link. The alert score is the average | 25 points from 50 |
 | News + price | One alert for that trading day when the close and the same day's headlines both clear their rules | same rules |
 
 A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound still drops anything older than that. The admin rebuild on the Settings page deletes saved alerts and reruns these rules for each session in the last 1–40 calendar days.

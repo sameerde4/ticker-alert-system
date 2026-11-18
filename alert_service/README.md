@@ -6,12 +6,13 @@ FastAPI process for the Ticker Alert System. Setup, the migration, and the run c
 |---|---|
 | `app/engine.py` | Price, news, and fusion rules |
 | `app/sentiment.py` | Keyword sentiment lexicon |
-| `app/finbert.py` | Local ProsusAI/finbert score, positive minus negative |
-| `app/scoring.py` | Selects FinBERT or the lexicon. Does not average them |
+| `app/finbert.py` | Local ProsusAI/finbert score from 0 to 100, plus confidence and the three class shares |
+| `app/scoring.py` | Sends every headline to FinBERT. The lexicon remains in the repo and is not used by a check |
 | `app/prices.py` | Yahoo daily bars |
 | `app/news.py` | Yahoo headlines |
 | `app/checks.py` | One watchlist pass, and the admin rebuild of recent sessions |
-| `ui/index.html` | Home inbox, sortable history, settings, rebuild, Yahoo quote links |
+| `ui/index.html` | Home inbox, sortable history, settings, rebuild, Yahoo quote links, symbol search |
+| `ui/symbol_universe.json` | Local ticker and company-name list for the Watchlist box |
 | `tests/` | Rules, parsing, and API smoke tests |
 
 ```bash
