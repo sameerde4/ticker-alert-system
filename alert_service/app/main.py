@@ -22,7 +22,16 @@ from .config import (
 )
 from .db import db
 from .sectors import ensure_symbol_sectors
-from .store import add_symbol, get_alert_rules, list_alerts, list_watchlist, remove_symbol, save_alert_rules
+from .store import (
+    add_symbol,
+    get_alert_rules,
+    list_alerts,
+    list_watchlist,
+    perplexity_api_key,
+    remove_symbol,
+    save_alert_rules,
+    save_perplexity_api_key,
+)
 from .prices import yahoo_lists_symbol
 from .symbols import known_universe_symbol, normalize_symbol
 
@@ -59,7 +68,14 @@ class AlertRulesIn(BaseModel):
     sentiment_threshold: float
 
 
-def _settings_payload(rules: dict[str, float | str]) -> dict[str, float | int | str]:
+class PerplexityKeyIn(BaseModel):
+    perplexity_api_key: str | None = None
+    clear_perplexity_api_key: bool = False
+
+
+def _settings_payload(
+    rules: dict[str, float | str], *, perplexity_key_saved: bool
+) -> dict[str, float | int | str | bool]:
     return {
         "price_move_threshold": rules["price_move_threshold"],
         "volume_spike_threshold": settings.volume_spike_threshold,
@@ -70,7 +86,15 @@ def _settings_payload(rules: dict[str, float | str]) -> dict[str, float | int | 
         "display_timezone": settings.display_timezone,
         "price_move_threshold_default": DEFAULT_PRICE_MOVE_THRESHOLD,
         "sentiment_threshold_default": DEFAULT_SENTIMENT_THRESHOLD,
+        "perplexity_key_saved": perplexity_key_saved,
     }
+
+
+async def _public_settings() -> dict[str, float | int | str | bool]:
+    async with _pool().acquire() as conn:
+        rules = await get_alert_rules(conn)
+        saved = bool(await perplexity_api_key(conn) or settings.perplexity_api_key.strip())
+    return _settings_payload(rules, perplexity_key_saved=saved)
 
 
 def _pool():
@@ -96,32 +120,46 @@ async def symbol_universe() -> FileResponse:
 
 
 @app.get("/v1/settings")
-async def public_settings() -> dict[str, float | int | str]:
-    async with _pool().acquire() as conn:
-        return _settings_payload(await get_alert_rules(conn))
+async def public_settings() -> dict[str, float | int | str | bool]:
+    return await _public_settings()
 
 
 @app.put("/v1/settings")
-async def put_settings(body: AlertRulesIn) -> dict[str, float | int | str]:
+async def put_settings(body: AlertRulesIn) -> dict[str, float | int | str | bool]:
     try:
         price = price_fraction_from_percent(body.price_move_percent)
         sentiment = sentiment_threshold_value(body.sentiment_threshold)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     async with _pool().acquire() as conn:
-        return _settings_payload(await save_alert_rules(
-            conn, price_move_threshold=price, sentiment_threshold=sentiment
-        ))
+        await save_alert_rules(conn, price_move_threshold=price, sentiment_threshold=sentiment)
+    return await _public_settings()
+
+
+@app.put("/v1/settings/perplexity")
+async def put_perplexity_key(body: PerplexityKeyIn) -> dict[str, float | int | str | bool]:
+    if body.clear_perplexity_api_key:
+        key = ""
+    elif body.perplexity_api_key and body.perplexity_api_key.strip():
+        key = body.perplexity_api_key.strip()
+        if len(key) > 512 or any(char.isspace() for char in key):
+            raise HTTPException(status_code=400, detail="Enter the Perplexity API key with no spaces.")
+    else:
+        raise HTTPException(status_code=400, detail="Enter a Perplexity API key, or clear the saved key.")
+    async with _pool().acquire() as conn:
+        await save_perplexity_api_key(conn, key)
+    return await _public_settings()
 
 
 @app.post("/v1/settings/reset")
-async def reset_settings() -> dict[str, float | int | str]:
+async def reset_settings() -> dict[str, float | int | str | bool]:
     async with _pool().acquire() as conn:
-        return _settings_payload(await save_alert_rules(
+        await save_alert_rules(
             conn,
             price_move_threshold=DEFAULT_PRICE_MOVE_THRESHOLD,
             sentiment_threshold=DEFAULT_SENTIMENT_THRESHOLD,
-        ))
+        )
+    return await _public_settings()
 
 
 @app.get("/v1/watchlist")

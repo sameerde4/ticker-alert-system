@@ -427,6 +427,22 @@
         </form>
       </section>
       <section class="card">
+        <h2>Perplexity</h2>
+        <p class="hint">After a check decides the alerts, the saved key sends one JSON payload for those symbols: the price change, the headlines, and the FinBERT score, confidence, and class shares. Perplexity returns two sentences of reasoning. The rule sentence stays when no key is saved or the call fails. The key is not shown again after you save it.</p>
+        <form id="perplexity-form" class="settings-form">
+          <label class="field">
+            <span>API key</span>
+            <input id="perplexityKey" type="password" autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="hint" id="perplexitySaved">No key saved.</p>
+          <div class="settings-actions">
+            <button type="submit" id="savePerplexity">Save key</button>
+            <button type="button" id="clearPerplexity" class="ghost">Clear key</button>
+            <p class="status" id="perplexityStatus"></p>
+          </div>
+        </form>
+      </section>
+      <section class="card">
         <h2>Rebuild history</h2>
         <p class="hint">Admin test tool. Deletes every saved alert, then reruns the current price and sentiment rules for each watchlist symbol over the last X calendar days, including today. Price uses each session’s close. Headlines published on a day in that window are scored for that day, including days before today.</p>
         <form id="rebuild-form" class="settings-form">
@@ -680,11 +696,13 @@
         }
         if ((alert.articles || []).length) card.append(articleList(alert.articles));
         addSection(card, "Together", sections.synthesis);
+        if (sections.rules && sections.rules !== sections.synthesis) addSection(card, "Rule", sections.rules);
       } else {
         const summary = document.createElement("p");
         summary.className = "summary";
         summary.textContent = alert.summary;
         card.append(summary);
+        if (sections.rules && sections.rules !== alert.summary) addSection(card, "Rule", sections.rules);
         if (alert.sentiment_score != null) {
           const score = document.createElement("p");
           score.className = "combined " + scoreClass(alert.sentiment_score);
@@ -1118,7 +1136,10 @@
         const note = result.errors && result.errors.length
           ? " Finished with " + result.errors.length + " symbol error(s)."
           : "";
-        setStatus("Check finished. " + result.alerts.length + " alert row(s) written." + note);
+        const reasoning = result.reasoning === "perplexity"
+          ? " Perplexity wrote the reasoning."
+          : (result.reasoning_error ? " Kept the rule sentence." : "");
+        setStatus("Check finished. " + result.alerts.length + " alert row(s) written." + note + reasoning);
         await refresh();
       } catch (err) {
         setStatus(err.message, true);
@@ -1129,6 +1150,9 @@
       if (!rules) return;
       document.querySelector("#pricePercent").value = (rules.price_move_threshold * 100).toFixed(1);
       document.querySelector("#sentimentThreshold").value = Math.round(Number(rules.sentiment_threshold));
+      document.querySelector("#perplexitySaved").textContent = rules.perplexity_key_saved
+        ? "A key is saved."
+        : "No key saved.";
     }
 
     function setSettingsStatus(text, isError) {
@@ -1228,6 +1252,47 @@
       } catch (err) {
         status.textContent = err.message;
         status.className = "status error";
+      }
+    });
+
+    function setPerplexityStatus(text, isError) {
+      const el = document.querySelector("#perplexityStatus");
+      el.textContent = text || "";
+      el.className = isError ? "status error" : "status";
+    }
+
+    document.querySelector("#perplexity-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setPerplexityStatus("Saving…");
+      try {
+        const saved = await readJson(await fetch("/v1/settings/perplexity", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ perplexity_api_key: document.querySelector("#perplexityKey").value }),
+        }));
+        currentRules = saved;
+        fillSettingsForm(saved);
+        document.querySelector("#perplexityKey").value = "";
+        setPerplexityStatus("Key saved.");
+      } catch (err) {
+        setPerplexityStatus(err.message, true);
+      }
+    });
+
+    document.querySelector("#clearPerplexity").addEventListener("click", async () => {
+      setPerplexityStatus("Clearing…");
+      try {
+        const saved = await readJson(await fetch("/v1/settings/perplexity", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clear_perplexity_api_key: true }),
+        }));
+        currentRules = saved;
+        fillSettingsForm(saved);
+        document.querySelector("#perplexityKey").value = "";
+        setPerplexityStatus("Key cleared.");
+      } catch (err) {
+        setPerplexityStatus(err.message, true);
       }
     });
 

@@ -72,6 +72,9 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "The price rule" in page.text
     assert "While the market is open, a stock is compared with its opening price" in page.text
     assert "does not wait for the close" in page.text
+    assert 'id="perplexity-form"' in page.text
+    assert "/v1/settings/perplexity" in page.text
+    assert "two sentences of reasoning" in page.text
     assert "The percent still applies" not in page.text
     assert "<h2>Watchlist</h2>" in page.text
     assert "<h2>Recent</h2>" in page.text

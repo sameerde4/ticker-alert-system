@@ -15,6 +15,7 @@ from .prices import fetch_daily_bars, fetch_last_24h, fetch_open_to_last
 from .symbols import trades_all_day
 from .scoring import attach_scores
 from .sectors import ensure_symbol_sectors
+from .perplexity import complete_reasoning
 from .store import (
     clear_symbol_day,
     delete_all_alerts,
@@ -23,6 +24,7 @@ from .store import (
     list_watchlist,
     load_bars,
     load_headlines,
+    perplexity_api_key,
     upsert_alert,
     upsert_bars,
     upsert_headlines,
@@ -59,7 +61,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
         await ensure_symbol_sectors(conn, symbols)
 
     errors: list[dict[str, str]] = []
-    alerts: list[dict[str, Any]] = []
+    alerts: list[Any] = []
     for symbol in symbols:
         try:
             bars = await asyncio.to_thread(
@@ -97,11 +99,22 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 live_session=live,
             )
             today = eastern_date(moment)
-            drafts = [draft for draft in drafts if draft.bar_date == today]
+            kept = [draft for draft in drafts if draft.bar_date == today]
             await clear_symbol_day(conn, symbol, today)
-            for draft in drafts:
-                alerts.append(await upsert_alert(conn, draft))
-    return {"checked": symbols, "errors": errors, "alerts": alerts}
+            for draft in kept:
+                alerts.append(draft)
+    reasoned, reasoning, reasoning_error = await _reason(pool, alerts)
+    saved = []
+    async with pool.acquire() as conn:
+        for draft in reasoned:
+            saved.append(await upsert_alert(conn, draft))
+    return {
+        "checked": symbols,
+        "errors": errors,
+        "alerts": saved,
+        "reasoning": reasoning,
+        "reasoning_error": reasoning_error,
+    }
 
 
 async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[str, Any]:
@@ -175,6 +188,21 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
     return {"alerts": written}
 
 
+async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str, str | None]:
+    """Ask Perplexity for two sentences when a key is saved. Otherwise keep the rule text."""
+    if not drafts:
+        return drafts, "rules", None
+    async with pool.acquire() as conn:
+        saved = await perplexity_api_key(conn)
+    key = saved or settings.perplexity_api_key.strip()
+    if not key:
+        return drafts, "rules", None
+    updated, error = await asyncio.to_thread(complete_reasoning, key, drafts)
+    if error:
+        return drafts, "rules", error
+    return updated, "perplexity", None
+
+
 def rebuild_start(today: date, days: int) -> date:
     """First calendar day of a rebuild. ``days`` of 1 is today only."""
     if isinstance(days, bool) or not isinstance(days, int) or days < 1 or days > MAX_REBUILD_DAYS:
@@ -200,7 +228,7 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
         await ensure_symbol_sectors(conn, symbols)
 
     errors: list[dict[str, str]] = []
-    alerts: list[dict[str, Any]] = []
+    pending: list[Any] = []
     fetch_days = days + settings.volume_lookback + 5
     for symbol in symbols:
         try:
@@ -246,11 +274,18 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
                 )
                 for draft in drafts:
                     if draft.bar_date == day:
-                        alerts.append(await upsert_alert(conn, draft))
+                        pending.append(draft)
+    reasoned, reasoning, reasoning_error = await _reason(pool, pending)
+    saved: list[dict[str, Any]] = []
+    async with pool.acquire() as conn:
+        for draft in reasoned:
+            saved.append(await upsert_alert(conn, draft))
     return {
         "days": days,
         "start": start.isoformat(),
         "checked": symbols,
         "errors": errors,
-        "alerts": alerts,
+        "alerts": saved,
+        "reasoning": reasoning,
+        "reasoning_error": reasoning_error,
     }
