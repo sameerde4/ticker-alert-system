@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ticker Alert System</title>
+  <style>
+    :root {
+      --bg: #12110e;
+      --card: #1c1a16;
+      --elevated: #242119;
+      --text: #f3efe4;
+      --muted: #b7ad9a;
+      --gold: #d4af37;
+      --gold-dim: #b89214;
+      --line: rgba(212, 175, 55, 0.28);
+      --up: #3ddc97;
+      --down: #ff6b6b;
+      --news: #7eb6ff;
+      --fusion: #d4af37;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Iowan Old Style", Palatino, Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 18px 0 4px;
+    }
+    h1 { margin: 0; font-weight: 600; letter-spacing: 0.01em; justify-self: start; }
+    h1 span { color: var(--gold); }
+    .rules { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    form, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, button {
+      font: 15px/1.2 ui-sans-serif, system-ui, sans-serif;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+    input {
+      background: #0e0d0b;
+      color: var(--text);
+      padding: 10px 12px;
+      min-width: 180px;
+    }
+    button {
+      background: var(--gold-dim);
+      color: #1a1404;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+    button.ghost { background: transparent; color: var(--text); }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .chip {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--elevated);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+    .chip button { border: 0; background: transparent; color: var(--muted); padding: 0 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-family: ui-sans-serif, system-ui, sans-serif; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(243, 239, 228, 0.08); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; }
+    .badge.price { background: rgba(61, 220, 151, 0.15); color: var(--up); }
+    .badge.news { background: rgba(126, 182, 255, 0.15); color: var(--news); }
+    .badge.fusion, .badge.news_price { background: rgba(212, 175, 55, 0.18); color: var(--fusion); }
+    h3.section { margin: 12px 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .empty, .status { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .status.error { color: var(--down); }
+    .alert {
+      border-top: 1px solid rgba(243, 239, 228, 0.08);
+      padding: 14px 4px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    .alert:first-child { border-top: 0; }
+    .alert-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .symbol, a.symbol-link { font-weight: 700; }
+    a.symbol-link { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
+    a.symbol-link:hover { color: var(--text); }
+    .when { margin-left: auto; color: var(--muted); font-size: 13px; }
+    .rule-note { color: var(--muted); font-size: 13px; margin: 4px 0 10px; line-height: 1.4; }
+    .summary { margin: 8px 0; line-height: 1.45; }
+    .combined { margin: 0 0 8px; font-weight: 700; }
+    .combined.up, .score.up, td.up { color: var(--up); }
+    .combined.down, .score.down, td.down { color: var(--down); }
+    .combined.mixed, .score.mixed { color: var(--gold); }
+    .articles { list-style: none; margin: 0; padding: 0; }
+    .articles li { margin: 8px 0; }
+    .articles a { color: var(--gold); }
+    .reason { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin: 0;
+      grid-column: 2;
+      justify-self: center;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    @media (max-width: 720px) {
+      header { grid-template-columns: 1fr; justify-items: center; }
+      h1 { justify-self: start; }
+      .tabs { grid-column: 1; margin-top: 12px; }
+    }
+    .tab-btn {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid transparent;
+      border-radius: 10px;
+      min-width: 88px;
+      min-height: 54px;
+      padding: 8px 12px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .tab-btn svg { width: 20px; height: 20px; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--elevated);
+      color: var(--gold);
+      border-color: var(--line);
+    }
+    .tab-panel[hidden] { display: none; }
+    .settings-form { display: grid; gap: 14px; max-width: 460px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .field { display: grid; gap: 6px; }
+    .field span { font-size: 14px; font-weight: 650; }
+    .field input { width: 160px; min-width: 0; }
+    .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+    .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
+    table.history th, table.history td { white-space: nowrap; }
+    table.history thead th {
+      background: var(--elevated);
+      border-bottom: 1px solid var(--line);
+      padding: 0;
+      position: sticky;
+      top: 0;
+    }
+    table.history tbody td { background: var(--card); }
+    table.history tbody tr:hover td { background: rgba(212, 175, 55, 0.07); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .sort-btn {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-start;
+      background: transparent;
+      color: var(--muted);
+      border: 0;
+      border-radius: 0;
+      padding: 12px 10px;
+      font: 650 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    th.num .sort-btn { justify-content: flex-end; }
+    .sort-btn:hover { color: var(--text); }
+    th[aria-sort] .sort-btn { color: var(--gold); }
+    th[aria-sort="ascending"] .sort-btn::after { content: "↑"; }
+    th[aria-sort="descending"] .sort-btn::after { content: "↓"; }
+    table.history th.details { padding: 12px 10px; }
+    .linkish {
+      background: none;
+      border: 0;
+      color: var(--gold);
+      padding: 0;
+      font-weight: 650;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    .modal[hidden] { display: none; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      border: 0;
+      border-radius: 0;
+      background: rgba(0, 0, 0, 0.55);
+      padding: 0;
+    }
+    .modal-panel {
+      position: relative;
+      z-index: 1;
+      width: min(720px, 100%);
+      max-height: min(80vh, 900px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 16px 8px;
+    }
+    .modal-header h3 { margin: 0; font-size: 20px; }
+    .modal-close {
+      margin-left: auto;
+      background: transparent;
+      color: var(--text);
+      min-width: 36px;
+      padding: 6px 10px;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .modal-body {
+      overflow: auto;
+      padding: 4px 16px 16px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>Ticker</span> Alert System</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" type="button" data-tab="homeTab" role="tab" aria-selected="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 10.5 12 3l9 7.5"></path>
+          <path d="M5 9.5V21h14V9.5"></path>
+        </svg>
+        Home
+      </button>
+      <button class="tab-btn" type="button" data-tab="historyTab" role="tab" aria-selected="false" title="Alert History" aria-label="Alert History">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+          <path d="M3 3v5h5"></path>
+          <path d="M12 7v5l4 2"></path>
+        </svg>
+        History
+      </button>
+      <button class="tab-btn" type="button" data-tab="settingsTab" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.6.9 1 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path>
+        </svg>
+        Settings
+      </button>
+    </nav>
+  </header>
+  <main>
+    <section id="homeTab" class="tab-panel">
+    <p class="rules" id="rules">Loading rules…</p>
+    <section class="card">
+      <form id="add-form">
+        <input id="symbol" name="symbol" placeholder="Ticker, e.g. AAPL" autocomplete="off" />
+        <button type="submit">Add to watchlist</button>
+        <button type="button" id="run" class="ghost">Run check</button>
+      </form>
+      <div class="chips" id="watchlist"></div>
+      <p class="status" id="status"></p>
+    </section>
+    <section class="card">
+      <p class="hint" id="homeScope" hidden>Since you last opened the app.</p>
+      <div id="alerts"></div>
+      <p class="empty" id="empty">No alerts yet. Add a ticker and run a check.</p>
+    </section>
+    </section>
+    <section id="historyTab" class="tab-panel" hidden>
+      <section class="card">
+        <h2>Alert History</h2>
+        <p class="hint">Click a column heading to sort. Details opens the same write-up as the card on Home.</p>
+        <div class="table-wrap">
+          <table class="history">
+            <thead>
+              <tr>
+                <th data-sort="symbol" aria-sort="none"><button type="button" class="sort-btn">Symbol</button></th>
+                <th data-sort="sector" aria-sort="none"><button type="button" class="sort-btn">Sector</button></th>
+                <th data-sort="type" aria-sort="none"><button type="button" class="sort-btn">Type</button></th>
+                <th data-sort="when" aria-sort="descending"><button type="button" class="sort-btn">When</button></th>
+                <th class="num" data-sort="price" aria-sort="none"><button type="button" class="sort-btn">Price change</button></th>
+                <th class="num" data-sort="sentiment" aria-sort="none"><button type="button" class="sort-btn">News sentiment</button></th>
+                <th class="details">Details</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="historyEmpty">No alerts yet. Add a ticker and run a check.</p>
+      </section>
+    </section>
+    <section id="settingsTab" class="tab-panel" hidden>
+      <section class="card">
+        <h2>Alert rules</h2>
+        <form id="settings-form" class="settings-form">
+          <label class="field">
+            <span>Price alert percentage</span>
+            <input id="pricePercent" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" required />
+            <p class="hint">A close that moves at least this far from the prior close opens a price alert. Default is 3%.</p>
+          </label>
+          <label class="field">
+            <span>Sentiment score threshold</span>
+            <input id="sentimentThreshold" type="number" min="0.01" max="1" step="0.01" inputmode="decimal" required />
+            <p class="hint">A headline opens a news alert when its absolute score reaches this value. Default is 0.34. One mild word tops out near 0.33.</p>
+          </label>
+          <div class="settings-actions">
+            <button type="submit" id="saveSettings">Save</button>
+            <button type="button" id="resetSettings" class="ghost">Reset to default</button>
+          </div>
+          <p class="status" id="settingsStatus"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Rebuild history</h2>
+        <p class="hint">Admin test tool. Deletes every saved alert, then reruns the current price and sentiment rules for each watchlist symbol over the last X calendar days, including today. Price uses each session’s close. Headlines are the stories already stored plus the recent list Yahoo returns now, and each story stays on its publish day.</p>
+        <form id="rebuild-form" class="settings-form">
+          <label class="field">
+            <span>Days to rebuild</span>
+            <input id="rebuildDays" type="number" min="1" max="40" step="1" value="5" inputmode="numeric" required />
+            <p class="hint">1 is today only. 40 is the furthest this check can reach.</p>
+          </label>
+          <div class="settings-actions">
+            <button type="submit" id="rebuildHistory">Wipe and rebuild</button>
+          </div>
+          <p class="status" id="rebuildStatus"></p>
+        </form>
+      </section>
+    </section>
+  </main>
+  <div id="detailModal" class="modal" hidden>
+    <button type="button" class="modal-backdrop" id="detailBackdrop" aria-label="Close details"></button>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+      <div class="modal-header">
+        <h3 id="detailTitle">Alert</h3>
+        <button type="button" class="modal-close" id="detailClose" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+  <script>
+    const KIND_LABELS = { price: "price", news: "news", news_price: "news + price" };
+    let displayTimeZone = "America/New_York";
+    let currentRules = null;
+    const statusEl = document.querySelector("#status");
+    const alertsEl = document.querySelector("#alerts");
+    const emptyEl = document.querySelector("#empty");
+    const historyBody = document.querySelector("#historyBody");
+    const historyEmpty = document.querySelector("#historyEmpty");
+    const detailModal = document.querySelector("#detailModal");
+    const homeScope = document.querySelector("#homeScope");
+    const HOME_WATERMARK_KEY = "tickerAlertHomeWatermark";
+    const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
+    let latestAlerts = [];
+    let historySort = { key: "when", dir: "desc" };
+
+    function homeWatermark() {
+      let mark = sessionStorage.getItem(HOME_WATERMARK_KEY);
+      if (mark === null) {
+        mark = localStorage.getItem(LAST_CLOSED_KEY) || "";
+        sessionStorage.setItem(HOME_WATERMARK_KEY, mark);
+      }
+      return mark || null;
+    }
+
+    window.addEventListener("pagehide", () => {
+      localStorage.setItem(LAST_CLOSED_KEY, new Date().toISOString());
+    });
+
+    function alertsForHome(alerts) {
+      const mark = homeWatermark();
+      if (!mark) return alerts;
+      const cut = new Date(mark).getTime();
+      if (Number.isNaN(cut)) return alerts;
+      return alerts.filter((alert) => new Date(alert.created_at || 0).getTime() > cut);
+    }
+    const watchEl = document.querySelector("#watchlist");
+
+    function setStatus(text, isError) {
+      statusEl.textContent = text || "";
+      statusEl.className = isError ? "status error" : "status";
+    }
+
+    async function readJson(res) {
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = body.detail;
+        throw new Error(typeof detail === "string" ? detail : "Request failed");
+      }
+      return body;
+    }
+
+    function renderWatchlist(symbols) {
+      watchEl.replaceChildren();
+      for (const row of symbols) {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = row.symbol;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "×";
+        button.setAttribute("aria-label", "Remove " + row.symbol);
+        button.addEventListener("click", async () => {
+          await readJson(await fetch("/v1/watchlist/" + encodeURIComponent(row.symbol), { method: "DELETE" }));
+          await refresh();
+        });
+        chip.append(button);
+        watchEl.append(chip);
+      }
+    }
+
+    function scoreClass(value) {
+      if (value > 0.15) return "up";
+      if (value < -0.15) return "down";
+      return "mixed";
+    }
+
+    function formatScore(value) {
+      const number = Number(value);
+      const sign = number > 0 ? "+" : "";
+      return sign + number.toFixed(2);
+    }
+
+    function formatWhen(iso) {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return iso || "";
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone: displayTimeZone,
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+        hour12: true,
+      }).format(date);
+    }
+
+    function addSection(card, title, body) {
+      if (!body) return;
+      const heading = document.createElement("h3");
+      heading.className = "section";
+      heading.textContent = title;
+      const paragraph = document.createElement("p");
+      paragraph.className = "summary";
+      paragraph.textContent = body;
+      card.append(heading, paragraph);
+    }
+
+    function articleList(articles) {
+      const list = document.createElement("ul");
+      list.className = "articles";
+      for (const article of articles) {
+        const item = document.createElement("li");
+        const score = document.createElement("span");
+        score.className = "score " + scoreClass(article.sentiment_score);
+        score.textContent = formatScore(article.sentiment_score) + " ";
+        const title = article.url ? document.createElement("a") : document.createElement("span");
+        title.textContent = article.title;
+        if (article.url) {
+          title.href = article.url;
+          title.target = "_blank";
+          title.rel = "noopener noreferrer";
+        }
+        const source = document.createElement("span");
+        source.textContent = article.source ? " (" + article.source + ")" : "";
+        const reason = document.createElement("span");
+        reason.className = "reason";
+        reason.textContent = article.reason || "";
+        item.append(score, title, source, reason);
+        list.append(item);
+      }
+      return list;
+    }
+
+    function formatMove(value) {
+      if (value == null || Number.isNaN(Number(value))) return "—";
+      const number = Number(value) * 100;
+      const sign = number > 0 ? "+" : "";
+      return sign + number.toFixed(2) + "%";
+    }
+
+    function fillAlertDetail(card, alert) {
+      const sections = alert.sections || {};
+      const combined = sections.price || sections.news;
+      if (combined) {
+        addSection(card, "Price", sections.price);
+        addSection(card, "News", sections.news);
+        if (alert.sentiment_score != null) {
+          const score = document.createElement("p");
+          score.className = "combined " + scoreClass(alert.sentiment_score);
+          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score);
+          card.append(score);
+        }
+        if ((alert.articles || []).length) card.append(articleList(alert.articles));
+        addSection(card, "Together", sections.synthesis);
+      } else {
+        const summary = document.createElement("p");
+        summary.className = "summary";
+        summary.textContent = alert.summary;
+        card.append(summary);
+        if (alert.sentiment_score != null) {
+          const score = document.createElement("p");
+          score.className = "combined " + scoreClass(alert.sentiment_score);
+          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score);
+          card.append(score);
+        }
+        if ((alert.articles || []).length) card.append(articleList(alert.articles));
+      }
+    }
+
+    function yahooQuoteUrl(symbol) {
+      return "https://finance.yahoo.com/quote/" + encodeURIComponent(symbol);
+    }
+
+    function symbolLink(symbol) {
+      const link = document.createElement("a");
+      link.className = "symbol-link";
+      link.href = yahooQuoteUrl(symbol);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = symbol;
+      return link;
+    }
+
+    function renderAlerts(alerts) {
+      alertsEl.replaceChildren();
+      const returning = Boolean(homeWatermark());
+      homeScope.hidden = !returning;
+      emptyEl.hidden = alerts.length > 0;
+      emptyEl.textContent = alerts.length > 0
+        ? ""
+        : returning
+          ? "No new alerts since you last opened the app. History has the full list."
+          : "No alerts yet. Add a ticker and run a check.";
+      for (const alert of alerts) {
+        const card = document.createElement("article");
+        card.className = "alert";
+        const head = document.createElement("div");
+        head.className = "alert-head";
+        const badge = document.createElement("span");
+        badge.className = "badge " + alert.kind;
+        badge.textContent = KIND_LABELS[alert.kind] || alert.kind;
+        const symbol = symbolLink(alert.symbol);
+        const when = document.createElement("span");
+        when.className = "when";
+        when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
+        when.title = "When the condition was met";
+        head.append(badge, symbol, when);
+        card.append(head);
+        fillAlertDetail(card, alert);
+        alertsEl.append(card);
+      }
+    }
+
+    function historyValue(alert, key) {
+      if (key === "symbol") return alert.symbol || "";
+      if (key === "sector") return alert.sector || "";
+      if (key === "type") return KIND_LABELS[alert.kind] || alert.kind || "";
+      if (key === "when") {
+        const time = new Date(alert.triggered_at || alert.updated_at || 0).getTime();
+        return Number.isNaN(time) ? null : time;
+      }
+      if (key === "price") return alert.price_change_pct == null ? null : Number(alert.price_change_pct);
+      if (key === "sentiment") return alert.sentiment_score == null ? null : Number(alert.sentiment_score);
+      return "";
+    }
+
+    function compareHistory(a, b) {
+      const av = historyValue(a, historySort.key);
+      const bv = historyValue(b, historySort.key);
+      const direction = historySort.dir === "asc" ? 1 : -1;
+      const missingA = av == null || av === "";
+      const missingB = bv == null || bv === "";
+      if (missingA && missingB) return 0;
+      if (missingA) return 1;
+      if (missingB) return -1;
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * direction;
+      return String(av).localeCompare(String(bv)) * direction;
+    }
+
+    function syncHistoryHeaders() {
+      document.querySelectorAll("table.history th[data-sort]").forEach((header) => {
+        const active = header.dataset.sort === historySort.key;
+        header.setAttribute("aria-sort", active ? (historySort.dir === "asc" ? "ascending" : "descending") : "none");
+      });
+    }
+
+    function renderHistory(alerts) {
+      historyBody.replaceChildren();
+      historyEmpty.hidden = alerts.length > 0;
+      syncHistoryHeaders();
+      const rows = alerts.slice().sort(compareHistory);
+      for (const alert of rows) {
+        const row = document.createElement("tr");
+        const symbol = document.createElement("td");
+        symbol.append(symbolLink(alert.symbol));
+        const sector = document.createElement("td");
+        sector.textContent = alert.sector || "—";
+        const type = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "badge " + alert.kind;
+        badge.textContent = KIND_LABELS[alert.kind] || alert.kind;
+        type.append(badge);
+        const when = document.createElement("td");
+        when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
+        when.title = "When the condition was met";
+        const move = document.createElement("td");
+        move.className = "num";
+        move.textContent = formatMove(alert.price_change_pct);
+        if (alert.price_change_pct > 0) move.classList.add("up");
+        if (alert.price_change_pct < 0) move.classList.add("down");
+        const sentiment = document.createElement("td");
+        sentiment.className = "num";
+        if (alert.sentiment_score == null) {
+          sentiment.textContent = "—";
+        } else {
+          sentiment.textContent = formatScore(alert.sentiment_score);
+          sentiment.classList.add(scoreClass(alert.sentiment_score));
+        }
+        const details = document.createElement("td");
+        const link = document.createElement("button");
+        link.type = "button";
+        link.className = "linkish";
+        link.textContent = "Details";
+        link.addEventListener("click", () => openDetail(alert));
+        details.append(link);
+        row.append(symbol, sector, type, when, move, sentiment, details);
+        historyBody.append(row);
+      }
+    }
+
+    function rulesAtFire(alert) {
+      const parts = [];
+      if (alert.price_move_threshold != null) {
+        parts.push("price change " + (Number(alert.price_move_threshold) * 100).toFixed(1) + "%");
+      }
+      if (alert.sentiment_threshold != null) {
+        parts.push("sentiment score " + Number(alert.sentiment_threshold).toFixed(2));
+      }
+      if (!parts.length) return "";
+      return "When this alert fired, the settings were " + parts.join(" and ") + ".";
+    }
+
+    function openDetail(alert) {
+      if (!alert) return;
+      const title = document.querySelector("#detailTitle");
+      title.replaceChildren(
+        symbolLink(alert.symbol),
+        document.createTextNode(" · " + (KIND_LABELS[alert.kind] || alert.kind)),
+      );
+      const body = document.querySelector("#detailBody");
+      body.replaceChildren();
+      const when = document.createElement("p");
+      when.className = "when";
+      when.style.marginLeft = "0";
+      when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
+      when.title = "When the condition was met";
+      body.append(when);
+      const rules = rulesAtFire(alert);
+      if (rules) {
+        const note = document.createElement("p");
+        note.className = "rule-note";
+        note.textContent = rules;
+        body.append(note);
+      }
+      fillAlertDetail(body, alert);
+      detailModal.hidden = false;
+      document.querySelector("#detailClose").focus();
+    }
+
+    function closeDetail() {
+      detailModal.hidden = true;
+    }
+
+    async function refresh() {
+      const [watch, alerts, rules] = await Promise.all([
+        readJson(await fetch("/v1/watchlist")),
+        readJson(await fetch("/v1/alerts?limit=1000")),
+        readJson(await fetch("/v1/settings")),
+      ]);
+      currentRules = rules;
+      displayTimeZone = rules.display_timezone || displayTimeZone;
+      latestAlerts = alerts.alerts;
+      renderWatchlist(watch.symbols);
+      renderAlerts(alertsForHome(latestAlerts));
+      renderHistory(latestAlerts);
+      fillSettingsForm(rules);
+      applyRulesLine(rules);
+    }
+
+    function applyRulesLine(rules) {
+      const move = (Number(rules.price_move_threshold) * 100).toFixed(1);
+      const sentiment = Number(rules.sentiment_threshold).toFixed(2);
+      document.querySelector("#rules").textContent =
+        `One alert per symbol per day: price at ${move}% versus the prior close, news when |sentiment| is at least ${sentiment}, or news + price when both fire. The time is when the condition was met, in US Eastern. A price move is stamped at the 4:00 PM close.`;
+    }
+
+    document.querySelector("#add-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const symbol = document.querySelector("#symbol").value;
+      try {
+        await readJson(await fetch("/v1/watchlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol }),
+        }));
+        document.querySelector("#symbol").value = "";
+        setStatus("");
+        await refresh();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    document.querySelector("#run").addEventListener("click", async () => {
+      setStatus("Checking prices and headlines…");
+      try {
+        const result = await readJson(await fetch("/v1/checks/run", { method: "POST" }));
+        const note = result.errors && result.errors.length
+          ? " Finished with " + result.errors.length + " symbol error(s)."
+          : "";
+        setStatus("Check finished. " + result.alerts.length + " alert row(s) written." + note);
+        await refresh();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    });
+
+    function fillSettingsForm(rules) {
+      if (!rules) return;
+      document.querySelector("#pricePercent").value = (rules.price_move_threshold * 100).toFixed(1);
+      document.querySelector("#sentimentThreshold").value = Number(rules.sentiment_threshold).toFixed(2);
+    }
+
+    function setSettingsStatus(text, isError) {
+      const el = document.querySelector("#settingsStatus");
+      el.textContent = text || "";
+      el.className = isError ? "status error" : "status";
+    }
+
+    document.querySelectorAll(".tab-btn").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach((other) => {
+          const on = other === button;
+          other.classList.toggle("active", on);
+          other.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        document.querySelectorAll(".tab-panel").forEach((panel) => {
+          panel.hidden = panel.id !== button.dataset.tab;
+        });
+      });
+    });
+
+    document.querySelector("#settings-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setSettingsStatus("Saving…");
+      try {
+        const saved = await readJson(await fetch("/v1/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            price_move_percent: Number(document.querySelector("#pricePercent").value),
+            sentiment_threshold: Number(document.querySelector("#sentimentThreshold").value),
+          }),
+        }));
+        currentRules = saved;
+        fillSettingsForm(saved);
+        applyRulesLine(saved);
+        setSettingsStatus("Saved.");
+      } catch (err) {
+        setSettingsStatus(err.message, true);
+      }
+    });
+
+    document.querySelectorAll("table.history th[data-sort]").forEach((header) => {
+      header.querySelector(".sort-btn").addEventListener("click", () => {
+        const key = header.dataset.sort;
+        if (historySort.key === key) {
+          historySort.dir = historySort.dir === "asc" ? "desc" : "asc";
+        } else {
+          const numeric = key === "when" || key === "price" || key === "sentiment";
+          historySort = { key, dir: numeric ? "desc" : "asc" };
+        }
+        renderHistory(latestAlerts);
+      });
+    });
+
+    document.querySelector("#detailClose").addEventListener("click", closeDetail);
+    document.querySelector("#detailBackdrop").addEventListener("click", closeDetail);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !detailModal.hidden) closeDetail();
+    });
+
+    document.querySelector("#rebuild-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const days = Number(document.querySelector("#rebuildDays").value);
+      const status = document.querySelector("#rebuildStatus");
+      const confirmed = window.confirm(
+        "This deletes every saved alert and rebuilds the last " + days + " day(s) for the watchlist."
+      );
+      if (!confirmed) {
+        status.textContent = "";
+        status.className = "status";
+        return;
+      }
+      status.textContent = "Wiping alerts and rebuilding…";
+      status.className = "status";
+      try {
+        const result = await readJson(await fetch("/v1/admin/rebuild", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ days }),
+        }));
+        const problems = result.errors && result.errors.length
+          ? " " + result.errors.length + " symbol error(s)."
+          : "";
+        status.textContent = "Rebuilt " + result.alerts.length + " alert(s) from " + result.start + "." + problems;
+        status.className = "status";
+        await refresh();
+      } catch (err) {
+        status.textContent = err.message;
+        status.className = "status error";
+      }
+    });
+
+    document.querySelector("#resetSettings").addEventListener("click", async () => {
+      setSettingsStatus("Restoring defaults…");
+      try {
+        const saved = await readJson(await fetch("/v1/settings/reset", { method: "POST" }));
+        currentRules = saved;
+        fillSettingsForm(saved);
+        applyRulesLine(saved);
+        setSettingsStatus("Reset to default.");
+      } catch (err) {
+        setSettingsStatus(err.message, true);
+      }
+    });
+
+    refresh().catch((err) => setStatus(err.message, true));
+  </script>
+</body>
+</html>
