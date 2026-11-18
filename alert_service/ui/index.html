@@ -476,18 +476,16 @@
     const detailModal = document.querySelector("#detailModal");
     const finbertModal = document.querySelector("#finbertModal");
     const homeScope = document.querySelector("#homeScope");
-    const HOME_WATERMARK_KEY = "tickerAlertHomeWatermark";
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
+    let homeOpenedAt = null;
     let latestAlerts = [];
     let historySort = { key: "when", dir: "desc" };
 
     function homeWatermark() {
-      let mark = sessionStorage.getItem(HOME_WATERMARK_KEY);
-      if (mark === null) {
-        mark = localStorage.getItem(LAST_CLOSED_KEY) || "";
-        sessionStorage.setItem(HOME_WATERMARK_KEY, mark);
-      }
-      return mark || null;
+      const closedAt = localStorage.getItem(LAST_CLOSED_KEY);
+      if (closedAt) return closedAt;
+      if (!homeOpenedAt) homeOpenedAt = new Date().toISOString();
+      return homeOpenedAt;
     }
 
     window.addEventListener("pagehide", () => {
@@ -683,14 +681,12 @@
 
     function renderAlerts(alerts) {
       alertsEl.replaceChildren();
-      const returning = Boolean(homeWatermark());
+      const returning = Boolean(localStorage.getItem(LAST_CLOSED_KEY)) || latestAlerts.length > alerts.length;
       homeScope.hidden = !returning;
       emptyEl.hidden = alerts.length > 0;
-      emptyEl.textContent = alerts.length > 0
-        ? ""
-        : returning
-          ? "No new alerts since you last opened the app. History has the full list."
-          : "No alerts yet. Add a ticker and run a check.";
+      emptyEl.textContent = latestAlerts.length > 0
+        ? "No new alerts since you last opened the app. History has the full list."
+        : "No alerts yet. Add a ticker and run a check.";
       for (const alert of alerts) {
         const card = document.createElement("article");
         card.className = "alert";

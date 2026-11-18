@@ -11,6 +11,11 @@ def test_health_and_ui_without_a_database():
     assert "Ticker Alert System" in page.text
     assert "Ticker or company name" in page.text
     assert "function rankSymbolUniverseMatches" in page.text
+    assert "tickerAlertLastClosedAt" in page.text
+    assert "tickerAlertHomeWatermark" not in page.text
+    assert "sessionStorage" not in page.text
+    assert "function homeWatermark" in page.text
+    assert "homeOpenedAt" in page.text
     universe = client.get("/ui/symbol_universe.json")
     assert universe.status_code == 200
     payload = universe.json()

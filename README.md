@@ -8,7 +8,7 @@ Watch a list of tickers. Each symbol gets one alert per day:
 
 Each alert stores a plain-English explanation assembled from the alert fields. When FinBERT is selected, that model only produces the headline score. It does not write the paragraph. The time on a card is when the condition was met, in US Eastern: the 4:00 PM close for a price move, the earliest headline for news, and the later of those two when both fire.
 
-Home lists alerts that arrived after you last had the app open, as cards. Alert History is the full list, newest first: symbol, sector, type, time, the day's price change, news sentiment, and a details popup with the same write-up as the card. Column headings sort the table. Sector names come from Yahoo and are cached. The card clock is still when the condition was met. "New" uses the time the alert was first saved.
+Home lists alerts saved after you last had the page open. Reloading the page starts that visit again, so older cards stay on Alert History. Alert History is the full list, newest first: symbol, sector, type, time, the day's price change, news sentiment, and a details popup with the same write-up as the card. Column headings sort the table. Sector names come from Yahoo and are cached. The card clock is still when the condition was met. "New" uses the time the alert was first saved.
 
 A symbol on a Home card, in the History symbol column, and in the details title opens that ticker's Yahoo Finance quote in a new tab.
 
