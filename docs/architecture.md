@@ -2,7 +2,7 @@
 
 Local decision-support service that turns a watchlist into one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
 
-The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, an Isolation Forest trained on that lake, and Perplexity for the alert wording. The revised plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md). This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, local FinBERT, and a deterministic summary.
+The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, an Isolation Forest trained on that lake, and Perplexity for the alert wording. The revised plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md). This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, local FinBERT, and a Perplexity summary when a key is saved. The deterministic sentence is the fallback.
 
 There is no shared package with Vajra Astra Capital. Common logic lives in this repo as its own copy.
 
@@ -26,7 +26,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | FinBERT inference on each headline, locally, during a check | **As-built**. Not a live score stream |
 | Spark feature table on S3, Isolation Forest fit on that table, model registry | **Target** |
 | Correlation on the price slice (gap, session, or close), including news-only and price-only | **Target** |
-| Perplexity two-sentence summary, with the deterministic sentence as fallback | **Target** |
+| Perplexity two-sentence summary, with the deterministic sentence as fallback | **As-built** when a key is saved |
 | Slack or email notification | **Target** |
 
 A normal check writes only the current Eastern trading day. The admin rebuild is the historical pass we can run now: it deletes saved alerts and reapplies the current rules to each session in the chosen window. It is not the proposal's training lake. Yahoo's quote-news list is newest first and can run out before the first day of a long window, especially for a busy ticker. A rebuild pages that list back through the window and scores each story for the trading day it was published. Sessions with no remaining headline stay price-only.
@@ -44,7 +44,7 @@ The revised target keeps both engines and one feature list. Spark lands historic
 | Minute bars on Kafka, scored by the registered forest | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
 | Slice join, with news-only and price-only | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
-| Perplexity, two sentences, after the decision | Deterministic sentences, plus the thresholds saved on the alert |
+| Perplexity, two sentences, after the decision | Perplexity when a key is saved. Otherwise deterministic sentences, plus the thresholds saved on the alert |
 | S3 lake, Spark training, model registry | Admin rebuild of the last 1–40 calendar days from Yahoo bars and stored headlines. Current settings are applied again, and previous alerts are deleted |
 | One alert per symbol per day | One row per symbol per day |
 

@@ -59,4 +59,5 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Perplexity" in readme
     service = _text(ROOT / "alert_service" / "README.md")
     assert "docs/proposal-pipeline-audit.md" in service
-    assert "This process does not run that stack" in service
+    assert "This process does not run the Kafka, Flink, or Spark stack" in service
+    assert "A saved Perplexity key writes the two-sentence alert reasoning" in service

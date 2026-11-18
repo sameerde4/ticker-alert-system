@@ -184,4 +184,4 @@ A reviewer should be able to point at the diagram and name the batch engine, the
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. Diagrams as transcribed in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service is the smaller path running today: Yahoo bars, local FinBERT, and a deterministic summary. Perplexity, Kafka, Flink, Spark, and the forest are the target this document describes.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. Diagrams as transcribed in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service runs Yahoo bars, local FinBERT, and a Perplexity summary when a key is saved. The deterministic sentence is the fallback. Kafka, Flink, Spark, and the forest are still the target this document describes.
