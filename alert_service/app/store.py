@@ -347,6 +347,7 @@ async def list_alerts(conn: asyncpg.Connection, *, limit: int = 100) -> list[dic
     )
     alerts = [alert_record(row) for row in rows]
     await _fill_missing_price_changes(conn, alerts)
+    await _fill_article_publish_times(conn, alerts)
     return alerts
 
 
@@ -430,3 +431,39 @@ async def _fill_missing_price_changes(conn: asyncpg.Connection, alerts: list[dic
                 break
         if close is not None and prior is not None and prior > 0:
             alert["price_change_pct"] = (close - prior) / prior
+
+
+async def _fill_article_publish_times(conn: asyncpg.Connection, alerts: list[dict[str, Any]]) -> None:
+    """Older alert cards stored the headline without its publish time. Copy it from headlines."""
+    wanted: dict[str, set[str]] = {}
+    for alert in alerts:
+        for article in alert.get("articles") or []:
+            if article.get("published_at") or not article.get("title"):
+                continue
+            wanted.setdefault(alert["symbol"], set()).add(article["title"])
+    if not wanted:
+        return
+    rows = await conn.fetch(
+        """
+        SELECT symbol, title, published_at
+        FROM headlines
+        WHERE symbol = ANY($1::text[])
+        """,
+        list(wanted),
+    )
+    found: dict[tuple[str, str], datetime] = {}
+    for row in rows:
+        titles = wanted.get(row["symbol"])
+        if not titles or row["title"] not in titles or row["published_at"] is None:
+            continue
+        key = (row["symbol"], row["title"])
+        current = found.get(key)
+        if current is None or row["published_at"] > current:
+            found[key] = row["published_at"]
+    for alert in alerts:
+        for article in alert.get("articles") or []:
+            if article.get("published_at"):
+                continue
+            published = found.get((alert["symbol"], article.get("title")))
+            if published is not None:
+                article["published_at"] = published.isoformat()
