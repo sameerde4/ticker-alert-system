@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the Ticker Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class target (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). This process does not run the Kafka, Flink, or Spark stack. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply.
+FastAPI process for the Ticker Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class target (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). The revised target diagrams and the as-built check diagram are in [docs/architecture.md](../docs/architecture.md). This process does not run the Kafka, Flink, or Spark stack. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply.
 
 | Path | Purpose |
 |---|---|

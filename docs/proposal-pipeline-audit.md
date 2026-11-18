@@ -2,7 +2,7 @@
 
 CISC 525 deck and PDF, 30 August 2026. *Real-Time Equity Anomaly & Sentiment Fusion Platform.* Sameer De, Mahir Jhaveri, Gaurav Gulia, Runsen Ning.
 
-Verdicts are against two constraints at once. The product raises one alert per symbol per day. The course requires a big-data architecture: a batch path over historical data, a streaming path over live data, a machine-learning model trained on the batch, and an AI step that writes the alert in plain English. Diagram steps match the deck as transcribed in [architecture.md](architecture.md).
+Verdicts are against two constraints at once. The product raises one alert per symbol per day. The course requires a big-data architecture: a batch path over historical data, a streaming path over live data, a machine-learning model trained on the batch, and an AI step that writes the alert in plain English. The revised target diagrams live in [architecture.md](architecture.md). The tables below say what stayed from the original deck, what changed, and what came off.
 
 ## What the professor needs to see
 
@@ -184,4 +184,4 @@ A reviewer should be able to point at the diagram and name the batch engine, the
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. Diagrams as transcribed in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service runs Yahoo bars, local FinBERT, and a Perplexity summary when a key is saved. Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. The deterministic sentence is the fallback. Kafka, Flink, Spark, and the forest are still the target this document describes.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The revised target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service runs Yahoo bars, local FinBERT, and a Perplexity summary when a key is saved. Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. Kafka, Flink, Spark, and the forest are still the target this document describes.
