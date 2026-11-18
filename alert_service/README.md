@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the Ticker Alert System. Setup, the migration, and the run command are in the [repository README](../README.md).
+FastAPI process for the Ticker Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class target (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). This process does not run that stack.
 
 | Path | Purpose |
 |---|---|

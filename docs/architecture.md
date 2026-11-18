@@ -2,7 +2,7 @@
 
 Local decision-support service that turns a watchlist into one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
 
-The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, and a model registry for anomaly thresholds. This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, and local FinBERT.
+The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, an Isolation Forest trained on that lake, and Perplexity for the alert wording. The revised plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md). This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, local FinBERT, and a deterministic summary.
 
 There is no shared package with Vajra Astra Capital. Common logic lives in this repo as its own copy.
 
@@ -21,50 +21,32 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | Saved price and sentiment thresholds | **As-built** |
 | Admin rebuild: wipe alerts and rerun the current rules over the last 1–40 calendar days | **As-built** |
 | Symbol links to the Yahoo Finance quote, from Home, History, and the details title | **As-built** |
-| Live tick websocket (Alpaca / Databento) | **Target** |
-| Kafka topics and Flink windowed VWAP / volume z-score | **Target** |
+| Minute bars for the watchlist on Kafka (Alpaca / Databento) | **Target** |
+| Flink session features scored with the registered Isolation Forest | **Target** |
 | FinBERT inference on each headline, locally, during a check | **As-built**. Not a live score stream |
-| Isolation Forest training on the historical lake | **Target** |
-| Correlation of a tick anomaly and a sentiment score inside a sub-minute window | **Target** |
-| LLM explanation of an alert | **Target** |
+| Spark feature table on S3, Isolation Forest fit on that table, model registry | **Target** |
+| Correlation on the price slice (gap, session, or close), including news-only and price-only | **Target** |
+| Perplexity two-sentence summary, with the deterministic sentence as fallback | **Target** |
 | Slack or email notification | **Target** |
 
 A normal check writes only the current Eastern trading day. The admin rebuild is the historical pass we can run now: it deletes saved alerts and reapplies the current rules to each session in the chosen window. It is not the proposal's training lake. Yahoo's quote-news list is newest first and can run out before the first day of a long window, especially for a busy ticker. A rebuild pages that list back through the window and scores each story for the trading day it was published. Sessions with no remaining headline stay price-only.
 
 ## Proposal audit
 
-The class deck (CISC 525, 30 Aug 2026) asks for a lambda system: live ticks and a news firehose on a streaming path, historical OHLCV and labeled headlines on a batch path, then a correlation step that explains an anomaly with nearby sentiment. The diagrams in that deck are the target diagrams below. This section is the gap between that proposal and this repository.
+The class deck (CISC 525, 30 Aug 2026) asks for batch processing and stream processing in a big-data architecture, plus machine learning and an AI summary. [proposal-pipeline-audit.md](proposal-pipeline-audit.md) is the revised plan. The mermaid diagrams below are the deck as drawn. The audit says which boxes stay, which change, and which come off.
 
-### What the correlation engine was for
-
-The streaming diagram does not alert the trader from either stream alone. Flink raises a flag only when an anomaly threshold is breached. FinBERT emits a sentiment score stream. Both outputs go into the correlation engine, which keeps them only when they refer to the same symbol inside one time window, then hands that pair to the summarizer.
-
-That join is the product. A price spike with no story, and a headline with no unusual tape, stay inside the pipeline. The trader is supposed to see "this move happened, and this news is the candidate reason."
-
-The deck never defines the window, the symbol match, or what happens when only one side arrives. The sequence diagram always shows both a tick and a headline.
-
-### Where the proposal is thin
-
-- The anomaly is described two ways. The objective says a statistically significant price or volume move. The stack says Isolation Forest. The streaming diagram says a threshold gate. Those are not the same detector, and the deck does not say which one the correlation engine waits for.
-- The time window is unnamed. A few seconds would miss a headline that prints after the close. A whole day will mix a later story with an earlier move. The LITE case in this app is that mix.
-- Late news, disagreeing tone, and several headlines for one move are not specified. The engine is drawn as a single arrow.
-- The batch path trains models and calibrates thresholds. It is not drawn as a way to rebuild the alert table. Using it as "historical updates" would still need a replay job the deck does not specify.
-- Historical news is assumed to exist as an archive. The live news box is a firehose. Neither is the recent-list feed this app can actually call.
-- The serving path writes TimescaleDB, Cassandra, Aurora, and S3. The deck does not say which store is the alert of record.
-- The no-code slide claims a regulatory audit trail and latency SLAs. The rest of the deck does not define either.
-- Kafka, Flink, and FinBERT are the critical path, and the same deck marks them as the skills still being learned.
+The revised target keeps both engines and one feature list. Spark lands historical bars and stored headlines in S3, builds one feature row per symbol per session, and fits an Isolation Forest. The registry holds that model, the feature list, and the score cutoff. Flink scores the same vector on live minute bars from Kafka and writes feature rows to TimescaleDB. FinBERT scores headlines on the stream. Correlation joins a headline to the slice in progress and still allows news-only and price-only. Perplexity writes two sentences from the finished payload. The deterministic sentence remains the fallback. Postgres is the alert of record. Cassandra is not part of the target.
 
 ### What this repository does instead
 
-| Proposal | This app |
+| Revised target | This app |
 |---|---|
-| Tick stream, anomaly within seconds | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
+| Minute bars on Kafka, scored by the registered forest | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
-| Correlation window, unspecified | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
-| Alert only when both sides meet | Price only, news only, or news + price |
-| LLM summary | Deterministic sentences, plus the thresholds saved on the alert |
-| Historical lake and backtesting | Admin rebuild of the last 1–40 calendar days from Yahoo bars and stored headlines. Current settings are applied again, and previous alerts are deleted |
-| Many alerts per symbol per session | One row per symbol per day |
+| Slice join, with news-only and price-only | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
+| Perplexity, two sentences, after the decision | Deterministic sentences, plus the thresholds saved on the alert |
+| S3 lake, Spark training, model registry | Admin rebuild of the last 1–40 calendar days from Yahoo bars and stored headlines. Current settings are applied again, and previous alerts are deleted |
+| One alert per symbol per day | One row per symbol per day |
 
 The rebuild is the closest thing we have to the historical path. It replays rules. It does not train a model or tune a threshold.
 
@@ -104,9 +86,9 @@ flowchart TB
     end
 ```
 
-## Target: high-level lambda architecture
+## Deck: high-level lambda architecture
 
-Streaming path for live detection. Batch path for training and historical reporting. This is the CISC 525 target. It is not what the local process runs today.
+Streaming path for live detection. Batch path for training and historical reporting. These diagrams are the 30 Aug 2026 deck. The revised boxes, including Perplexity and the forest trained on the curated table, are in [proposal-pipeline-audit.md](proposal-pipeline-audit.md). None of this is what the local process runs today.
 
 ```mermaid
 flowchart LR
@@ -167,7 +149,7 @@ flowchart LR
     ALERTS --> API
 ```
 
-## Target: batch historical ELT
+## Deck: batch historical ELT
 
 Extract and load raw history, then transform in the lake.
 
@@ -190,7 +172,7 @@ flowchart LR
     SQL --> BI[Analyst dashboard]
 ```
 
-## Target: streaming ETL
+## Deck: streaming ETL
 
 Extract live ticks and headlines, transform in flight, then load curated results.
 
@@ -218,7 +200,7 @@ flowchart TD
     LLM --> NOTIFY[Notification: Slack or email]
 ```
 
-## Target: end-to-end alert sequence
+## Deck: end-to-end alert sequence
 
 ```mermaid
 sequenceDiagram

@@ -20,7 +20,7 @@ Settings stores the price percent and the FinBERT threshold. FinBERT is the only
 
 This is a separate repository from Vajra Astra Capital. Shared ideas (FastAPI, PostgreSQL migrations, Yahoo bars, the keyword sentiment lexicon) are copied here. Nothing imports the other repo.
 
-The class target (Kafka, Flink, FinBERT, a historical lake) is drawn in [docs/architecture.md](docs/architecture.md). The process that runs today is the local path in that same document. Vendor details are in [docs/data-sources.md](docs/data-sources.md).
+The class target is a batch lake and a live stream: Kafka, Flink, Spark, an Isolation Forest trained on the historical feature table, FinBERT, and a Perplexity summary. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). The deck diagrams and the smaller path this process runs today are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
 
 ## Layout
 
@@ -28,7 +28,7 @@ The class target (Kafka, Flink, FinBERT, a historical lake) is drawn in [docs/ar
 |---|---|
 | [`alert_service/`](alert_service/) | FastAPI app, single-page UI, tests |
 | [`db/migrations/`](db/migrations/) | PostgreSQL schema |
-| [`docs/`](docs/) | Architecture diagrams and data sources |
+| [`docs/`](docs/) | Architecture diagrams, the revised class proposal, and data sources |
 
 ## Prerequisites
 

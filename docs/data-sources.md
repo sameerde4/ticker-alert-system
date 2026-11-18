@@ -32,4 +32,6 @@ The card time is when the condition was met, in US Eastern. During market hours 
 
 ## Target sources
 
-The class design adds a live tick websocket (Alpaca or Databento), a newswire, historical OHLCV and labeled headlines in object storage, and an Isolation Forest trained on the curated lake. Those feeds are not connected. FinBERT itself does run here, on each headline during a check, from weights stored on this machine. The class deck’s FinBERT was a live score stream, which this slice does not have.
+The revised class target is in [proposal-pipeline-audit.md](proposal-pipeline-audit.md). Live minute bars for the watchlist come from Alpaca or Databento onto Kafka. Headlines are scored with FinBERT and persisted; that store is the news history, because the live feed is not an archive. Historical bars and those headlines land in S3. Spark builds the feature table and fits an Isolation Forest. Flink applies that model. After the alert row exists, Perplexity writes two sentences from the payload, and the deterministic sentence is the fallback.
+
+None of those feeds or jobs are connected. FinBERT does run here, on each headline during a check, from weights stored on this machine. The summary the app shows today is the deterministic sentence.
