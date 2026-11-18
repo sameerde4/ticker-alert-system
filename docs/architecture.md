@@ -33,7 +33,7 @@ A normal check writes only the current Eastern trading day. The admin rebuild is
 
 ## Proposal audit
 
-The class deck (CISC 525, 30 Aug 2026) asks for batch processing and stream processing in a big-data architecture, plus machine learning and an AI summary. [proposal-pipeline-audit.md](proposal-pipeline-audit.md) is the revised plan. The mermaid diagrams below are the deck as drawn. The audit says which boxes stay, which change, and which come off.
+The class deck (CISC 525, 30 Aug 2026) asks for batch processing and stream processing in a big-data architecture, plus machine learning and an AI summary. [proposal-pipeline-audit.md](proposal-pipeline-audit.md) is the revised plan. The mermaid diagrams below are that revised target. The original deck still had Cassandra, a FinBERT fine-tune, VWAP as a stream stage, and a generic LLM box. Those are gone here. The audit tables still list every keep, change, and drop.
 
 The revised target keeps both engines and one feature list. Spark lands historical bars and stored headlines in S3, builds one feature row per symbol per session, and fits an Isolation Forest. The registry holds that model, the feature list, and the score cutoff. Flink scores the same vector on live minute bars from Kafka and writes feature rows to TimescaleDB. FinBERT scores headlines on the stream. Correlation joins a headline to the slice in progress and still allows news-only and price-only. Perplexity writes two sentences from the finished payload. The deterministic sentence remains the fallback. Postgres is the alert of record. Cassandra is not part of the target.
 
@@ -52,10 +52,12 @@ The rebuild is the closest thing we have to the historical path. It replays rule
 
 ## As-built check
 
+What this repository runs today. Isolation Forest, Kafka, Flink, and Spark are not on this path.
+
 ```mermaid
 flowchart TB
     subgraph ingest [Ingestion]
-        WL[Watchlist] --> RUN[Run check]
+        WL[Watchlist] --> RUN[Run check or rebuild]
         RUN --> PX[Yahoo daily bars]
         RUN --> NW[Yahoo headlines]
         PX --> BARS[(daily_bars)]
@@ -70,7 +72,7 @@ flowchart TB
         VOL --> PA
         NEWS --> NA{Score at least 25 points from 50}
         NA -->|at or beyond threshold| NEWSALERT[News alert]
-        PA --> ONE{Both rules fired}
+        PA --> ONE{Headline slice clears the same percent}
         NEWSALERT --> ONE
         ONE -->|yes| FA[News plus price alert]
         ONE -->|price only| PA
@@ -78,155 +80,166 @@ flowchart TB
     end
 
     subgraph out [Output]
-        PA --> SUM[Deterministic summary]
-        NEWSALERT --> SUM
-        FA --> SUM
-        SUM --> ALERTS[(alerts)]
-        ALERTS --> UI[Home inbox and alert history]
+        PA --> RULE[Deterministic summary]
+        NEWSALERT --> RULE
+        FA --> RULE
+        RULE --> KEY{Perplexity key saved}
+        KEY -->|no or call failed| ALERTS[(alerts)]
+        KEY -->|yes, batches of eight| PPLX[Perplexity two sentences]
+        PPLX --> ALERTS
+        ALERTS --> UI[Home, History, Details]
+        PPLX -.->|model name under Together| UI
+        RULE -.->|Rule section when replaced| UI
     end
 ```
 
-## Deck: high-level lambda architecture
+## Revised target: high-level lambda architecture
 
-Streaming path for live detection. Batch path for training and historical reporting. These diagrams are the 30 Aug 2026 deck. The revised boxes, including Perplexity and the forest trained on the curated table, are in [proposal-pipeline-audit.md](proposal-pipeline-audit.md). None of this is what the local process runs today.
+Streaming path for live detection. Batch path for training. None of this is what the local process runs today, except FinBERT and the Perplexity summary when a key is saved.
 
 ```mermaid
 flowchart LR
     subgraph sources [Data sources]
-        TICK[Live market tick feed]
+        BARS_LIVE[Minute bars for the watchlist]
         LIVE_NEWS[News and headlines API]
-        HIST_PX[Historical OHLCV archive]
-        HIST_NEWS[Historical news archive]
+        HIST_PX[Historical OHLCV]
+        HIST_NEWS[Persisted scored headlines]
     end
 
     subgraph ingest [Ingestion]
-        KAFKA[Streaming ingest Kafka]
-        BATCH[Batch ingest archive]
+        KAFKA[Kafka]
+        BATCH[Batch land into the lake]
     end
 
     subgraph process [Processing]
-        STREAM[Stream feature computation]
-        SPARK[Batch transform Spark or dbt]
+        FLINK[Flink session features]
+        SPARK[Spark ELT and training]
     end
 
     subgraph storage [Storage]
-        RAW[Data lake raw zone]
-        TS[(Time series feature store)]
-        CURATED[Data lake curated zone]
-        ALERTS[(Alert store)]
+        RAW[S3 raw zone]
+        TS[(TimescaleDB feature rows)]
+        CURATED[S3 curated Parquet]
+        ALERTS[(Postgres alerts)]
     end
 
     subgraph model [Model plane]
-        TRAIN[Model training]
+        TRAIN[Isolation Forest training]
         REG[(Model registry)]
     end
 
     subgraph detect [Detection]
-        SENT[Sentiment scoring]
-        ANOM[Anomaly detection]
-        CORR[Alert correlation]
-        LLM[LLM summarizer]
+        SENT[FinBERT 0 to 100]
+        ANOM[Registered Isolation Forest]
+        CORR[Slice correlation]
+        PPLX[Perplexity two sentences]
     end
 
     subgraph serve [Serving]
         API[Alert API and dashboard]
-        NOTE[Trader notification]
+        NOTE[Slack or email]
     end
 
-    TICK --> KAFKA --> STREAM --> TS
+    BARS_LIVE --> KAFKA --> FLINK --> TS
     LIVE_NEWS --> KAFKA
     HIST_PX --> BATCH --> RAW
     HIST_NEWS --> BATCH
     RAW --> SPARK --> CURATED
     CURATED --> TRAIN --> REG
     REG --> ANOM
-    STREAM --> ANOM
+    FLINK --> ANOM
     KAFKA --> SENT
     SENT --> CORR
     ANOM --> CORR
     CORR --> ALERTS
-    CORR --> LLM --> API --> NOTE
+    ALERTS --> PPLX
+    PPLX --> API --> NOTE
     ALERTS --> API
 ```
 
-## Deck: batch historical ELT
+## Revised target: batch historical ELT
 
-Extract and load raw history, then transform in the lake.
+Land raw history, then build the feature table and fit the forest. FinBERT is not fine-tuned here.
 
 ```mermaid
 flowchart LR
-    HP[Historical price archive] --> ELP[Extract and load raw]
-    HN[Historical news archive] --> ELN[Extract and load raw]
+    HP[Historical price bars] --> ELP[Land raw]
+    HN[Persisted scored headlines] --> ELN[Land raw]
     ELP --> RAW[(S3 raw zone)]
     ELN --> RAW
-    RAW --> VAL[Transform: schema validation and dedup]
-    VAL --> JOBS[Spark or dbt jobs]
-    JOBS --> FEAT[Transform: feature engineering]
-    FEAT --> CUR[(S3 curated zone Parquet)]
-    CUR --> TRAIN[Model training pipeline]
-    TRAIN --> ANOM[Anomaly detection model]
-    TRAIN --> BERT[FinBERT fine-tune]
-    ANOM -.-> INF[Streaming inference service]
-    BERT -.-> INF
-    CUR --> SQL[(Aurora or PostgreSQL reporting tables)]
-    SQL --> BI[Analyst dashboard]
+    RAW --> VAL[Schema check and dedup]
+    VAL --> SPARK[Spark]
+    SPARK --> FEAT[Feature rows: gap, session, close, volume z-score, FinBERT aggregates]
+    FEAT --> CUR[(S3 curated Parquet)]
+    CUR --> TRAIN[Fit Isolation Forest and pick the cutoff]
+    TRAIN --> REG[(Model registry)]
+    REG -.-> FLINK[Flink loads the same model]
+    CUR --> PG[(Postgres alert and reporting tables)]
+    PG --> UI[Alert history dashboard]
 ```
 
-## Deck: streaming ETL
+## Revised target: streaming ETL
 
-Extract live ticks and headlines, transform in flight, then load curated results.
+Minute bars and headlines on Kafka. Flink scores the live vector with the registered forest. Postgres holds the alert. Perplexity writes after the row exists.
 
 ```mermaid
 flowchart TD
-    MKT[Market websocket feed] --> EX1[Extract]
-    EX1 --> KT[Kafka raw ticks]
-    KT --> VWAP[Transform: windowed VWAP and volume z-score]
-    VWAP --> FLINK[Flink stream job]
-    FLINK --> GATE{Anomaly threshold breached}
+    MKT[Minute bars for the watchlist] --> KT[Kafka raw bars]
+    KT --> FLINK[Flink: session returns and volume z-score]
+    FLINK --> GATE{Registered forest cutoff}
     FLINK --> LOADT[Load]
-    LOADT --> TIMESCALE[(TimescaleDB tick features)]
-    GATE -->|Yes| CORR[Correlation engine]
+    LOADT --> TIMESCALE[(TimescaleDB feature rows)]
+    GATE -->|score crosses cutoff| CORR[Slice correlation]
 
-    NEWS[News headline feed] --> EX2[Extract]
-    EX2 --> KN[Kafka raw news]
-    KN --> SS[Transform: sentiment scoring]
-    SS --> FINBERT[FinBERT inference]
-    FINBERT --> SCORES[Sentiment score stream]
+    NEWS[News headline feed] --> KN[Kafka raw news]
+    KN --> FINBERT[FinBERT 0 to 100]
+    FINBERT --> SCORES[Kafka sentiment scores]
     SCORES --> CORR
 
-    CORR --> CASS[(Cassandra alert store)]
-    CORR --> LLM[LLM summarizer]
-    LLM --> DASH[Trader alert dashboard]
-    LLM --> NOTIFY[Notification: Slack or email]
+    CORR --> PG[(Postgres alerts)]
+    PG --> PPLX[Perplexity two sentences]
+    PPLX --> DASH[Trader alert dashboard]
+    PG --> DASH
+    PG --> NOTIFY[Slack or email]
 ```
 
-## Deck: end-to-end alert sequence
+## Revised target: end-to-end alert sequence
+
+Price-only and news-only are allowed. Perplexity never decides the alert.
 
 ```mermaid
 sequenceDiagram
-    participant Market as Market feed
+    participant Market as Minute bars
     participant Kafka
     participant Flink
+    participant Registry as Model registry
     participant FinBERT
-    participant Corr as Correlation engine
-    participant Gen as GenAI summarizer
+    participant Corr as Slice correlation
+    participant PG as Postgres
+    participant Pplx as Perplexity
     participant Trader
 
-    Market->>Kafka: Stream live tick
-    Kafka->>Flink: Consume tick batch
-    Flink->>Flink: Compute rolling volatility and volume
-    Flink->>Corr: Anomaly flag if threshold breached
+    Market->>Kafka: Stream minute bar
+    Kafka->>Flink: Consume bar batch
+    Flink->>Flink: Build gap, session, close, volume z-score
+    Registry->>Flink: Load Isolation Forest and cutoff
+    Flink->>Corr: Anomaly score when the cutoff trips
     Kafka->>FinBERT: Consume news headline
-    FinBERT->>Corr: Sentiment score
-    Corr->>Corr: Correlate anomaly and sentiment in the time window
-    Corr->>Gen: Structured alert payload
-    Gen->>Trader: Plain-English alert summary
+    FinBERT->>Corr: Sentiment score 0 to 100
+    Corr->>Corr: Join on symbol and slice, or keep one side alone
+    Corr->>PG: Store alert row
+    PG->>Pplx: Structured payload
+    alt Key saved and call succeeds
+        Pplx->>Trader: Two-sentence summary
+    else No key or call failed
+        PG->>Trader: Deterministic summary
+    end
 ```
 
 ## Local schema
 
-`watchlist` holds the symbols a check will refresh. `symbols` caches the history label: a Yahoo sector for a stock, the fund category for an ETF or mutual fund, and Crypto for a coin or a digital-asset fund. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction and the FinBERT sentiment threshold. The default threshold is 25 points from 50. `alerts.kind` is `price`, `news`, or `news_price`.
+`watchlist` holds the symbols a check will refresh. `symbols` caches the history label: a Yahoo sector for a stock, the fund category for an ETF or mutual fund, and Crypto for a coin or a digital-asset fund. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, and the selected Perplexity model. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`.
 
-One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
+One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. When Perplexity rewrites Together, the alert `sections` keep the rule sentence, the model id, and the model label shown under Together. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
 
 `sentiment_scorer` stays `finbert`. FinBERT loads ProsusAI/finbert on this machine. The stored score is 0 to 100, with 50 neutral. Confidence is the winning class probability. A headline is eligible when the score is at least the saved number of points from 50.
