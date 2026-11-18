@@ -23,7 +23,8 @@ from .config import (
 from .db import db
 from .sectors import ensure_symbol_sectors
 from .store import add_symbol, get_alert_rules, list_alerts, list_watchlist, remove_symbol, save_alert_rules
-from .symbols import normalize_symbol
+from .prices import yahoo_lists_symbol
+from .symbols import known_universe_symbol, normalize_symbol
 
 _UI_DIR = Path(__file__).resolve().parents[1] / "ui"
 _UI = _UI_DIR / "index.html"
@@ -135,6 +136,8 @@ async def post_watchlist(body: WatchlistIn) -> dict:
         symbol = normalize_symbol(body.symbol)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not known_universe_symbol(symbol) and not yahoo_lists_symbol(symbol):
+        raise HTTPException(status_code=400, detail=f"{symbol} is not a ticker Yahoo recognizes.")
     async with _pool().acquire() as conn:
         return await add_symbol(conn, symbol)
 

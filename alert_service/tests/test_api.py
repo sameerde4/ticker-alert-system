@@ -26,6 +26,12 @@ def test_health_and_ui_without_a_database():
     assert "https://finance.yahoo.com/quote/" in page.text
     assert 'link.target = "_blank"' in page.text
     assert "function symbolLink" in page.text
+    form = page.text.split('id="add-form"', 1)[1].split("</form>", 1)[0]
+    assert form.index('id="run"') < form.index('id="status"')
+    assert "Added " in page.text
+    assert "is already on the watchlist." in page.text
+    assert "Enter a ticker." in page.text
+    assert "requestSubmit" not in page.text
     for column in ("symbol", "sector", "type", "when", "price", "sentiment"):
         assert f'data-sort="{column}"' in page.text
 
@@ -71,3 +77,25 @@ def test_bad_symbol_is_rejected_before_the_database():
     client = TestClient(app)
     response = client.post("/v1/watchlist", json={"symbol": "not a ticker"})
     assert response.status_code == 400
+
+
+def test_unknown_ticker_is_rejected_before_the_database(monkeypatch):
+    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: False)
+    client = TestClient(app)
+    response = client.post("/v1/watchlist", json={"symbol": "ZZZZ"})
+    assert response.status_code == 400
+    assert "not a ticker" in response.json()["detail"]
+
+
+def test_a_known_ticker_is_not_rejected_as_missing(monkeypatch):
+    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: False)
+    client = TestClient(app)
+    response = client.post("/v1/watchlist", json={"symbol": "AAPL"})
+    assert response.status_code == 503
+
+
+def test_a_yahoo_listed_ticker_is_not_rejected_as_missing(monkeypatch):
+    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: True)
+    client = TestClient(app)
+    response = client.post("/v1/watchlist", json={"symbol": "ZZZZ"})
+    assert response.status_code == 503

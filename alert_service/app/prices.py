@@ -70,6 +70,20 @@ def fetch_sector(symbol: str) -> str | None:
     return text or None
 
 
+def yahoo_lists_symbol(symbol: str) -> bool:
+    """True when Yahoo has a last price for this ticker."""
+    try:
+        import yfinance as yf
+    except Exception:  # pragma: no cover
+        return False
+    try:
+        price = yf.Ticker(symbol).fast_info["last_price"]
+        number = float(price)
+    except Exception:
+        return False
+    return number == number and number > 0
+
+
 def _positive(value: Any) -> float | None:
     try:
         number = float(value)

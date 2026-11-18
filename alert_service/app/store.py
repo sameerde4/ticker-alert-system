@@ -124,6 +124,7 @@ async def list_watchlist(conn: asyncpg.Connection) -> list[dict[str, Any]]:
 
 
 async def add_symbol(conn: asyncpg.Connection, symbol: str) -> dict[str, Any]:
+    already = await conn.fetchval("SELECT 1 FROM watchlist WHERE symbol = $1", symbol)
     row = await conn.fetchrow(
         """
         INSERT INTO watchlist (symbol)
@@ -133,7 +134,11 @@ async def add_symbol(conn: asyncpg.Connection, symbol: str) -> dict[str, Any]:
         """,
         symbol,
     )
-    return {"symbol": row["symbol"], "added_at": row["added_at"].isoformat()}
+    return {
+        "symbol": row["symbol"],
+        "added_at": row["added_at"].isoformat(),
+        "already": bool(already),
+    }
 
 
 async def remove_symbol(conn: asyncpg.Connection, symbol: str) -> bool:

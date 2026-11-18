@@ -10,7 +10,7 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 
 | Capability | Status |
 |---|---|
-| Watchlist of tickers, with a local symbol and company-name search | **As-built** |
+| Watchlist of tickers, with a local symbol and company-name search. A suggestion fills the box. Add rejects a symbol that is not on that list and that Yahoo does not quote | **As-built** |
 | Yahoo daily bars into `daily_bars` | **As-built** |
 | Yahoo headlines scored with local FinBERT on a 0–100 scale, with confidence and a class breakdown | **As-built** |
 | Price alert: percent change versus the prior close, with a volume-spike flag | **As-built** |

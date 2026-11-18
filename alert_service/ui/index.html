@@ -50,6 +50,7 @@
       padding: 16px 18px;
       margin: 0;
     }
+    #add-form .status { flex: 1 1 220px; }
     form, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .symbol-suggest { position: relative; display: inline-flex; }
     .symbol-suggest-frame {
@@ -363,9 +364,9 @@
         </span>
         <button type="submit">Add to watchlist</button>
         <button type="button" id="run" class="ghost">Run check</button>
+        <p class="status" id="status"></p>
       </form>
       <div class="chips" id="watchlist"></div>
-      <p class="status" id="status"></p>
     </section>
     <section class="card">
       <h2>Recent</h2>
@@ -934,13 +935,12 @@
       return scored.slice(0, limit);
     }
 
-    function bindSymbolSuggestInput(inputEl, opts = {}) {
+    function bindSymbolSuggestInput(inputEl) {
       const wrap = inputEl.closest(".symbol-suggest");
       const frameEl = wrap.querySelector(".symbol-suggest-frame");
       const listEl = wrap.querySelector(".symbol-suggest-list");
       let activeIdx = -1;
       let currentMatches = [];
-      const onEnter = typeof opts.onEnter === "function" ? opts.onEnter : null;
 
       const hide = () => {
         frameEl.hidden = true;
@@ -1007,7 +1007,6 @@
         event.preventDefault();
         const symbol = button.getAttribute("data-symbol");
         choose(symbol);
-        if (onEnter) onEnter(symbol);
       });
       inputEl.addEventListener("keydown", (event) => {
         const listOpen = !frameEl.hidden;
@@ -1028,42 +1027,39 @@
           return;
         }
         if (event.key !== "Enter") return;
+        event.preventDefault();
         const typed = (inputEl.value || "").trim().toUpperCase();
         const keepTyped = typedTickerBypassesSuggestions(typed, currentMatches);
         if (!keepTyped && listOpen && currentMatches.length && activeIdx >= 0) {
           const pick = currentMatches[activeIdx];
-          if (pick) {
-            event.preventDefault();
-            choose(pick.symbol);
-            if (onEnter) onEnter(pick.symbol);
-          }
-          return;
-        }
-        if (keepTyped) hide();
-        if (onEnter && typed) {
-          event.preventDefault();
-          onEnter(typed);
+          if (pick) choose(pick.symbol);
         }
       });
     }
 
     const symbolInput = document.querySelector("#symbol");
-    bindSymbolSuggestInput(symbolInput, {
-      onEnter() { document.querySelector("#add-form").requestSubmit(); },
-    });
+    bindSymbolSuggestInput(symbolInput);
 
     document.querySelector("#add-form").addEventListener("submit", async (event) => {
       event.preventDefault();
-      const symbol = document.querySelector("#symbol").value;
+      const field = document.querySelector("#symbol");
+      const raw = field.value.trim();
+      if (!raw) {
+        setStatus("Enter a ticker.", true);
+        return;
+      }
+      setStatus("Checking " + raw.toUpperCase() + "…");
       try {
-        await readJson(await fetch("/v1/watchlist", {
+        const saved = await readJson(await fetch("/v1/watchlist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ symbol }),
+          body: JSON.stringify({ symbol: raw }),
         }));
-        document.querySelector("#symbol").value = "";
-        setStatus("");
+        field.value = "";
         await refresh();
+        setStatus(saved.already
+          ? saved.symbol + " is already on the watchlist."
+          : "Added " + saved.symbol + " to the watchlist.");
       } catch (err) {
         setStatus(err.message, true);
       }
