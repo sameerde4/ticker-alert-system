@@ -9,6 +9,7 @@ from typing import Any
 import asyncpg
 
 from .config import DEFAULT_PRICE_MOVE_THRESHOLD, DEFAULT_SENTIMENT_THRESHOLD, settings
+from .scoring import DEFAULT_SCORER, normalize_scorer
 from .engine import AlertDraft
 
 _ALERT_COLUMNS = """
@@ -49,22 +50,33 @@ def alert_record(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def _rule_record(price: float, sentiment: float) -> dict[str, float]:
+def _rule_record(price: float, sentiment: float, scorer: str) -> dict[str, float | str]:
     return {
         "price_move_threshold": price,
         "sentiment_threshold": sentiment,
+        "sentiment_scorer": normalize_scorer(scorer),
         "price_move_threshold_default": DEFAULT_PRICE_MOVE_THRESHOLD,
         "sentiment_threshold_default": DEFAULT_SENTIMENT_THRESHOLD,
+        "sentiment_scorer_default": DEFAULT_SCORER,
     }
 
 
-async def get_alert_rules(conn: asyncpg.Connection) -> dict[str, float]:
+async def get_alert_rules(conn: asyncpg.Connection) -> dict[str, float | str]:
     row = await conn.fetchrow(
-        "SELECT price_move_threshold, sentiment_threshold FROM app_settings WHERE id"
+        """
+        SELECT price_move_threshold, sentiment_threshold, sentiment_scorer
+        FROM app_settings WHERE id
+        """
     )
     if row is None:
-        return _rule_record(settings.price_move_threshold, settings.sentiment_threshold)
-    return _rule_record(float(row["price_move_threshold"]), float(row["sentiment_threshold"]))
+        return _rule_record(
+            settings.price_move_threshold, settings.sentiment_threshold, DEFAULT_SCORER
+        )
+    return _rule_record(
+        float(row["price_move_threshold"]),
+        float(row["sentiment_threshold"]),
+        str(row["sentiment_scorer"]),
+    )
 
 
 async def save_alert_rules(
@@ -81,6 +93,24 @@ async def save_alert_rules(
         """,
         price_move_threshold,
         sentiment_threshold,
+    )
+    return await get_alert_rules(conn)
+
+
+async def save_sentiment_scorer(conn: asyncpg.Connection, scorer: str) -> dict[str, float | str]:
+    """Store FinBERT or custom scoring. Price and sentiment thresholds stay as they are."""
+    name = normalize_scorer(scorer)
+    await conn.execute(
+        """
+        INSERT INTO app_settings (id, price_move_threshold, sentiment_threshold, sentiment_scorer)
+        VALUES (TRUE, $1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET
+          sentiment_scorer = EXCLUDED.sentiment_scorer,
+          updated_at = NOW()
+        """,
+        settings.price_move_threshold,
+        settings.sentiment_threshold,
+        name,
     )
     return await get_alert_rules(conn)
 

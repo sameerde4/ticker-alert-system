@@ -147,7 +147,7 @@ def article_view(item: dict[str, Any]) -> dict[str, Any]:
         "url": item.get("url"),
         "source": item.get("source"),
         "sentiment_score": float(item["sentiment_score"]),
-        "reason": explain_matches(f"{title} {body}"),
+        "reason": item.get("reason") or explain_matches(f"{title} {body}"),
     }
 
 

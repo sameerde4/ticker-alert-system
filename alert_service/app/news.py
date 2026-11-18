@@ -1,11 +1,11 @@
-"""Yahoo headline fetch and keyword scoring."""
+"""Yahoo headline fetch. Scoring happens later, with the selected scorer."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from .sentiment import _parse_pub_date, _strip_html, score_sentiment
+from .sentiment import _parse_pub_date, _strip_html
 
 SOURCE = "yahoo_finance"
 _NAME_STOP = frozenset(
@@ -155,7 +155,6 @@ def parse_yahoo_news_items(raw: list[Any] | None) -> list[dict[str, Any]]:
                 "published_at": published_at,
                 "source": source[:120],
                 "url": _http_url(content, entry),
-                "sentiment_score": score_sentiment(f"{title} {body}"),
             }
         )
     return items
