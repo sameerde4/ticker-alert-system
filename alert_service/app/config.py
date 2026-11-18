@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Kept so older env files still load. A same-day check no longer writes a separate fusion row.
     fusion_window_hours: int = 48
     display_timezone: str = "America/New_York"
+    # Saved in the database from Settings. This env value is used only when that column is empty.
+    perplexity_api_key: str = ""
+    perplexity_model: str = "perplexity/sonar"
+    perplexity_timeout_s: float = 45
 
 
 settings = Settings()

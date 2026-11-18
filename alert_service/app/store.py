@@ -97,6 +97,32 @@ async def save_alert_rules(
     return await get_alert_rules(conn)
 
 
+async def perplexity_api_key(conn: asyncpg.Connection) -> str:
+    """The saved key, or an empty string when Settings has none."""
+    row = await conn.fetchrow("SELECT perplexity_api_key FROM app_settings WHERE id")
+    if row is None:
+        return ""
+    return str(row["perplexity_api_key"] or "").strip()
+
+
+async def save_perplexity_api_key(conn: asyncpg.Connection, api_key: str) -> bool:
+    """Store a key. Returns whether a key is now saved. An empty string clears it."""
+    cleaned = api_key.strip()
+    await conn.execute(
+        """
+        INSERT INTO app_settings (id, price_move_threshold, sentiment_threshold, perplexity_api_key)
+        VALUES (TRUE, $1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET
+          perplexity_api_key = EXCLUDED.perplexity_api_key,
+          updated_at = NOW()
+        """,
+        settings.price_move_threshold,
+        settings.sentiment_threshold,
+        cleaned,
+    )
+    return bool(cleaned)
+
+
 async def save_sentiment_scorer(conn: asyncpg.Connection, scorer: str) -> dict[str, float | str]:
     """Store FinBERT or custom scoring. Price and sentiment thresholds stay as they are."""
     name = normalize_scorer(scorer)
