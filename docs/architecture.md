@@ -31,7 +31,7 @@ Flink scoring and Isolation Forest training complete the class stack on that lak
 | Spark curated feature table (gap, session, close, volume z-score) and Isolation Forest registry | **Target** |
 | Flink scores the registered forest on live session features; Timescale feature sink | **Target** |
 | Near-term headline topic on Kafka with FinBERT scores for live slice join | **Target** |
-| Slack or email after the alert row exists | **Target** |
+| Mac/Chrome desktop notification (Notification Center) plus tab title/favicon badge when new alerts arrive from Run check or live | **As-built** |
 
 Dropped from both the running design and the class target: Cassandra, FinBERT fine-tuning, VWAP as a stream stage, a generic LLM box, a historical news lake, and sentiment features inside Isolation Forest training.
 
@@ -53,6 +53,7 @@ Spark lands **historical S&P daily prices** in the lake, builds one price/volume
 | Perplexity after the decision | When a key is saved; model name under Together; deterministic fallback |
 | Lake, Spark training, registry | Raw daily prices under `data/lake/raw/` via `batch_ingest` or Settings. Curated features and forest training read that lake. Headlines are not in the batch land |
 | One alert per symbol per day | One row per symbol per day |
+| Notify the trader after the row exists | Open UI tab: OS desktop notification via the Notifications API / `ui/sw-notifications.js`, plus a title and favicon unread count. Slack and email are not used |
 
 ## As-built check
 
@@ -92,10 +93,13 @@ flowchart TB
         KEY -->|yes, batches of eight| PPLX[Perplexity two sentences]
         PPLX --> ALERTS
         ALERTS --> UI[Home, History, Details]
+        UI --> NOTE[Desktop notification and tab badge]
         PPLX -.->|model name under Together| UI
         RULE -.->|Rule section when replaced| UI
     end
 ```
+
+Home asks for notification permission (Enable desktop notifications). When Run check or a live refresh adds alert rows, the open tab raises a Mac/Chrome Notification Center popup and sets `(N)` on the title with a favicon badge. Opening Home clears the unread count. Slack and email are not used.
 
 ## As-built live price stream
 
@@ -124,6 +128,7 @@ flowchart LR
         BEAT[live_consumer_heartbeat_at]
         API[GET /v1/live/status]
         UI2[Home Live alerts on]
+        NOTE2[Desktop notification and tab badge]
     end
 
     ALP --> PROD --> TOPIC --> LIVE
@@ -131,7 +136,7 @@ flowchart LR
     LIVE --> BOOK --> RULE2
     RULE2 -->|yes, and day is price-only| PG
     LIVE --> BEAT --> API --> UI2
-    PG --> UI2
+    PG --> UI2 --> NOTE2
 ```
 
 ```mermaid
@@ -216,7 +221,7 @@ flowchart LR
 
     subgraph serve [Serving]
         API[Alert API and dashboard]
-        NOTE[Slack or email]
+        NOTE[Desktop notification and tab badge]
     end
 
     BARS_LIVE --> KAFKA --> FLINK --> TS
@@ -276,7 +281,7 @@ flowchart TD
     PG --> PPLX[Perplexity two sentences]
     PPLX --> DASH[Trader alert dashboard]
     PG --> DASH
-    PG --> NOTIFY[Slack or email]
+    PG --> NOTIFY[Desktop notification and tab badge]
 ```
 
 ## Revised target: end-to-end alert sequence

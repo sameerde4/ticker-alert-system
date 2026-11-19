@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply.
+FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply. When Run check or live adds alerts, the open UI can raise a Mac/Chrome desktop notification and a tab badge (`ui/sw-notifications.js`). Slack and email are not used.
 
 | Path | Purpose |
 |---|---|
@@ -18,7 +18,8 @@ FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run 
 | `app/live_alerts.py` | Session-move price drafts; does not overwrite news / news_price rows |
 | `app/live_consumer.py` | Kafka consumer for `prices.raw.bars` → Postgres price alerts |
 | `app/live.py` | `python -m app.live` entry point; heartbeats so Home can show Live alerts on |
-| `ui/index.html` | Home inbox, sortable history, settings, lake land, rebuild, Yahoo quote links, symbol search |
+| `ui/index.html` | Home inbox, sortable history, settings, lake land, rebuild, Yahoo quote links, symbol search, desktop notifications and tab badge |
+| `ui/sw-notifications.js` | Service worker for OS/Chrome Notification Center popups |
 | `ui/sp500_universe.json` | S&P 500 ticker and company-name list for the Watchlist box |
 | `app/lake_land.py` | Settings action: land one year of S&P daily bars into `data/lake` |
 | `tests/` | Rules, parsing, and API smoke tests |

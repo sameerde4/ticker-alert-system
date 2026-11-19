@@ -69,7 +69,7 @@ Streaming for live detection, batch for training. That split of purpose is what 
 
 The live feed should be minute bars for the S&P 500, written to Kafka. Near-term headlines are scored with FinBERT for the product join; they are not archived into the training lake. Historical **prices** land in the raw zone for forest training.
 
-Kafka stays the bus. The batch ingest lands prices in the lake, and the feature definition it uses is the one Flink uses. Spark is the batch engine on the diagram. The raw zone and the curated zone are the lake. Timescale is the stream feature sink. The registry is how the fitted forest reaches Flink. Correlation stays the product join: symbol plus the slice that was in progress, with news-only and price-only allowed. Perplexity runs after that join. Slack or email is a webhook after the row exists, and a failed notification must not lose the alert.
+Kafka stays the bus. The batch ingest lands prices in the lake, and the feature definition it uses is the one Flink uses. Spark is the batch engine on the diagram. The raw zone and the curated zone are the lake. Timescale is the stream feature sink. The registry is how the fitted forest reaches Flink. Correlation stays the product join: symbol plus the slice that was in progress, with news-only and price-only allowed. Perplexity runs after that join. The dashboard watches for new alert rows and raises a Mac/Chrome desktop notification plus a tab badge; a failed notification must not lose the alert.
 
 | Step | Verdict | Why |
 |---|---|---|
@@ -92,7 +92,7 @@ Kafka stays the bus. The batch ingest lands prices in the lake, and the feature 
 | Correlation | Keep | Join on symbol and slice. Allow price-only and news-only. |
 | Perplexity summary | Keep | Two sentences after the decision. Deterministic fallback. |
 | API and dashboard | Keep | One screen reads the alert table. |
-| Notification | Keep | Slack or email after the row exists. |
+| Notification | Keep | Desktop (OS) notification and tab badge after the row exists. Slack and email are not used. |
 
 ## Slide 7 — Batch historical ELT
 
@@ -130,7 +130,7 @@ The producer writing minute bars to Kafka is the extract. Windowed features and 
 
 Timescale stores the live feature rows. FinBERT scores near-term headlines and publishes the score. Correlation consumes that topic and the anomaly score. It emits news, price, or both.
 
-Cassandra is the box to remove. One alert per symbol per day is a Postgres write. Perplexity, the dashboard, and Slack sit after the Postgres write.
+Cassandra is the box to remove. One alert per symbol per day is a Postgres write. Perplexity, the dashboard, and desktop notifications sit after the Postgres write.
 
 | Step | Verdict | Why |
 |---|---|---|
@@ -146,7 +146,7 @@ Cassandra is the box to remove. One alert per symbol per day is a Postgres write
 | Cassandra | Drop | Postgres holds the alert. |
 | Perplexity | Keep | Two sentences after the row is stored. The deterministic sentence remains the fallback. |
 | Dashboard | Keep | Read the alert table. |
-| Slack or email | Keep | Consumer of the alert row. |
+| Desktop notification and tab badge | Keep | Consumer of the alert row in the open dashboard tab (Mac/Chrome Notification Center). |
 
 ## Slide 9 — End-to-end sequence
 
@@ -171,7 +171,7 @@ The structured payload is symbol, time, kind, percent, FinBERT score when presen
 
 ## Slide 12 — No-code replacement
 
-A workflow tool can send Slack and can call Perplexity. It cannot hold Flink session state, the Spark training job, or the slice join. That is the big-data argument on this slide. Drop the claim of a regulatory audit trail and a latency SLA the rest of the deck never defines. The threshold snapshot and the model version on the alert row are the audit trail you can defend.
+A workflow tool can fire a webhook and can call Perplexity. It cannot hold Flink session state, the Spark training job, or the slice join. That is the big-data argument on this slide. Drop the claim of a regulatory audit trail and a latency SLA the rest of the deck never defines. The threshold snapshot and the model version on the alert row are the audit trail you can defend. Desktop notifications in the dashboard are enough for a class demo; they are not a substitute for the stream path.
 
 ## What the course still needs to see
 
@@ -185,4 +185,4 @@ A reviewer should be able to point at the diagram and name the batch engine, the
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The revised target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last price alerts (`python -m app.live`) with a Home “Live alerts on” cue, and a batch land of index daily prices into the lake. Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. Flink scoring and Isolation Forest training complete the class stack on that price lake and Kafka path. Historical headlines are not part of the design.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The revised target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last price alerts (`python -m app.live`) with a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. Flink scoring and Isolation Forest training complete the class stack on that price lake and Kafka path. Historical headlines are not part of the design.
