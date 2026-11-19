@@ -192,7 +192,12 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
 
 
 async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str, str | None]:
-    """Ask Perplexity for two sentences when a key is saved. Otherwise keep the rule text."""
+    """Ask Perplexity for richer news / news+price write-ups when a key is saved.
+
+    Price-only alerts keep the deterministic rule sentence.
+    """
+    from .perplexity import drafts_for_reasoning
+
     if not drafts:
         return drafts, "rules", None
     async with pool.acquire() as conn:
@@ -201,19 +206,26 @@ async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str
     key = saved or settings.perplexity_api_key.strip()
     if not key:
         return drafts, "rules", None
-    updated: list[Any] = []
+    eligible = drafts_for_reasoning(drafts)
+    if not eligible:
+        return drafts, "rules", None
+    updated: list[Any] = list(drafts)
     errors: list[str] = []
-    # One response has to hold two sentences per alert. A five-day rebuild is too
+    # One response has to hold several sentences per alert. A five-day rebuild is too
     # many for a single reply, so the call is split and each batch keeps its own result.
-    for start in range(0, len(drafts), _REASON_BATCH):
-        batch = drafts[start : start + _REASON_BATCH]
+    for start in range(0, len(eligible), _REASON_BATCH):
+        batch = eligible[start : start + _REASON_BATCH]
         part, error = await asyncio.to_thread(complete_reasoning, key, batch, model)
         by_key = {(draft.symbol, draft.bar_date): draft for draft in part}
-        updated.extend(by_key.get((draft.symbol, draft.bar_date), draft) for draft in batch)
+        updated = [by_key.get((draft.symbol, draft.bar_date), draft) for draft in updated]
         if error:
             errors.append(error)
-    missed = [draft for draft in updated if "model_label" not in draft.sections]
-    if missed and len(missed) < len(updated):
+    missed = [
+        draft
+        for draft in updated
+        if draft.kind in ("news", "news_price") and "model_label" not in draft.sections
+    ]
+    if missed and len(missed) < len(eligible):
         part, error = await asyncio.to_thread(complete_reasoning, key, missed, model)
         by_key = {(draft.symbol, draft.bar_date): draft for draft in part}
         updated = [by_key.get((draft.symbol, draft.bar_date), draft) for draft in updated]

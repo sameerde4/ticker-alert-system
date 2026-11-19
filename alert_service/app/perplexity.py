@@ -1,7 +1,8 @@
 """Perplexity alert reasoning.
 
-The decision is already made. This sends the facts for a set of alerts and asks
-for two sentences. A missing key or a failed call leaves the deterministic summary.
+The decision is already made. News and news+price alerts get a richer trader-facing
+write-up. Price-only alerts keep the deterministic rule sentence. A missing key or a
+failed call leaves the deterministic summary.
 """
 
 from __future__ import annotations
@@ -16,16 +17,28 @@ from urllib.error import HTTPError
 from .config import settings
 from .engine import AlertDraft
 
+# Price-only stays on the rule sentence for now; Isolation Forest wording comes later.
+REASONING_KINDS = frozenset({"news", "news_price"})
+
 _INSTRUCTIONS = (
-    "You write the reasoning for alerts that have already been decided. "
-    "Use only the facts in the JSON. Do not add a price, a score, or a headline that is not in the payload. "
-    "Do not decide whether an alert should exist. "
-    "For each alert, write two sentences. "
-    "The first sentence says what the price did, including the percent when a price change is present. "
-    "When the price change is null, the first sentence says this alert is news only. "
-    "The second sentence gives the candidate reason from the headlines when kind is news_price. "
-    "When kind is news, the second sentence summarizes the FinBERT scores on the headlines. "
-    "When kind is price, the second sentence says whether a headline lined up with the move. "
+    "You write trader-facing reasoning for equity alerts that have already been decided. "
+    "Each alert in the JSON is either kind=news (headline sentiment only) or kind=news_price "
+    "(price move plus headlines). Do not decide whether an alert should exist. "
+    "Use only facts in the payload: prices, percents, FinBERT scores, headline titles, sources, "
+    "publish times, and urls. Do not invent a price, score, ticker, or article that is not listed. "
+    "You may quote or paraphrase headline titles and cite their urls from the payload. "
+    "Do not merely restate that the price moved and that headlines lined up. "
+    "For each alert write three to four short sentences: "
+    "(1) What happened — for news_price, name the move with the percent and levels when present; "
+    "for news, say this is a news-only alert and give the combined FinBERT score out of 100. "
+    "(2) Why it likely moved or why the news matters — ground the reason in the specific headlines "
+    "(company action, guidance, product, legal, sector, etc.), not generic market chatter. "
+    "Name the most relevant headline title; include its url when one is present. "
+    "(3) How the FinBERT scores support that reading (strong negative, positive, or mixed). "
+    "(4) Forward look — one cautious sentence on what a trader might watch next given these stories "
+    "(follow-up prints, guidance, sector peers). This is not personalized financial advice; "
+    "keep it tentative (might, could, watch for). "
+    "When headlines disagree in tone, say so instead of forcing a single story. "
     "Return one JSON object with an alerts array. Each item has symbol, bar_date, and summary."
 )
 
@@ -51,11 +64,16 @@ _SCHEMA = {
 }
 
 
+def drafts_for_reasoning(drafts: list[AlertDraft]) -> list[AlertDraft]:
+    """News and news+price only. Price-only keeps the deterministic sentence."""
+    return [draft for draft in drafts if draft.kind in REASONING_KINDS]
+
+
 def reasoning_payload(drafts: list[AlertDraft]) -> dict[str, Any]:
-    """Facts and instructions for one Perplexity call covering every alert in the set."""
+    """Facts and instructions for one Perplexity call covering news / news+price alerts."""
     return {
         "instructions": _INSTRUCTIONS,
-        "alerts": [_alert_facts(draft) for draft in drafts],
+        "alerts": [_alert_facts(draft) for draft in drafts_for_reasoning(drafts)],
     }
 
 
@@ -84,19 +102,22 @@ def apply_reasoning(
 def complete_reasoning(
     api_key: str, drafts: list[AlertDraft], model: str | None = None
 ) -> tuple[list[AlertDraft], str | None]:
-    """Call Perplexity. On failure, return the original drafts and a short error."""
+    """Call Perplexity for news / news+price drafts. Price-only rows pass through unchanged."""
     key = api_key.strip()
     if not key or not drafts:
         return drafts, None
+    eligible = drafts_for_reasoning(drafts)
+    if not eligible:
+        return drafts, None
     from .perplexity_catalog import resolve_model
 
-    payload = reasoning_payload(drafts)
+    payload = reasoning_payload(eligible)
     body = {
         "model": resolve_model(model or settings.perplexity_model),
         "instructions": _INSTRUCTIONS,
         "input": json.dumps(payload),
-        "temperature": 0.2,
-        "max_output_tokens": 4000,
+        "temperature": 0.3,
+        "max_output_tokens": 6000,
         "tools": [],
         "response_format": {
             "type": "json_schema",
@@ -129,7 +150,10 @@ def complete_reasoning(
         parsed = _parse_json(text)
     except json.JSONDecodeError:
         return drafts, "Perplexity did not return JSON."
-    return apply_reasoning(drafts, parsed, model), None
+    reasoned = apply_reasoning(eligible, parsed, model)
+    by_key = {(draft.symbol, draft.bar_date): draft for draft in reasoned}
+    merged = [by_key.get((draft.symbol, draft.bar_date), draft) for draft in drafts]
+    return merged, None
 
 
 def _alert_facts(draft: AlertDraft) -> dict[str, Any]:
@@ -168,7 +192,7 @@ def _with_summary(draft: AlertDraft, summary: str, model: str | None = None) -> 
     sections = dict(draft.sections)
     if draft.summary:
         sections["rules"] = draft.summary
-    if draft.kind == "news_price":
+    if draft.kind in REASONING_KINDS:
         sections["synthesis"] = summary
     if model:
         sections["model"] = known_model(model)

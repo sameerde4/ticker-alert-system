@@ -108,7 +108,7 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert 'id="perplexity-form"' in page.text
     assert "/v1/settings/perplexity" in page.text
     assert 'id="perplexityModel"' in page.text
-    assert "The selected model writes two sentences." in page.text
+    assert "The selected model writes three to four short sentences." in page.text
     assert "Dots in the field mean a key is saved." in page.text
     assert "••••••••••••" in page.text
     assert "key !== SAVED_KEY_DOTS" in page.text

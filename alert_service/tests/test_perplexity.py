@@ -1,4 +1,4 @@
-"""Perplexity receives the decided alerts and returns two sentences, or the rule text stays."""
+"""Perplexity rewrites news / news+price alerts; price-only keeps the rule text."""
 
 import asyncio
 import json
@@ -48,11 +48,16 @@ def _draft(symbol: str, kind: str = "news_price") -> AlertDraft:
 
 
 def test_one_payload_carries_every_symbol_price_headline_and_finbert_detail():
-    payload = reasoning_payload([_draft("AVGO"), _draft("LITE", "news")])
-    assert "two sentences" in payload["instructions"]
-    assert "do not decide" in payload["instructions"].lower()
+    payload = reasoning_payload([_draft("AVGO"), _draft("LITE", "news"), _draft("MSFT", "price")])
+    instructions = payload["instructions"].lower()
+    assert "three to four" in instructions
+    assert "do not decide" in instructions
+    assert "do not merely restate" in instructions
+    assert "forward" in instructions
+    assert "url" in instructions
     symbols = [item["symbol"] for item in payload["alerts"]]
     assert symbols == ["AVGO", "LITE"]
+    assert "MSFT" not in symbols
     avgo = payload["alerts"][0]
     assert avgo["price_change_pct"] == -0.0418
     headline = avgo["headlines"][0]
@@ -64,6 +69,15 @@ def test_one_payload_carries_every_symbol_price_headline_and_finbert_detail():
     assert headline["neutral_pct"] == 8.0
     assert payload["alerts"][1]["price_change_pct"] is None
     assert "pplx-" not in json.dumps(payload)
+
+
+def test_price_only_drafts_are_skipped_for_reasoning():
+    from app.perplexity import drafts_for_reasoning
+
+    price = _draft("MSFT", "price")
+    news = _draft("AAPL", "news")
+    assert drafts_for_reasoning([price]) == []
+    assert [d.symbol for d in drafts_for_reasoning([price, news])] == ["AAPL"]
 
 
 def test_a_reply_replaces_the_summary_and_keeps_the_rule_sentence():
@@ -137,7 +151,8 @@ def test_a_successful_call_sends_the_json_schema_and_not_the_key(monkeypatch):
     assert captured["url"] == "https://api.perplexity.ai/v1/agent"
     assert captured["auth"] == "Bearer pplx-secret"
     assert captured["body"]["model"] == "openai/gpt-5.4-mini"
-    assert captured["body"]["max_output_tokens"] == 4000
+    assert captured["body"]["max_output_tokens"] == 6000
+    assert captured["body"]["temperature"] == 0.3
     assert captured["body"]["response_format"]["json_schema"]["name"] == "alert_reasoning"
     sent = json.loads(captured["body"]["input"])
     assert sent["alerts"][0]["symbol"] == "AVGO"
@@ -271,7 +286,7 @@ def test_a_news_only_reply_keeps_the_rule_sentence_and_names_the_model():
     sections = updated[0].sections
     assert updated[0].summary == "Apple news only."
     assert sections["rules"] == "AAPL rule sentence."
-    assert "synthesis" not in sections
+    assert sections["synthesis"] == "Apple news only."
     assert sections["model"] == "google/gemini-3.6-flash"
     assert sections["model_label"] == "Gemini · Balanced · google/gemini-3.6-flash"
 
