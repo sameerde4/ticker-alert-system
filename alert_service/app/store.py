@@ -343,6 +343,88 @@ async def live_consumer_status(
     }
 
 
+async def fetch_recent_daily_bars(
+    conn: asyncpg.Connection, symbol: str, *, limit: int = 40
+) -> list[dict[str, Any]]:
+    """Newest-first daily bars for live forest history (caller sorts as needed)."""
+    rows = await conn.fetch(
+        """
+        SELECT symbol, dt, open, high, low, close, volume
+        FROM daily_bars
+        WHERE symbol = $1
+        ORDER BY dt DESC
+        LIMIT $2
+        """,
+        symbol.upper(),
+        limit,
+    )
+    return [
+        {
+            "symbol": row["symbol"],
+            "dt": row["dt"],
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": float(row["volume"]),
+        }
+        for row in rows
+    ]
+
+
+async def insert_live_feature_row(
+    conn: asyncpg.Connection,
+    *,
+    symbol: str,
+    session_day: date,
+    observed_at: datetime,
+    gap_return: float,
+    session_return: float,
+    close_return: float,
+    volume_zscore: float,
+    forest_score: float,
+    score_cutoff: float,
+    anomalous: bool,
+    model_id: str,
+    open_px: float | None,
+    last_px: float | None,
+    prior_close: float | None,
+    session_volume: float | None,
+) -> None:
+    """Append one live feature + forest score row (Timescale stand-in)."""
+    await conn.execute(
+        """
+        INSERT INTO live_feature_rows (
+          symbol, session_day, observed_at,
+          gap_return, session_return, close_return, volume_zscore,
+          forest_score, score_cutoff, anomalous, model_id,
+          open_px, last_px, prior_close, session_volume
+        )
+        VALUES (
+          $1, $2, $3,
+          $4, $5, $6, $7,
+          $8, $9, $10, $11,
+          $12, $13, $14, $15
+        )
+        """,
+        symbol.upper(),
+        session_day,
+        observed_at,
+        gap_return,
+        session_return,
+        close_return,
+        volume_zscore,
+        forest_score,
+        score_cutoff,
+        anomalous,
+        model_id,
+        open_px,
+        last_px,
+        prior_close,
+        session_volume,
+    )
+
+
 async def get_alert_for_day(
     conn: asyncpg.Connection, symbol: str, bar_date: date
 ) -> dict[str, Any] | None:

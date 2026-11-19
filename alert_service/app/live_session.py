@@ -16,6 +16,7 @@ class SessionState:
     open: float
     last: float
     last_ts: datetime
+    volume: float = 0.0
 
 
 def parse_bar_ts(raw: Any) -> datetime | None:
@@ -46,8 +47,18 @@ def _positive(value: Any) -> float | None:
     return number
 
 
+def _nonneg(value: Any) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if number != number or number < 0:
+        return 0.0
+    return number
+
+
 class SessionBook:
-    """Per-symbol session open and latest close from RTH minute bars."""
+    """Per-symbol session open, latest close, and cumulative RTH volume from minute bars."""
 
     def __init__(self) -> None:
         self._states: dict[str, SessionState] = {}
@@ -61,6 +72,7 @@ class SessionBook:
         stamp = parse_bar_ts(bar.get("ts"))
         opened = _positive(bar.get("open"))
         closed = _positive(bar.get("close"))
+        bar_volume = _nonneg(bar.get("volume"))
         if not symbol or stamp is None or opened is None or closed is None:
             return None
         if not cash_session_open(stamp):
@@ -74,6 +86,7 @@ class SessionBook:
                 open=opened,
                 last=closed,
                 last_ts=stamp,
+                volume=bar_volume,
             )
         elif stamp < prior.last_ts:
             return prior
@@ -84,6 +97,7 @@ class SessionBook:
                 open=prior.open,
                 last=closed,
                 last_ts=stamp,
+                volume=prior.volume + bar_volume,
             )
         self._states[symbol] = state
         return state

@@ -1,9 +1,13 @@
 """Runtime settings. Environment variables use the TICKER_ALERT_ prefix."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_PRICE_MOVE_THRESHOLD = 0.03
 DEFAULT_SENTIMENT_THRESHOLD = 25.0
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_LAKE_ROOT = str(_REPO_ROOT / "data" / "lake")
 
 
 def price_fraction_from_percent(percent: float) -> float:
@@ -54,6 +58,12 @@ class Settings(BaseSettings):
     live_watchlist_refresh_seconds: int = 30
     # UI treats the live consumer as on when the heartbeat is newer than this.
     live_heartbeat_stale_seconds: int = 15
+    # Local lake root (registry + optional raw Parquet). Same path batch_train uses.
+    lake_root: str = DEFAULT_LAKE_ROOT
+    # Minimum seconds between live_feature_rows writes for one symbol (sink throttle).
+    live_feature_min_interval_seconds: int = 60
+    # When true, an Isolation Forest anomaly can upsert a live price alert (if no news row).
+    live_forest_alerts: bool = True
 
 
 settings = Settings()

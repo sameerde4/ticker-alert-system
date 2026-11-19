@@ -28,7 +28,7 @@ class AlertDraft:
     headline_title: str | None
     summary: str
     articles: tuple[dict[str, Any], ...] = ()
-    sections: dict[str, str] = field(default_factory=dict)
+    sections: dict[str, Any] = field(default_factory=dict)
     triggered_at: datetime | None = None
     price_move_threshold: float | None = None
     sentiment_threshold: float | None = None
