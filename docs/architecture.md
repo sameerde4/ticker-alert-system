@@ -2,17 +2,21 @@
 
 Local decision-support service for the **S&P 500**. A watchlist of index constituents becomes one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
 
-The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical **price** path, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. The plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
+The class design (CISC 525) is a **local** lambda architecture: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. The plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
 
-This repository runs:
+**Deploy target:** one developer machine (Docker Desktop + Postgres + local lake). Cloud names from the original deck (S3, Aurora, managed Flink) map to local stand-ins below. This project does **not** require an AWS production deploy for the class demo.
 
-- Alpaca delayed SIP minute bars onto Kafka (`stream_ingest/`)
-- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts for the watchlist
+This repository runs today:
+
+- Alpaca delayed SIP minute bars onto local Kafka (`stream_ingest/`)
+- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts for the watchlist (percent rule)
 - Yahoo daily bars and FinBERT headlines on **Run check** (near-term news only)
 - A Perplexity summary when a key is saved
-- A batch land of about one year of S&P daily prices into the lake (`batch_ingest/` or Settings → Historical prices)
+- Batch land of about one year of S&P daily prices into `data/lake/raw/` (`batch_ingest/` or Settings)
+- Curated session features + Isolation Forest registry (`batch_train/`)
+- Mac/Chrome desktop notifications and a tab badge when new alerts arrive
 
-Flink scoring and Isolation Forest training complete the class stack on that lake and Kafka path. **Historical headlines are not landed and are not training features.** News stays on the near-term check (and, in the class stream diagram, a live headline topic). There is no shared package with Vajra Astra Capital.
+Still open for the **local final** stack: score live Kafka sessions with the registered forest (Flink **role**), optional Timescale/Postgres feature-row sink, and a near-term news topic on Kafka. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
 
 ## Status
 
@@ -28,32 +32,79 @@ Flink scoring and Isolation Forest training complete the class stack on that lak
 | Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500) | **As-built** |
 | Live Kafka consumer: open→last price alerts (`python -m app.live`); Home “Live alerts on” heartbeat | **As-built** |
 | Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone | **As-built** |
-| Spark curated feature table (gap, session, close, volume z-score) and Isolation Forest registry | **Target** |
-| Flink scores the registered forest on live session features; Timescale feature sink | **Target** |
-| Near-term headline topic on Kafka with FinBERT scores for live slice join | **Target** |
+| Spark-role curated feature table (gap, session, close, volume z-score) and Isolation Forest registry via `batch_train` (local pandas/scikit-learn) | **As-built** |
 | Mac/Chrome desktop notification (Notification Center) plus tab title/favicon badge when new alerts arrive from Run check or live | **As-built** |
+| Live scorer loads the registry and scores session features from Kafka bars (Flink role); feature-row sink | **Local final target** |
+| Near-term headline topic on Kafka with FinBERT scores for live slice join | **Local final target** |
 
-Dropped from both the running design and the class target: Cassandra, FinBERT fine-tuning, VWAP as a stream stage, a generic LLM box, a historical news lake, and sentiment features inside Isolation Forest training.
+Dropped from both the running design and the local final target: Cassandra, FinBERT fine-tuning, VWAP as a stream stage, a generic LLM box, a historical news lake, sentiment features inside Isolation Forest training, and a mandatory AWS production deploy.
 
 A normal check writes the current Eastern trading day. The admin rebuild deletes saved alerts and reapplies rules over the last 1–40 calendar days for the watchlist. It is not the training lake. Model training reads lake Parquet, not the rebuild.
 
 ## Proposal audit
 
-[proposal-pipeline-audit.md](proposal-pipeline-audit.md) is the revised plan. The mermaid diagrams below are that target. Cassandra, FinBERT fine-tune, VWAP, and a generic LLM box are gone. Historical news is not part of the batch lake.
-
-Spark lands **historical S&P daily prices** in the lake, builds one price/volume feature row per symbol per session, and fits an Isolation Forest. The registry holds that model, the feature list, and the score cutoff. Flink scores the same vector on live minute bars from Kafka and writes feature rows to TimescaleDB. FinBERT scores **near-term** headlines (check today; live news topic on the class stream). Correlation joins a headline to the slice in progress and allows news-only and price-only. Perplexity writes two sentences after the row exists. Postgres is the alert of record.
+[proposal-pipeline-audit.md](proposal-pipeline-audit.md) is the revised plan. Diagrams below separate **as-built** (running now) from **local final target** (still to wire on this machine). Cassandra, FinBERT fine-tune, VWAP, and a generic LLM box are gone. Historical news is not part of the batch lake. S3/Aurora on older slides mean `data/lake` and local Postgres.
 
 ### What this repository does
 
-| Class target | This app |
+| Local final target | This app today |
 |---|---|
-| Minute bars on Kafka, scored by the registered forest | Minute bars on Kafka from Alpaca. `python -m app.live` applies the open→last percent rule and writes a **price** row. Forest scoring uses the same lake features once the model is registered |
+| Minute bars on Kafka, scored by the registered forest | Minute bars on Kafka from Alpaca. `python -m app.live` applies the open→last **percent** rule. Forest scoring from the registry is the remaining live gap |
 | FinBERT on near-term headlines | FinBERT on each headline during a check. Weights on this machine. No historical news land |
 | Slice join, news-only and price-only | Same Eastern day; gap, session, or close slice. Fusion only when that slice clears the price rule |
 | Perplexity after the decision | When a key is saved; model name under Together; deterministic fallback |
-| Lake, Spark training, registry | Raw daily prices under `data/lake/raw/` via `batch_ingest` or Settings. Curated features and forest training read that lake. Headlines are not in the batch land |
+| Lake, Spark-role training, registry | Raw under `data/lake/raw/` via `batch_ingest`. `batch_train` writes curated features and `data/lake/registry/isolation_forest/current/` |
 | One alert per symbol per day | One row per symbol per day |
-| Notify the trader after the row exists | Open UI tab: OS desktop notification via the Notifications API / `ui/sw-notifications.js`, plus a title and favicon unread count. Slack and email are not used |
+| Notify the trader after the row exists | OS desktop notification + tab badge (`ui/sw-notifications.js`). Slack and email are not used |
+
+### Local stand-ins (no AWS required)
+
+| Original deck / cloud name | Local stand-in in this repo |
+|---|---|
+| S3 data lake | `data/lake/` Parquet on disk |
+| Aurora / RDS | Local Postgres `ticker_alert_db` |
+| Managed Kafka | Docker Compose Kafka |
+| Spark cluster (EMR / Dataproc) | `batch_train` Spark-**role** job (pandas ELT + scikit-learn Isolation Forest) |
+| Flink on Kinesis/MSK | Local Flink-**role** live scorer (next): same four features + registry cutoff |
+| Timescale (managed) | Local Timescale in Docker, or a Postgres feature-row table |
+| Slack / email | Mac/Chrome desktop notification + tab badge |
+
+## As-built: system overview
+
+Everything that runs on one machine today. Live price alerts still use the **percent rule**; the forest is trained but not yet applied on the Kafka path.
+
+```mermaid
+flowchart TB
+    subgraph batch [Batch path as-built]
+        YF[Yahoo daily OHLCV] --> LAND[batch_ingest / Settings land]
+        LAND --> RAW[(data/lake/raw/prices/daily)]
+        RAW --> BT[batch_train pandas ELT]
+        BT --> CUR[(curated/features/session)]
+        CUR --> IF[Isolation Forest scikit-learn]
+        IF --> REG[(registry/isolation_forest/current)]
+    end
+
+    subgraph stream [Live path as-built]
+        ALP[Alpaca delayed_sip] --> PROD[stream_ingest]
+        PROD --> KAFKA[(Docker Kafka prices.raw.bars)]
+        KAFKA --> LIVE[python -m app.live]
+        LIVE -->|open to last percent rule| PG[(Postgres alerts)]
+    end
+
+    subgraph check [Run check as-built]
+        WL[Watchlist] --> RUN[Run check]
+        RUN --> YB[Yahoo bars + headlines]
+        YB --> FB[Local FinBERT]
+        FB --> PG
+        RUN -->|percent + news rules| PG
+    end
+
+    subgraph serve [Serving as-built]
+        PG --> API[FastAPI + UI]
+        API --> NOTE[Desktop notification and tab badge]
+        REG -.->|not scored live yet| LIVE
+    end
+```
 
 ## As-built check
 
@@ -103,7 +154,7 @@ Home asks for notification permission (Enable desktop notifications). When Run c
 
 ## As-built live price stream
 
-Docker Kafka, Alpaca producer, and `python -m app.live`. Writes **price** alerts. News comes from Run check. Home reads `/v1/live/status`.
+Docker Kafka, Alpaca producer, and `python -m app.live`. Writes **price** alerts with the **percent rule**. News comes from Run check. Home reads `/v1/live/status`.
 
 ```mermaid
 flowchart LR
@@ -166,7 +217,7 @@ sequenceDiagram
 
 ## As-built batch lake land
 
-S&P 500 daily prices only. No historical headlines.
+S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in).
 
 ```mermaid
 flowchart LR
@@ -174,42 +225,48 @@ flowchart LR
     YF --> LAND[batch_ingest or Settings land]
     LAND --> RAW[data/lake/raw/prices/daily]
     LAND --> MAN[raw/_runs manifest]
-    RAW -.-> CURATE[Curated features Target]
-    CURATE -.-> TRAIN[Isolation Forest Target]
 ```
 
-## Revised target: high-level lambda architecture
+## As-built curated features and Isolation Forest
 
-Batch trains on **price history**. Stream applies that model and scores **near-term** news. No historical news lake.
+Local Spark-**role** job [`batch_train`](../batch_train/): pandas ELT + scikit-learn Isolation Forest. Four price/volume features only. Registry under `data/lake/registry/isolation_forest/current/`. Not a Dataproc/EMR cluster; same *job* the diagrams call Spark training.
+
+```mermaid
+flowchart LR
+    RAW[data/lake/raw/prices/daily] --> CURATE[batch_train curate]
+    CURATE --> FEAT[curated/features/session]
+    FEAT --> TRAIN[Fit Isolation Forest]
+    TRAIN --> REG[registry/isolation_forest/current]
+```
+
+## Local final target: high-level lambda architecture
+
+Batch trains on **price history** (as-built). Stream applies that model and scores **near-term** news (remaining). Everything stays on the local machine. No historical news lake. No AWS requirement.
 
 ```mermaid
 flowchart LR
     subgraph sources [Data sources]
-        BARS_LIVE[S&P minute bars]
+        BARS_LIVE[S&P minute bars Alpaca]
         LIVE_NEWS[Near-term headlines]
-        HIST_PX[Historical daily OHLCV]
+        HIST_PX[Historical daily OHLCV Yahoo]
     end
 
     subgraph ingest [Ingestion]
-        KAFKA[Kafka]
-        BATCH[Batch land prices into the lake]
+        KAFKA[Docker Kafka]
+        BATCH[batch_ingest into data/lake]
     end
 
     subgraph process [Processing]
-        FLINK[Flink session features]
-        SPARK[Spark ELT and training]
+        LIVE_SCORE[Live scorer Flink role]
+        TRAIN_JOB[batch_train Spark role]
     end
 
-    subgraph storage [Storage]
-        RAW[S3 or data/lake raw prices]
-        TS[(TimescaleDB feature rows)]
-        CURATED[Curated Parquet features]
+    subgraph storage [Storage on disk and local DB]
+        RAW[data/lake raw prices]
+        TS[(Feature rows Timescale or Postgres)]
+        CURATED[data/lake curated features]
         ALERTS[(Postgres alerts)]
-    end
-
-    subgraph model [Model plane]
-        TRAIN[Isolation Forest training]
-        REG[(Model registry)]
+        REG[(data/lake registry)]
     end
 
     subgraph detect [Detection]
@@ -224,13 +281,13 @@ flowchart LR
         NOTE[Desktop notification and tab badge]
     end
 
-    BARS_LIVE --> KAFKA --> FLINK --> TS
+    BARS_LIVE --> KAFKA --> LIVE_SCORE --> TS
     LIVE_NEWS --> KAFKA
     HIST_PX --> BATCH --> RAW
-    RAW --> SPARK --> CURATED
-    CURATED --> TRAIN --> REG
+    RAW --> TRAIN_JOB --> CURATED
+    CURATED --> REG
     REG --> ANOM
-    FLINK --> ANOM
+    LIVE_SCORE --> ANOM
     KAFKA --> SENT
     SENT --> CORR
     ANOM --> CORR
@@ -240,36 +297,36 @@ flowchart LR
     ALERTS --> API
 ```
 
-## Revised target: batch historical ELT
+## Local final target: batch historical ELT
 
-Land raw **prices**, build price/volume features, fit the forest. FinBERT is not fine-tuned and is not a batch input.
+Land raw **prices**, build price/volume features, fit the forest. FinBERT is not fine-tuned and is not a batch input. **This path is as-built** via `batch_ingest` + `batch_train`.
 
 ```mermaid
 flowchart LR
-    HP[Historical S&P daily bars] --> ELP[Land raw]
-    ELP --> RAW[(Lake raw zone)]
+    HP[Historical S&P daily bars] --> ELP[batch_ingest land raw]
+    ELP --> RAW[(data/lake raw zone)]
     RAW --> VAL[Schema check and dedup]
-    VAL --> SPARK[Spark]
-    SPARK --> FEAT[Feature rows: gap, session, close, volume z-score]
+    VAL --> SPARK_ROLE[batch_train Spark role]
+    SPARK_ROLE --> FEAT[Feature rows: gap, session, close, volume z-score]
     FEAT --> CUR[(Curated Parquet)]
     CUR --> TRAIN[Fit Isolation Forest and pick the cutoff]
-    TRAIN --> REG[(Model registry)]
-    REG -.-> FLINK[Flink loads the same model]
-    CUR --> PG[(Postgres alert and reporting tables)]
+    TRAIN --> REG[(data/lake registry)]
+    REG -.-> LIVE[Live scorer loads the same model]
+    CUR --> PG[(Postgres alert tables)]
     PG --> UI[Alert history dashboard]
 ```
 
-## Revised target: streaming ETL
+## Local final target: streaming ETL
 
-Minute bars scored by the registered forest. Near-term headlines scored by FinBERT. Postgres holds the alert. Perplexity writes after the row exists.
+Minute bars scored by the registered forest. Near-term headlines scored by FinBERT. Postgres holds the alert. Perplexity writes after the row exists. **Percent-rule live path is as-built; forest scoring and live news topic are the remaining gap.**
 
 ```mermaid
 flowchart TD
-    MKT[S&P minute bars] --> KT[Kafka raw bars]
-    KT --> FLINK[Flink: session returns and volume z-score]
-    FLINK --> GATE{Registered forest cutoff}
-    FLINK --> LOADT[Load]
-    LOADT --> TIMESCALE[(TimescaleDB feature rows)]
+    MKT[S&P minute bars] --> KT[Docker Kafka raw bars]
+    KT --> SCORE[Live scorer: session returns and volume z-score]
+    SCORE --> GATE{Registered forest cutoff}
+    SCORE --> LOADT[Load]
+    LOADT --> FEATSTORE[(Feature rows local Timescale or Postgres)]
     GATE -->|score crosses cutoff| CORR[Slice correlation]
 
     NEWS[Near-term headline feed] --> KN[Kafka raw news]
@@ -284,7 +341,7 @@ flowchart TD
     PG --> NOTIFY[Desktop notification and tab badge]
 ```
 
-## Revised target: end-to-end alert sequence
+## Local final target: end-to-end alert sequence
 
 Price-only and news-only are allowed. Perplexity never decides the alert. The forest features are price and volume only.
 
@@ -292,7 +349,7 @@ Price-only and news-only are allowed. Perplexity never decides the alert. The fo
 sequenceDiagram
     participant Market as Minute bars
     participant Kafka
-    participant Flink
+    participant Scorer as Live scorer
     participant Registry as Model registry
     participant FinBERT
     participant Corr as Slice correlation
@@ -301,10 +358,10 @@ sequenceDiagram
     participant Trader
 
     Market->>Kafka: Stream minute bar
-    Kafka->>Flink: Consume bar batch
-    Flink->>Flink: Build gap, session, close, volume z-score
-    Registry->>Flink: Load Isolation Forest and cutoff
-    Flink->>Corr: Anomaly score when the cutoff trips
+    Kafka->>Scorer: Consume bar batch
+    Scorer->>Scorer: Build gap, session, close, volume z-score
+    Registry->>Scorer: Load Isolation Forest and cutoff
+    Scorer->>Corr: Anomaly score when the cutoff trips
     Kafka->>FinBERT: Consume near-term headline
     FinBERT->>Corr: Sentiment score 0 to 100
     Corr->>Corr: Join on symbol and slice, or keep one side alone
@@ -315,6 +372,7 @@ sequenceDiagram
     else No key or call failed
         PG->>Trader: Deterministic summary
     end
+    PG->>Trader: Desktop notification when the UI tab is open
 ```
 
 ## Local schema
@@ -325,4 +383,4 @@ One row per symbol per `bar_date`. A repeated check replaces that day's alert an
 
 `sentiment_scorer` stays `finbert`. FinBERT loads ProsusAI/finbert on this machine. The stored score is 0 to 100, with 50 neutral. Confidence is the winning class probability. A headline is eligible when the score is at least the saved number of points from 50.
 
-The lake under `data/lake/raw/prices/daily/` holds historical daily OHLCV for training. It is separate from Postgres alerts.
+The lake under `data/lake/` holds raw daily OHLCV, curated session features, and the Isolation Forest registry. It is separate from Postgres alerts.

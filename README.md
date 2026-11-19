@@ -20,7 +20,7 @@ Settings stores the price percent, the FinBERT threshold, and an optional Perple
 
 This is a separate repository from Vajra Astra Capital. Shared ideas (FastAPI, PostgreSQL migrations, Yahoo bars, the keyword sentiment lexicon) are copied here. Nothing imports the other repo.
 
-The class architecture is a batch lake and a live stream: Kafka, Flink, Spark, an Isolation Forest trained on the historical feature table, FinBERT, and a Perplexity summary. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). Diagrams for the running path and the full class stack are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
+The class architecture is a **local** batch lake and live stream: Docker Kafka, a Spark-role training job (`batch_train`), Isolation Forest on lake price/volume features, FinBERT, and a Perplexity summary. AWS production deploy is not required. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). As-built vs local final target diagrams are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
 
 ## Layout
 
@@ -29,7 +29,8 @@ The class architecture is a batch lake and a live stream: Kafka, Flink, Spark, a
 | [`alert_service/`](alert_service/) | FastAPI app, single-page UI, tests, Kafka live price consumer (`python -m app.live`) |
 | [`stream_ingest/`](stream_ingest/) | Alpaca delayed SIP → Kafka minute-bar producer (S&P 500) |
 | [`batch_ingest/`](batch_ingest/) | Yahoo daily history → lake Parquet under `data/lake/raw/` |
-| [`data/lake/`](data/lake/) | Raw and curated lake layout (Parquet gitignored) |
+| [`batch_train/`](batch_train/) | Curated session features + Isolation Forest registry (local Spark-role job) |
+| [`data/lake/`](data/lake/) | Raw, curated, and registry lake layout (artifacts gitignored) |
 | [`db/migrations/`](db/migrations/) | PostgreSQL schema |
 | [`docs/`](docs/) | Architecture diagrams, the revised class proposal, and data sources |
 
@@ -72,6 +73,17 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 Open **http://127.0.0.1:8010/ui**. Add an S&P 500 ticker, then **Run check**. The watchlist is the **focus set** for Run check, rebuild, and live price alerts. The product universe is the full index (lake land, symbol search); checks do not automatically run all 500 names.
 
 On **Settings → Historical prices (lake)**, **Land S&P 500 prices** writes about one year of Yahoo daily bars for the index into `data/lake/raw/` (same job as `batch_ingest` on the CLI).
+
+To build curated features and fit Isolation Forest into the local registry:
+
+```bash
+cd batch_train
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.main
+```
+
+That writes `data/lake/curated/features/session/` and `data/lake/registry/isolation_forest/current/` (model + score cutoff). It is the local job the diagrams label as Spark training.
 
 For live open→last price alerts during the cash session:
 

@@ -2,29 +2,29 @@
 
 CISC 525 deck and PDF, 30 August 2026. *Real-Time Equity Anomaly & Sentiment Fusion Platform.* Sameer De, Mahir Jhaveri, Gaurav Gulia, Runsen Ning.
 
-Verdicts are against two constraints at once. The product raises one alert per symbol per day for the **S&P 500**. The course requires a big-data architecture: a batch path over historical **price** data, a streaming path over live data, a machine-learning model trained on the batch, and an AI step that writes the alert in plain English. The revised target diagrams live in [architecture.md](architecture.md). The tables below say what stayed from the original deck, what changed, and what came off.
+Verdicts are against two constraints at once. The product raises one alert per symbol per day for the **S&P 500**. The course requires a big-data architecture: a batch path over historical **price** data, a streaming path over live data, a machine-learning model trained on the batch, and an AI step that writes the alert in plain English. The **as-built** and **local final target** diagrams live in [architecture.md](architecture.md). The class demo runs on one machine (Docker Kafka, local Postgres, `data/lake`). An AWS production deploy is not required; cloud names on the original deck map to local stand-ins. The tables below say what stayed from the original deck, what changed, and what came off.
 
 ## What the professor needs to see
 
-The architecture has to read as big data on the diagram, not only as a Python job that happens to call Yahoo. These are the boxes that carry that, and each one has a job:
+The architecture has to read as big data on the diagram, not only as a Python job that happens to call Yahoo. These are the boxes that carry that, and each one has a job on the **local** stack:
 
-| Piece | Path | Job |
-|---|---|---|
-| Kafka | Streaming | The bus. Raw bars, near-term headlines, sentiment scores, and anomaly scores are separate topics. |
-| Flink | Streaming | Stateful windows. Holds the session open, the latest price, and volume, and scores the live price/volume feature vector. |
-| TimescaleDB | Streaming | Sink for the live feature rows. This is the time-series store on the diagram. |
-| S3 / lake raw zone | Batch | Immutable landing of historical **daily prices** for the S&P 500. |
-| Spark | Batch | ELT and the training job. Builds the price/volume feature table and fits the model. |
-| Curated Parquet | Batch | The training set Spark writes, one feature row per symbol per session. |
-| Model registry | Both | The fitted model, the feature list, and the score cutoff. Flink loads this. It does not refit during the session. |
-| FinBERT | Streaming / check | Machine learning on the **near-term** headline. Score 0 to 100. Not a batch lake input. |
-| Isolation Forest | Batch, then stream | Machine learning on **price and volume** features. Trained on the curated table. Applied by Flink to the live vector. |
-| Perplexity | After the decision | AI usage. Two sentences from the structured alert. The model does not decide the alert. |
-| Postgres | Serving | One alert row per symbol per day, including the model score, the thresholds, and the Perplexity text. |
+| Piece | Path | Job | Local stand-in |
+|---|---|---|---|
+| Kafka | Streaming | The bus. Raw bars, near-term headlines, sentiment scores, and anomaly scores are separate topics. | Docker Compose Kafka |
+| Flink | Streaming | Stateful windows. Holds the session open, the latest price, and volume, and scores the live price/volume feature vector. | Live scorer (Flink **role**) — remaining target |
+| TimescaleDB | Streaming | Sink for the live feature rows. This is the time-series store on the diagram. | Local Timescale or Postgres feature rows |
+| S3 / lake raw zone | Batch | Immutable landing of historical **daily prices** for the S&P 500. | `data/lake/raw/` on disk |
+| Spark | Batch | ELT and the training job. Builds the price/volume feature table and fits the model. | `batch_train` Spark-**role** job (pandas + scikit-learn) — as-built |
+| Curated Parquet | Batch | The training set the Spark-role job writes, one feature row per symbol per session. | `data/lake/curated/features/session/` |
+| Model registry | Both | The fitted model, the feature list, and the score cutoff. The live scorer loads this. It does not refit during the session. | `data/lake/registry/isolation_forest/current/` |
+| FinBERT | Streaming / check | Machine learning on the **near-term** headline. Score 0 to 100. Not a batch lake input. | Local Transformers + PyTorch |
+| Isolation Forest | Batch, then stream | Machine learning on **price and volume** features. Trained on the curated table. Applied live once the scorer loads the registry. | scikit-learn in `batch_train`; live apply remaining |
+| Perplexity | After the decision | AI usage. Two sentences from the structured alert. The model does not decide the alert. | Settings API key |
+| Postgres | Serving | One alert row per symbol per day, including the model score, the thresholds, and the Perplexity text. | Local `ticker_alert_db` (Aurora on a slide = same engine) |
 
-Cassandra, a second relational database, a separate analyst BI tool, a historical news lake, FinBERT fine-tuning, and VWAP as a stream stage stay off the diagram. One serving database is enough, and the alert screen is the dashboard. Aurora is the same engine as Postgres if the stack slide needs an AWS name.
+Cassandra, a second relational database, a separate analyst BI tool, a historical news lake, FinBERT fine-tuning, VWAP as a stream stage, and a mandatory AWS production deploy stay off the diagram. One serving database is enough, and the alert screen is the dashboard.
 
-The product universe is the S&P 500. A watchlist of constituents drives Run check; the live and batch paths cover the index. The architecture is the big-data shape the course asked for: a lake, a batch compute engine, a log, and a stream processor, with the model crossing from the batch path to the stream path. Minute bars, not raw quotes, are the grain. A session move is the latest trade against the open. Aggregating at the source keeps Kafka and Flink on the decision instead of on reaggregation.
+The product universe is the S&P 500. A watchlist of constituents drives Run check; the live and batch paths cover the index. The architecture is the big-data shape the course asked for: a lake, a batch compute job, a log, and a stream processor, with the model crossing from the batch path to the stream path. Minute bars, not raw quotes, are the grain. A session move is the latest trade against the open. Aggregating at the source keeps Kafka and the live scorer on the decision instead of on reaggregation.
 
 ## Verdict
 
@@ -34,8 +34,9 @@ The historical path exists to train the anomaly model on S&P daily history. The 
 
 | Choice | What it means |
 |---|---|
-| Two engines, one feature list | Spark fits the forest on price history. Flink scores the same features live. |
-| Lake plus log | The lake holds training prices. Kafka holds live bars and near-term news. |
+| Two engines, one feature list | `batch_train` fits the forest on price history. The live scorer scores the same features from Kafka. |
+| Lake plus log | `data/lake` holds training prices. Docker Kafka holds live bars and near-term news. |
+| Local demo, not AWS prod | Same architecture boxes; S3/Aurora/Dataproc names are optional slide aliases. |
 | Three outcomes | News, price, or both. The forest does not require a headline. |
 | AI after the decision | Perplexity explains the row. It does not create it. |
 | Near-term news only | FinBERT runs on headlines that matter for today’s slice. Old articles are not batch training data. |
@@ -175,14 +176,16 @@ A workflow tool can fire a webhook and can call Perplexity. It cannot hold Flink
 
 ## What the course still needs to see
 
-A reviewer should be able to point at the diagram and name the batch engine, the stream engine, the lake, the model that crosses from one to the other, and the AI call that does not.
+A reviewer should be able to point at the diagram and name the batch path, the stream path, the lake, the model that crosses from one to the other, and the AI call that does not — all runnable locally.
 
-- Batch: lake raw prices, Spark, curated Parquet, Isolation Forest, registry.
-- Streaming: Kafka, Flink, FinBERT on near-term news, Timescale.
-- The handoff: Flink scores live bars with the model Spark trained on price history.
+- Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry.
+- Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule price alerts, FinBERT on Run check, desktop notifications.
+- Streaming **local final gap**: live scorer loads the registry (Flink role); optional feature-row sink; near-term news topic on Kafka.
+- The handoff: live scorer scores Kafka bars with the model `batch_train` fitted on price history.
 - AI: Perplexity writes two sentences from the finished payload, with the template sentence as fallback.
 - Product rules that stay: S&P 500 universe, one alert per symbol per day, three outcomes, and the headline joined to the slice that was in progress.
+- Deploy: local machine. AWS production is not part of the final target.
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The revised target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last price alerts (`python -m app.live`) with a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. Flink scoring and Isolation Forest training complete the class stack on that price lake and Kafka path. Historical headlines are not part of the design.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The as-built and local final target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last price alerts (`python -m app.live`) with a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. `batch_train` curates session price/volume features and fits Isolation Forest into a local model registry (the Spark training box on the diagram, run with pandas/scikit-learn — not a Dataproc cluster). Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. A local live scorer loading that registry completes the stream path. Historical headlines are not part of the design. AWS production deploy is out of scope for the demo.
