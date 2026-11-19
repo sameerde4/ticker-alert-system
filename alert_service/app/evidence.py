@@ -34,6 +34,24 @@ def build_evidence_story(draft: AlertDraft) -> dict[str, Any]:
     article_count = len(draft.articles or ())
     forest = sections.get("forest")
     alignment = classify_second_side_alignment(draft, entry=entry, supports=supports)
+    move = _observed_move(draft)
+    threshold = _price_threshold(draft)
+    percent_cleared: bool | None = None
+    if move is not None:
+        try:
+            percent_cleared = abs(float(move)) >= threshold
+        except (TypeError, ValueError):
+            percent_cleared = None
+    forest_anomalous = isinstance(forest, dict) and bool(forest.get("anomalous"))
+    gate_label = _price_gate_case(
+        percent_cleared=percent_cleared, forest_anomalous=forest_anomalous
+    )
+    trigger_label = price_trigger_note(
+        draft,
+        forest,
+        percent_cleared=percent_cleared,
+        forest_anomalous=forest_anomalous,
+    )
 
     if entry == "news":
         return {
@@ -41,6 +59,8 @@ def build_evidence_story(draft: AlertDraft) -> dict[str, Any]:
             "entry": "news",
             "second_supports": supports,
             "alignment": alignment["level"],
+            "price_gate": gate_label.strip("()"),
+            "price_triggers": trigger_label,
             "steps": [
                 {
                     "id": "news_checked",
@@ -74,6 +94,8 @@ def build_evidence_story(draft: AlertDraft) -> dict[str, Any]:
         "entry": "price",
         "second_supports": supports,
         "alignment": alignment["level"],
+        "price_gate": gate_label.strip("()"),
+        "price_triggers": trigger_label,
         "steps": [
             {
                 "id": "price_noticed",
@@ -372,6 +394,76 @@ def _fmt_move(change: float | None) -> str:
     return f"{change * 100:+.2f}%"
 
 
+def _price_gate_case(*, percent_cleared: bool | None, forest_anomalous: bool) -> str:
+    """Short bracket tag: which price gates fired (percent / forest / both / neither)."""
+    if percent_cleared is True and forest_anomalous:
+        return "(percent + forest)"
+    if percent_cleared is True:
+        return "(percent only)"
+    if forest_anomalous:
+        return "(forest only)"
+    return "(neither gate)"
+
+
+def _forest_feature_case_tags(features: dict[str, Any] | None) -> list[str]:
+    """Map loudest forest features to doc case numbers (#3–#6)."""
+    if not isinstance(features, dict):
+        return []
+    ranked: list[tuple[float, str]] = []
+    gap = _as_float_safe(features.get("gap_return"))
+    session = _as_float_safe(features.get("session_return"))
+    close = _as_float_safe(features.get("close_return"))
+    volume_z = _as_float_safe(features.get("volume_zscore"))
+    if gap is not None:
+        ranked.append((abs(gap), "#3 gap"))
+    if session is not None:
+        ranked.append((abs(session), "#4 session"))
+    if close is not None:
+        ranked.append((abs(close), "#5 close"))
+    if volume_z is not None:
+        ranked.append((abs(volume_z) / 10.0, "#6 volume z"))
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    return [label for _, label in ranked[:2]]
+
+
+def price_trigger_note(
+    draft: AlertDraft,
+    forest: Any,
+    *,
+    percent_cleared: bool | None,
+    forest_anomalous: bool,
+) -> str:
+    """Compact note naming which documented price-trigger cases apply.
+
+    Doc cases: #1 percent, #2 forest, #3–#6 forest features, #7 volume-spike note.
+    """
+    bits: list[str] = []
+    if percent_cleared is True:
+        bits.append("#1 percent")
+    if forest_anomalous:
+        feature_tags = _forest_feature_case_tags(
+            forest.get("features") if isinstance(forest, dict) else None
+        )
+        if feature_tags:
+            bits.append(f"#2 forest ({', '.join(feature_tags)})")
+        else:
+            bits.append("#2 forest")
+    if draft.volume_spike:
+        bits.append("#7 volume spike noted")
+    if not bits:
+        return "triggers: none (price under both gates)"
+    return "triggers: " + " + ".join(bits)
+
+
+def _as_float_safe(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _price_checked_detail(draft: AlertDraft, forest: Any, *, as_support_check: bool) -> str:
     """Measurement-only copy for step 2 — verdict stays in the alignment step."""
     move = _observed_move(draft)
@@ -380,25 +472,58 @@ def _price_checked_detail(draft: AlertDraft, forest: Any, *, as_support_check: b
     rule_text = f"{threshold * 100:.1f}%"
     parts: list[str] = []
     forest_anomalous = isinstance(forest, dict) and bool(forest.get("anomalous"))
+    percent_cleared: bool | None = None
+    if move is not None:
+        try:
+            percent_cleared = abs(float(move)) >= threshold
+        except (TypeError, ValueError):
+            percent_cleared = None
+    gate = _price_gate_case(percent_cleared=percent_cleared, forest_anomalous=forest_anomalous)
+    trigger = price_trigger_note(
+        draft,
+        forest,
+        percent_cleared=percent_cleared,
+        forest_anomalous=forest_anomalous,
+    )
+
     if as_support_check:
         if move is None:
-            parts.append("Session price was measured; no usable move was available beside the news.")
-        else:
-            cleared = abs(float(move)) >= threshold
             parts.append(
-                f"Observed session move {move_text} "
-                + (f"cleared the {rule_text} rule." if cleared else f"stayed under the {rule_text} rule.")
+                f"Session price was measured; no usable move was available beside the news. "
+                f"{gate} [{trigger}]."
+            )
+        elif percent_cleared:
+            parts.append(
+                f"Observed session move {move_text} cleared the {rule_text} rule "
+                f"{gate} [{trigger}]."
+            )
+        else:
+            parts.append(
+                f"Observed session move {move_text} stayed under the {rule_text} rule "
+                f"{gate} [{trigger}]."
             )
     elif forest_anomalous:
         # Forest can fire under the percent rule — do not claim the percent gate cleared.
-        if move is not None and abs(float(move)) >= threshold:
-            parts.append(f"Session move {move_text} cleared the {rule_text} percent rule.")
+        if percent_cleared is True:
+            parts.append(
+                f"Session move {move_text} cleared the {rule_text} percent rule "
+                f"{gate} [{trigger}]."
+            )
         elif move is not None:
-            parts.append(f"Session move {move_text} stayed under the {rule_text} percent rule.")
+            parts.append(
+                f"Session move {move_text} stayed under the {rule_text} percent rule "
+                f"{gate} [{trigger}]."
+            )
         else:
-            parts.append("Session price was scored by the registered Isolation Forest.")
+            parts.append(
+                f"Session price was scored by the registered Isolation Forest "
+                f"{gate} [{trigger}]."
+            )
     else:
-        parts.append(f"Session move {move_text} cleared the product gate.")
+        parts.append(
+            f"Session move {move_text} cleared the {rule_text} percent rule "
+            f"{gate} [{trigger}]."
+        )
     forest_line = forest_evidence_detail(forest if isinstance(forest, dict) else None)
     if forest_line:
         parts.append(forest_line)

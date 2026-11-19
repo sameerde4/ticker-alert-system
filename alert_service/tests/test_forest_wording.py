@@ -239,6 +239,7 @@ def test_evidence_price_noticed_is_forest_aware_when_under_percent():
     story = attach_evidence_story(draft).sections["evidence"]
     price_step = next(step for step in story["steps"] if step["id"] == "price_noticed")
     assert "stayed under the 3.0% percent rule" in price_step["detail"]
+    assert "(forest only)" in price_step["detail"]
     assert "Isolation Forest" in price_step["detail"]
     assert "What stood out" in price_step["detail"]
     assert "cleared the product gate" not in price_step["detail"]
