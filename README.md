@@ -1,6 +1,6 @@
-# S&P 500 Alert System
+# S&P 500 Radar
 
-**S&P 500** alerts for price movements and anomalies, with same-day headline checks that grade how well the news explains the session. Two product paths sit side by side: **Live** (Kafka open→last feed → Home Recent alerts) and **Watchlist** (focus set + Scan today → Watchlist results). The batch lake trains Isolation Forest; it is not the Watchlist UI. Each symbol gets one alert per day:
+**S&P 500 Radar** monitors the index for price movements and anomalies, with same-day headline checks that grade how well the news explains the session. Two product paths sit side by side: **Live** (Kafka open→last feed → Home Recent alerts) and **Watchlist** (focus set + Scan today → Watchlist results). The batch lake trains Isolation Forest; it is not the Watchlist UI. Each symbol gets one alert per day:
 
 - **Price** — while the market is open, the latest price versus the opening price. After the close, the close versus the prior close.
 - **News** — headlines that clear the FinBERT sentiment rule. The alert lists each score and link.
@@ -20,7 +20,7 @@ Settings stores the price percent, the FinBERT threshold, and an optional Perple
 
 This is a separate repository from Vajra Astra Capital. Shared ideas (FastAPI, PostgreSQL migrations, Yahoo bars, the keyword sentiment lexicon) are copied here. Nothing imports the other repo.
 
-The class architecture is a **local** lambda stack: Docker Kafka (live), a batch lake + Spark-role training job (`batch_train`), Watchlist Scan today as the on-demand session product path, Isolation Forest on lake price/volume features, FinBERT, and a Perplexity summary. AWS production deploy is not required. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). As-built vs local final target diagrams (including Live vs Watchlist) are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
+The class architecture is a **local** lambda stack: Docker Kafka (live), a batch lake + Spark-role training job (`batch_train`), Watchlist Scan today as the on-demand session product path, Isolation Forest on lake price/volume features, FinBERT, and a Perplexity summary. AWS production deploy is not required. Finished-system diagrams (overview, Live / Watchlist, lake, lambda, batch ELT, streaming ETL, end-to-end sequence) are in [docs/architecture.md](docs/architecture.md). How the original proposal slides map to what we landed — keep / change / drop and why — is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
 
 ## Layout
 

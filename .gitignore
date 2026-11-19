@@ -11,3 +11,6 @@ __pycache__/
 data/lake/raw/
 data/lake/curated/
 data/lake/registry/
+
+# Personal / local-only docs (not for teammates)
+docs/architecture-working-notes.md
