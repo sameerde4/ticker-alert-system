@@ -9,7 +9,7 @@ data/lake/raw/prices/daily/symbol=AAPL/part-000.parquet
 data/lake/raw/_runs/<run-id>.json
 ```
 
-Postgres holds alerts and app state. The lake holds training history. Spark (or an equivalent job) reads these files into curated session features for Isolation Forest training.
+Postgres holds alerts and app state. The lake holds training history. [`batch_train/`](../batch_train/) is the local Spark-role job: it reads these files into curated session features, fits Isolation Forest, and writes the model registry.
 
 ## Setup
 
@@ -34,9 +34,8 @@ Or use **Settings → Historical prices (lake)** in the UI.
 
 ## Next on this path
 
-1. Curated feature rows per symbol per session: gap, session return, close return, volume z-score (price/volume only).
-2. Fit Isolation Forest and save a registry entry.
-3. Score the same features on live Kafka bars.
+1. ~~Curated features + Isolation Forest registry~~ — see [`batch_train/`](../batch_train/).
+2. Score the same features on live Kafka bars (Flink role on the diagram).
 
 Headlines stay on the near-term check path. They are not inputs to this lake.
 

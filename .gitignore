@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 .idea/
 
-# Local lake Parquet (S3 stand-in). Keep data/lake/README.md.
+# Local lake Parquet + model registry (S3 stand-in). Keep data/lake/README.md.
 data/lake/raw/
 data/lake/curated/
+data/lake/registry/
