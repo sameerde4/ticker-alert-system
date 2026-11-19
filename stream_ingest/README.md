@@ -9,7 +9,7 @@ Live / delayed minute bars for the streaming half of the class architecture.
 3. Publishes each bar to Kafka topic `prices.raw.bars`.
 4. On the free Basic plan, WebSocket subscriptions are capped at **30 symbols**. The remaining S&P names are covered by a **REST poller** of delayed SIP minute bars (same Kafka schema).
 
-The FastAPI live consumer (`python -m app.live` in `alert_service/`) reads this topic and writes open→last **price** alerts for the watchlist. Flink / Isolation Forest remain the class target on top of the same topic.
+The FastAPI live consumer (`python -m app.live` in `alert_service/`) reads this topic and writes open→last **price** alerts for the watchlist. Flink scores the same bar stream with the registered Isolation Forest on the class architecture.
 
 ## Important limit
 

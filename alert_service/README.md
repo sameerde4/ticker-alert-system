@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the Ticker Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class target (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). The revised target diagrams, the as-built check diagram, and the as-built live price stream diagram are in [docs/architecture.md](../docs/architecture.md). This process runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are still the class target, not this process. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply.
+FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake, live stream, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes the two-sentence alert reasoning. The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply.
 
 | Path | Purpose |
 |---|---|
@@ -8,7 +8,7 @@ FastAPI process for the Ticker Alert System. Setup, the migration, and the run c
 | `app/sentiment.py` | Keyword sentiment lexicon |
 | `app/finbert.py` | Local ProsusAI/finbert score from 0 to 100, plus confidence and the three class shares |
 | `app/scoring.py` | Sends every headline to FinBERT. The lexicon remains in the repo and is not used by a check |
-| `app/prices.py` | Yahoo daily bars, the last 24 hours of hourly prices for a market that trades all day, the open and latest price during the cash session, and the sector or fund category |
+| `app/prices.py` | Yahoo daily bars, the open and latest price during the cash session, and the sector or fund category |
 | `app/symbols.py` | Ticker normalization, the local symbol list, and which symbols trade all day |
 | `app/news.py` | Yahoo headlines |
 | `app/perplexity.py` | JSON payload of price changes, headlines, and FinBERT scores. The two-sentence reply replaces Together and stores the model name |
@@ -18,8 +18,9 @@ FastAPI process for the Ticker Alert System. Setup, the migration, and the run c
 | `app/live_alerts.py` | Session-move price drafts; does not overwrite news / news_price rows |
 | `app/live_consumer.py` | Kafka consumer for `prices.raw.bars` → Postgres price alerts |
 | `app/live.py` | `python -m app.live` entry point; heartbeats so Home can show Live alerts on |
-| `ui/index.html` | Home inbox, sortable history, settings, rebuild, Yahoo quote links, symbol search |
-| `ui/symbol_universe.json` | Local ticker and company-name list for the Watchlist box |
+| `ui/index.html` | Home inbox, sortable history, settings, lake land, rebuild, Yahoo quote links, symbol search |
+| `ui/sp500_universe.json` | S&P 500 ticker and company-name list for the Watchlist box |
+| `app/lake_land.py` | Settings action: land one year of S&P daily bars into `data/lake` |
 | `tests/` | Rules, parsing, and API smoke tests |
 
 ```bash
@@ -27,7 +28,7 @@ python -m pytest -q
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-Live session-move path (Kafka must be up; Alpaca producer publishing). Run check still owns news:
+Live session-move path (Kafka must be up; Alpaca producer publishing). Run check owns news:
 
 ```bash
 # terminal 1 — API / UI
