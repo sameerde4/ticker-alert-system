@@ -9,7 +9,14 @@ from typing import Any
 import asyncpg
 
 from .config import settings
-from .engine import EASTERN, cash_session_open, eastern_date, evaluate_symbol, headline_session
+from .engine import (
+    EASTERN,
+    cash_session_open,
+    eastern_date,
+    evaluate_symbol,
+    headline_session,
+    scan_focus_moment,
+)
 from .news import fetch_headlines
 from .prices import fetch_daily_bars, fetch_last_24h, fetch_open_to_last
 from .symbols import trades_all_day
@@ -60,6 +67,9 @@ async def _headlines_for_rules(conn, symbol: str, incoming: list[dict[str, Any]]
 
 async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[str, Any]:
     moment = now or datetime.now(UTC)
+    # Pre-open / weekend: evaluate the last completed session so Scan today is not empty.
+    focus = scan_focus_moment(moment)
+    focus_day = eastern_date(focus)
     async with pool.acquire() as conn:
         rules = await get_alert_rules(conn)
         symbols = [row["symbol"] for row in await list_watchlist(conn)]
@@ -86,6 +96,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
             )
             trailing = None
             live = None
+            # Live open→last only while the cash session is open on the wall clock.
             if trades_all_day(symbol):
                 trailing = await asyncio.to_thread(fetch_last_24h, symbol, now=moment)
             elif cash_session_open(moment):
@@ -94,7 +105,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 symbol=symbol,
                 bars=stored_bars,
                 headlines=stored_news,
-                now=moment,
+                now=focus,
                 price_move_threshold=rules["price_move_threshold"],
                 volume_spike_threshold=settings.volume_spike_threshold,
                 volume_lookback=settings.volume_lookback,
@@ -104,21 +115,20 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 trailing_24h=trailing,
                 live_session=live,
             )
-            today = eastern_date(moment)
             drafts = apply_forest_to_drafts(
                 drafts,
                 scorer=forest,
                 symbol=symbol,
                 bars=stored_bars,
-                session_day=today,
-                now=moment,
+                session_day=focus_day,
+                now=focus,
                 price_move_threshold=rules["price_move_threshold"],
                 sentiment_threshold=rules["sentiment_threshold"],
                 live_session=live,
                 origin="watchlist",
             )
-            kept = [attach_evidence_story(draft) for draft in drafts if draft.bar_date == today]
-            await clear_symbol_day(conn, symbol, today)
+            kept = [attach_evidence_story(draft) for draft in drafts if draft.bar_date == focus_day]
+            await clear_symbol_day(conn, symbol, focus_day)
             for draft in kept:
                 alerts.append(draft)
     reasoned, reasoning, reasoning_error = await reason_alert_drafts(pool, alerts)

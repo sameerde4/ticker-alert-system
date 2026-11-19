@@ -1,7 +1,14 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.engine import cash_session_open, evaluate_symbol, headline_price_slice, headline_session
+from app.engine import (
+    cash_session_open,
+    evaluate_symbol,
+    headline_price_slice,
+    headline_session,
+    scan_focus_moment,
+    session_close,
+)
 from app.prices import open_to_last, price_versus_24h, sector_label
 from app.symbols import known_universe_symbol, trades_all_day
 
@@ -401,6 +408,38 @@ def test_cash_session_is_the_weekday_regular_hours():
     assert not cash_session_open(datetime(2026, 11, 17, 9, 29, tzinfo=eastern))
     assert not cash_session_open(datetime(2026, 11, 17, 16, 0, tzinfo=eastern))
     assert not cash_session_open(datetime(2026, 11, 14, 11, 0, tzinfo=eastern))
+
+
+def test_scan_focus_moment_uses_prior_session_before_the_open():
+    eastern = ZoneInfo("America/New_York")
+    # Thursday 4am → Wednesday close.
+    preopen = datetime(2026, 11, 19, 4, 0, tzinfo=eastern)
+    assert scan_focus_moment(preopen) == session_close(date(2026, 11, 18))
+    # Monday 8am → Friday close.
+    monday_pre = datetime(2026, 11, 16, 8, 0, tzinfo=eastern)
+    assert scan_focus_moment(monday_pre) == session_close(date(2026, 11, 13))
+    # During cash hours → today's session on the wall clock.
+    midday = datetime(2026, 11, 19, 11, 0, tzinfo=eastern)
+    assert scan_focus_moment(midday).astimezone(eastern).date() == date(2026, 11, 19)
+    # After the close → still today.
+    after = datetime(2026, 11, 19, 17, 0, tzinfo=eastern)
+    assert scan_focus_moment(after).astimezone(eastern).date() == date(2026, 11, 19)
+
+
+def test_scan_focus_moment_uses_friday_close_on_the_weekend():
+    eastern = ZoneInfo("America/New_York")
+    saturday = datetime(2026, 11, 14, 10, 0, tzinfo=eastern)
+    sunday = datetime(2026, 11, 15, 18, 0, tzinfo=eastern)
+    assert scan_focus_moment(saturday) == session_close(date(2026, 11, 13))
+    assert scan_focus_moment(sunday) == session_close(date(2026, 11, 13))
+
+
+def test_prior_weekday_skips_saturday_and_sunday():
+    from app.engine import prior_weekday
+
+    assert prior_weekday(date(2026, 11, 16)) == date(2026, 11, 13)  # Mon → Fri
+    assert prior_weekday(date(2026, 11, 19)) == date(2026, 11, 18)  # Thu → Wed
+    assert prior_weekday(date(2026, 11, 15)) == date(2026, 11, 13)  # Sun → Fri
 
 
 def test_open_to_last_uses_the_opening_print():

@@ -76,6 +76,31 @@ def cash_session_open(now: datetime) -> bool:
     return time(9, 30) <= clock < time(16, 0)
 
 
+def prior_weekday(day: date) -> date:
+    """Previous Mon–Fri calendar day."""
+    cursor = day - timedelta(days=1)
+    while cursor.weekday() >= 5:
+        cursor -= timedelta(days=1)
+    return cursor
+
+
+def scan_focus_moment(now: datetime) -> datetime:
+    """As-of time for Watchlist Scan today.
+
+    During the cash session or after the close, use ``now`` (today's session).
+    Before the open — and on weekends — use the prior weekday's 4:00 PM close so
+    a pre-market scan still covers the last completed session. Alert ``when``
+    stamps stay on that session's clock, not "today" empty.
+    """
+    moment = _as_utc(now).astimezone(EASTERN)
+    if cash_session_open(moment):
+        return _as_utc(now)
+    clock = moment.timetz().replace(tzinfo=None)
+    if moment.weekday() < 5 and clock >= time(16, 0):
+        return _as_utc(now)
+    return session_close(prior_weekday(moment.date()))
+
+
 def headline_price_slice(published: datetime) -> str:
     """Which part of the session a stock headline can explain.
 
