@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from .engine import AlertDraft, cash_session_open, price_change_pct, price_summary
+from .engine import PRICE_SPAN, AlertDraft, cash_session_open, price_change_pct, price_summary
 from .forest_live import ForestScore
 from .forest_wording import enrich_price_draft_with_forest_wording, forest_price_summary
 from .live_session import SessionState
@@ -50,6 +50,7 @@ def price_draft_from_session(
             volume_spike_threshold=2.0,
             from_open=True,
         ),
+        sections={"price_span": PRICE_SPAN["live"]},
         triggered_at=state.last_ts.astimezone(UTC) if state.last_ts.tzinfo else state.last_ts.replace(tzinfo=UTC),
         price_move_threshold=price_move_threshold,
         sentiment_threshold=sentiment_threshold,
@@ -110,6 +111,7 @@ def forest_price_draft_from_session(
             },
             "entry": "price",
             "second_supports": False,
+            "price_span": PRICE_SPAN["live"],
         },
         triggered_at=state.last_ts.astimezone(UTC) if state.last_ts.tzinfo else state.last_ts.replace(tzinfo=UTC),
         price_move_threshold=price_move_threshold,

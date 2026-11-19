@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
-from .engine import AlertDraft, price_change_pct
+from .engine import PRICE_SPAN, AlertDraft, price_change_pct
 from .forest_live import ForestScore, LiveForestScorer, history_from_daily_rows
 from .forest_wording import enrich_price_draft_with_forest_wording, forest_price_summary
 
@@ -144,6 +144,7 @@ def apply_forest_to_drafts(
                 "forest": forest_block,
                 "entry": "price",
                 "second_supports": False,
+                "price_span": PRICE_SPAN["live"],
             },
             triggered_at=moment.astimezone(UTC),
             price_move_threshold=price_move_threshold,

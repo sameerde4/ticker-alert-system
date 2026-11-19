@@ -312,6 +312,7 @@ async def run_screener(
                                 ),
                                 "entry": "price",
                                 "second_supports": False,
+                                "price_span": "prior close → close",
                             },
                             triggered_at=focus,
                             price_move_threshold=price_threshold,

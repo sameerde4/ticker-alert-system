@@ -2,10 +2,12 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.engine import (
+    PRICE_SPAN,
     cash_session_open,
     evaluate_symbol,
     headline_price_slice,
     headline_session,
+    price_span_caption,
     scan_focus_moment,
     session_close,
 )
@@ -305,6 +307,7 @@ def test_a_crypto_headline_does_not_borrow_the_trailing_day():
     assert "did not line up" in drafts[0].summary
     assert drafts[0].sections["entry"] == "price"
     assert drafts[0].sections["second_supports"] is False
+    assert drafts[0].sections["price_span"] == "24h ago → now"
     assert "candidate reason" not in drafts[0].summary
     assert drafts[0].articles[0]["title"] == "Shares plunge after guidance cut"
     assert drafts[0].sentiment_score is not None
@@ -321,6 +324,7 @@ def test_a_premarket_headline_lines_up_with_the_overnight_gap():
     assert [draft.kind for draft in drafts] == ["news_price"]
     assert drafts[0].price_change_pct == 0.05
     assert "overnight gap" in drafts[0].summary
+    assert drafts[0].sections["price_span"] == "prior close → open"
 
 
 def test_a_midday_headline_does_not_explain_the_overnight_gap():
@@ -346,6 +350,7 @@ def test_an_after_close_headline_lines_up_with_the_close():
     assert [draft.kind for draft in drafts] == ["news_price"]
     assert "close versus the prior close" in drafts[0].summary
     assert drafts[0].price_change_pct == 0.04
+    assert drafts[0].sections["price_span"] == "prior close → close"
 
 
 def test_headline_price_slice_follows_the_eastern_clock():
@@ -354,6 +359,18 @@ def test_headline_price_slice_follows_the_eastern_clock():
     assert headline_price_slice(datetime(2026, 11, 17, 9, 30, tzinfo=eastern)) == "session"
     assert headline_price_slice(datetime(2026, 11, 17, 16, 1, tzinfo=eastern)) == "close"
     assert headline_price_slice(datetime(2026, 11, 14, 11, 0, tzinfo=eastern)) == "close"
+
+
+def test_price_span_captions_cover_each_slice():
+    assert PRICE_SPAN["live"] == "open → last"
+    assert PRICE_SPAN["close"] == "prior close → close"
+    assert PRICE_SPAN["gap"] == "prior close → open"
+    assert PRICE_SPAN["session"] == "open → close"
+    assert PRICE_SPAN["headline"] == "headline → +4h"
+    assert PRICE_SPAN["trailing_24h"] == "24h ago → now"
+    assert price_span_caption("live") == "open → last"
+    assert price_span_caption("unknown") is None
+    assert price_span_caption(None) is None
 
 
 def test_sector_label_uses_the_stock_sector_fund_category_or_crypto():

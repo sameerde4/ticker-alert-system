@@ -126,6 +126,23 @@ SLICE_LABEL = {
     "live": "the regular session so far, from the open to the latest price",
 }
 
+# Short tile captions for the Price change metric (from → to).
+PRICE_SPAN = {
+    "gap": "prior close → open",
+    "session": "open → close",
+    "close": "prior close → close",
+    "headline": "headline → +4h",
+    "live": "open → last",
+    "trailing_24h": "24h ago → now",
+}
+
+
+def price_span_caption(name: str | None) -> str | None:
+    """Compact from→to label for the expanded Price change tile."""
+    if not name:
+        return None
+    return PRICE_SPAN.get(name)
+
 
 def move_after_headline(
     points: list[tuple[datetime, float]],
@@ -419,6 +436,7 @@ def evaluate_symbol(
                     volume_spike_threshold=volume_spike_threshold,
                     trailing_24h=True,
                 ),
+                sections={"price_span": PRICE_SPAN["trailing_24h"]},
                 triggered_at=_as_utc(now),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
@@ -451,6 +469,7 @@ def evaluate_symbol(
                     volume_spike_threshold=volume_spike_threshold,
                     from_open=True,
                 ),
+                sections={"price_span": PRICE_SPAN["live"]},
                 triggered_at=_as_utc(now),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
@@ -490,6 +509,7 @@ def evaluate_symbol(
                     price_move_threshold=price_move_threshold,
                     volume_spike_threshold=volume_spike_threshold,
                 ),
+                sections={"price_span": PRICE_SPAN["close"]},
                 triggered_at=session_close(latest["dt"]),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
@@ -517,7 +537,8 @@ def evaluate_symbol(
         matched = [row for row in clearing if row["name"] == chosen_name]
         articles = tuple(article_view(row["item"]) for row in matched)
         news_score = combined_sentiment([article["sentiment_score"] for article in articles])
-        move_label = SLICE_LABEL["live"] if live_session is not None and chosen_name == "session" else SLICE_LABEL[chosen_name]
+        span_key = "live" if live_session is not None and chosen_name == "session" else chosen_name
+        move_label = SLICE_LABEL.get(span_key, SLICE_LABEL.get(chosen_name, "the headline's price slice"))
         end_px = matched[0]["end"] if chosen_name != "close" else float(matched[0]["end"])
         start_px = matched[0]["start"]
         # The close slice keeps the daily price write-up, including the volume note.
@@ -528,6 +549,7 @@ def evaluate_symbol(
             shown_start = price_draft.prior_close if price_draft.prior_close is not None else start_px
             volume_ratio_value = price_draft.volume_ratio
             volume_spike_value = price_draft.volume_spike
+            span_caption = (price_draft.sections or {}).get("price_span") or PRICE_SPAN["close"]
         else:
             shown_change = chosen_change
             shown_end = end_px
@@ -545,6 +567,7 @@ def evaluate_symbol(
                 volume_spike_threshold=volume_spike_threshold,
                 move_label=move_label,
             )
+            span_caption = price_span_caption(span_key)
         news_text = news_summary(
             symbol,
             list(articles),
@@ -560,6 +583,15 @@ def evaluate_symbol(
             )
         known_at = max(row["known_at"] for row in matched)
         entry = "price" if price_draft is not None else "news"
+        sections = {
+            "price": price_text,
+            "news": news_text,
+            "synthesis": synthesis,
+            "entry": entry,
+            "second_supports": True,
+        }
+        if span_caption:
+            sections["price_span"] = span_caption
         return [
             AlertDraft(
                 kind="news_price",
@@ -575,13 +607,7 @@ def evaluate_symbol(
                 headline_title=None,
                 summary=synthesis,
                 articles=articles,
-                sections={
-                    "price": price_text,
-                    "news": news_text,
-                    "synthesis": synthesis,
-                    "entry": entry,
-                    "second_supports": True,
-                },
+                sections=sections,
                 triggered_at=known_at,
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
@@ -606,19 +632,22 @@ def evaluate_symbol(
             f"and the headlines did not line up with that slice. Combined news sentiment is "
             f"{_score(news_score)} ({_tone(news_score)})."
         )
+        price_sections = {
+            "price": price_draft.summary,
+            "news": news_text,
+            "synthesis": synthesis,
+            "entry": "price",
+            "second_supports": False,
+        }
+        if (price_draft.sections or {}).get("price_span"):
+            price_sections["price_span"] = price_draft.sections["price_span"]
         return [
             replace(
                 price_draft,
                 summary=synthesis,
                 articles=articles,
                 sentiment_score=news_score,
-                sections={
-                    "price": price_draft.summary,
-                    "news": news_text,
-                    "synthesis": synthesis,
-                    "entry": "price",
-                    "second_supports": False,
-                },
+                sections=price_sections,
             )
         ]
     if price_draft is not None:
@@ -630,17 +659,20 @@ def evaluate_symbol(
             f"Price led for {symbol}: the move cleared the rule, and news was checked with no "
             "qualifying headlines."
         )
+        price_sections = {
+            "price": price_draft.summary,
+            "news": news_text,
+            "synthesis": synthesis,
+            "entry": "price",
+            "second_supports": False,
+        }
+        if (price_draft.sections or {}).get("price_span"):
+            price_sections["price_span"] = price_draft.sections["price_span"]
         return [
             replace(
                 price_draft,
                 summary=synthesis,
-                sections={
-                    "price": price_draft.summary,
-                    "news": news_text,
-                    "synthesis": synthesis,
-                    "entry": "price",
-                    "second_supports": False,
-                },
+                sections=price_sections,
             )
         ]
     if news_items:

@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from .engine import AlertDraft, price_change_pct
+from .engine import PRICE_SPAN, AlertDraft, price_change_pct
 
 
 def forest_feature_callouts(features: dict[str, Any] | None) -> list[str]:
@@ -207,6 +207,7 @@ def enrich_price_draft_with_forest_wording(draft: AlertDraft) -> AlertDraft:
         forest=forest,
     )
     sections["price"] = price_text
+    sections.setdefault("price_span", PRICE_SPAN["live"])
 
     if draft.kind != "price":
         return replace(draft, sections=sections)
