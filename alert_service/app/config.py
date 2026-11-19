@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # When true, an Isolation Forest anomaly can open/enrich a price alert on live
     # and on Watchlist Scan today / rebuild (same lake registry).
     live_forest_alerts: bool = True
+    # Auto-land when the lake is empty, then refresh+retrain on this interval (hours).
+    # Disable with TICKER_ALERT_LAKE_AUTO_ENABLED=false or TICKER_ALERT_SKIP_LAKE_AUTO=1.
+    lake_auto_enabled: bool = True
+    lake_refresh_interval_hours: float = 24.0
 
 
 settings = Settings()

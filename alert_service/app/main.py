@@ -39,8 +39,10 @@ from .store import (
 from .lake_land import (
     DEFAULT_REFRESH_DAYS,
     lake_land_status,
+    start_lake_auto_scheduler,
     start_lake_land,
     start_lake_refresh,
+    stop_lake_auto_scheduler,
 )
 from .symbols import known_universe_symbol, normalize_symbol
 
@@ -55,9 +57,11 @@ async def lifespan(_app: FastAPI):
         yield
         return
     await db.connect()
+    await start_lake_auto_scheduler()
     try:
         yield
     finally:
+        await stop_lake_auto_scheduler()
         await db.disconnect()
 
 
