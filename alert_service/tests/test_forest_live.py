@@ -272,8 +272,12 @@ def test_forest_price_draft_only_when_anomalous():
     assert draft is not None
     assert draft.kind == "price"
     assert "Isolation Forest" in draft.summary
+    assert "stayed under" in draft.summary or "also cleared" in draft.summary
+    assert "What stood out" in draft.summary
     assert draft.sections["forest"]["anomalous"] is True
     assert draft.sections["forest"]["model_id"] == "isolation_forest_v1"
+    assert "price" in draft.sections
+    assert "synthesis" in draft.sections
 
 
 def test_should_write_live_price_still_blocks_news_kinds():

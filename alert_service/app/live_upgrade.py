@@ -14,6 +14,7 @@ from .checks import _headlines_for_rules, reason_alert_drafts
 from .config import settings
 from .engine import AlertDraft, eastern_date, evaluate_symbol
 from .evidence import attach_evidence_story
+from .forest_wording import enrich_price_draft_with_forest_wording
 from .live_session import SessionState
 from .news import fetch_headlines
 from .store import load_bars
@@ -65,16 +66,10 @@ async def upgrade_price_draft_with_news(
     if isinstance(forest, dict):
         sections = dict(result.sections or {})
         sections["forest"] = forest
-        # Keep a price section that mentions the forest when evaluate_symbol rebuilt text.
-        if result.kind == "price" and draft.summary:
-            sections.setdefault("price", draft.summary)
         result = replace(result, sections=sections)
-        if result.kind == "price" and "Isolation Forest" in (draft.summary or ""):
-            # Prefer the forest summary when still price-only.
-            note = ""
-            if "no headline lined up" in (result.summary or "").lower():
-                note = " No headline lined up with this move."
-            result = replace(result, summary=(draft.summary.rstrip(".") + "." + note).strip())
+        # Price-only: rebuild Summary/Price with forest-aware deterministic wording.
+        # News / news_price: keep Together text; enrich only the Price accordion.
+        result = enrich_price_draft_with_forest_wording(result)
 
     result = attach_evidence_story(result)
     if result.kind in ("news", "news_price"):
@@ -82,6 +77,8 @@ async def upgrade_price_draft_with_news(
         if error:
             log.warning("Live Perplexity reasoning failed for %s: %s", state.symbol, error)
         result = reasoned[0] if reasoned else result
+        # Re-apply forest Price section after Perplexity overwrites synthesis.
+        result = enrich_price_draft_with_forest_wording(result)
         result = attach_evidence_story(result)
     return result
 

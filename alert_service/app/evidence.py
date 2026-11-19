@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from .engine import AlertDraft
+from .forest_wording import forest_evidence_detail
 
 # Granular second-side outcomes shown in What happened (step 3 + headline).
 ALIGNMENT_SUPPORTS = "supports"
@@ -378,6 +379,7 @@ def _price_checked_detail(draft: AlertDraft, forest: Any, *, as_support_check: b
     threshold = _price_threshold(draft)
     rule_text = f"{threshold * 100:.1f}%"
     parts: list[str] = []
+    forest_anomalous = isinstance(forest, dict) and bool(forest.get("anomalous"))
     if as_support_check:
         if move is None:
             parts.append("Session price was measured; no usable move was available beside the news.")
@@ -387,11 +389,17 @@ def _price_checked_detail(draft: AlertDraft, forest: Any, *, as_support_check: b
                 f"Observed session move {move_text} "
                 + (f"cleared the {rule_text} rule." if cleared else f"stayed under the {rule_text} rule.")
             )
+    elif forest_anomalous:
+        # Forest can fire under the percent rule — do not claim the percent gate cleared.
+        if move is not None and abs(float(move)) >= threshold:
+            parts.append(f"Session move {move_text} cleared the {rule_text} percent rule.")
+        elif move is not None:
+            parts.append(f"Session move {move_text} stayed under the {rule_text} percent rule.")
+        else:
+            parts.append("Session price was scored by the registered Isolation Forest.")
     else:
         parts.append(f"Session move {move_text} cleared the product gate.")
-    if isinstance(forest, dict) and forest.get("anomalous"):
-        parts.append(
-            f"Isolation Forest {forest.get('model_id') or 'model'} marked the session anomalous "
-            f"(score {float(forest.get('forest_score') or 0):.4f})."
-        )
+    forest_line = forest_evidence_detail(forest if isinstance(forest, dict) else None)
+    if forest_line:
+        parts.append(forest_line)
     return " ".join(parts)

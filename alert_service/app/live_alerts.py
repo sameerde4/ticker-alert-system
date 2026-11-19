@@ -7,6 +7,7 @@ from typing import Any
 
 from .engine import AlertDraft, cash_session_open, price_change_pct, price_summary
 from .forest_live import ForestScore
+from .forest_wording import enrich_price_draft_with_forest_wording, forest_price_summary
 from .live_session import SessionState
 
 
@@ -73,16 +74,18 @@ def forest_price_draft_from_session(
     if not scored.anomalous:
         return None
     change = price_change_pct(state.last, state.open)
-    move = f"{change * 100:+.2f}%" if change is not None else "n/a"
-    summary = (
-        f"{state.symbol} session looks anomalous on the registered Isolation Forest "
-        f"({scored.model_id}): score {scored.forest_score:.4f} at or below cutoff "
-        f"{scored.score_cutoff:.4f}. Open→last is {move} "
-        f"(gap {scored.features['gap_return'] * 100:+.2f}%, "
-        f"session {scored.features['session_return'] * 100:+.2f}%, "
-        f"volume z {scored.features['volume_zscore']:.2f})."
+    summary = forest_price_summary(
+        state.symbol,
+        model_id=scored.model_id,
+        forest_score=scored.forest_score,
+        score_cutoff=scored.score_cutoff,
+        features=scored.features,
+        open_px=state.open,
+        last_px=state.last,
+        price_move_threshold=price_move_threshold,
+        change=change,
     )
-    return AlertDraft(
+    draft = AlertDraft(
         kind="price",
         symbol=state.symbol,
         bar_date=state.session_day,
@@ -96,20 +99,24 @@ def forest_price_draft_from_session(
         headline_title=None,
         summary=summary,
         sections={
-            "price": summary,
             "forest": {
                 "model_id": scored.model_id,
                 "forest_score": scored.forest_score,
                 "score_cutoff": scored.score_cutoff,
                 "anomalous": True,
                 "features": scored.features,
+                "session_open": state.open,
+                "session_last": state.last,
             },
+            "entry": "price",
+            "second_supports": False,
         },
         triggered_at=state.last_ts.astimezone(UTC) if state.last_ts.tzinfo else state.last_ts.replace(tzinfo=UTC),
         price_move_threshold=price_move_threshold,
         sentiment_threshold=sentiment_threshold,
         origin="live",
     )
+    return enrich_price_draft_with_forest_wording(draft)
 
 
 def eastern_day_mismatch(state: SessionState, now: datetime) -> bool:
