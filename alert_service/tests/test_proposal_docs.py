@@ -1,4 +1,4 @@
-"""Docs agree on the S&P 500 plan: price lake, near-term news, forest on price/volume."""
+"""Docs agree on the S&P 500 plan: local lake, near-term news, forest on price/volume."""
 
 from pathlib import Path
 
@@ -46,6 +46,10 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "desktop notifications and a tab badge" in audit
     assert "Slack or email" not in audit
     assert "Slack and email are not used" in audit
+    assert "batch_train" in audit
+    assert "Local stand-in" in audit
+    assert "AWS production deploy is out of scope" in audit or "AWS production is not part of the final target" in audit
+    assert "as-built and local final target diagrams" in audit
 
 
 def test_architecture_points_at_the_audit_and_names_the_target():
@@ -54,15 +58,20 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in architecture
     assert "Perplexity two-sentence summary, with the deterministic sentence as fallback" in architecture or "Perplexity two sentences when a key is saved" in architecture
     assert "focus set for Run check" in architecture
-    assert "Spark curated feature table" in architecture or "Spark curated feature table (gap, session, close, volume z-score)" in architecture
-    assert "Flink session features scored with the registered Isolation Forest" in architecture or "Flink scores the registered forest" in architecture
+    assert "Spark-role curated feature table" in architecture
+    assert "Live scorer Flink role" in architecture or "Flink role" in architecture
     assert "Cassandra" in architecture and "Dropped" in architecture
-    assert "Revised target: high-level lambda architecture" in architecture
-    assert "Revised target: batch historical ELT" in architecture
-    assert "Revised target: streaming ETL" in architecture
-    assert "Revised target: end-to-end alert sequence" in architecture
+    assert "As-built: system overview" in architecture
+    assert "Local final target: high-level lambda architecture" in architecture
+    assert "Local final target: batch historical ELT" in architecture
+    assert "Local final target: streaming ETL" in architecture
+    assert "Local final target: end-to-end alert sequence" in architecture
+    assert "Local stand-ins (no AWS required)" in architecture
+    assert "does **not** require an AWS production deploy" in architecture or "AWS production deploy" in architecture
     assert "As-built live price stream" in architecture
     assert "As-built batch lake land" in architecture
+    assert "As-built curated features and Isolation Forest" in architecture
+    assert "batch_train" in architecture
     assert "python -m app.live" in architecture
     assert "Live alerts on" in architecture
     assert "Mac/Chrome desktop notification" in architecture
@@ -82,6 +91,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "optional Perplexity API key" in architecture
     assert "Historical headlines are not landed" in architecture
     assert "No historical headlines" in architecture
+    assert "percent rule" in architecture.lower() or "percent-rule" in architecture
+    assert "not scored live yet" in architecture
     assert "HIST_NEWS" not in architecture
     assert "Persisted scored headlines" not in architecture
     assert "HN[Persisted scored headlines]" not in architecture
@@ -95,6 +106,7 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "LLM summarizer" not in architecture
     assert "last 24 hours" not in architecture
     assert "BTC-USD" not in architecture
+    assert "Revised target: high-level lambda architecture" not in architecture
 
 
 def test_ui_uses_desktop_notifications_and_tab_badge():
@@ -111,6 +123,9 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "sw-notifications.js" in ui
     assert "Enable desktop notifications" in ui
     assert "Mac notification" in ui
+    assert "function alertMetrics" in ui
+    assert "head.append(kindPill(alert.kind), symbol, when)" in ui
+    assert "function badgeClass" not in ui
     sw = _text(ROOT / "alert_service" / "ui" / "sw-notifications.js")
     assert "notificationclick" in sw
     assert "clients.openWindow" in sw
@@ -134,6 +149,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Mac/Chrome desktop notification" in sources
     assert "Slack and email are not used" in sources
     assert "Slack or email" not in sources
+    assert "demo stack is **local**" in sources or "demo stack is local" in sources.lower()
     assert "BTC-USD" not in sources
     readme = _text(ROOT / "README.md")
     assert "[docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md)" in readme
@@ -147,9 +163,21 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "S&P 500" in readme
     assert "S&P 500 Alert System" in readme
     assert "focus set" in readme
+    assert "batch_train" in readme
+    assert "AWS production deploy is not required" in readme
+    assert "As-built vs local final target" in readme
     assert "about 5,400 symbols" not in readme
     assert "only for now" not in readme
     assert "Ticker Alert System" not in readme
+    batch_train = _text(ROOT / "batch_train" / "README.md")
+    assert "Isolation Forest" in batch_train
+    assert "gap_return" in batch_train
+    assert "volume_zscore" in batch_train
+    assert "registry/isolation_forest/current" in batch_train
+    assert "Not a Dataproc" in batch_train or "scikit-learn" in batch_train
+    lake = _text(ROOT / "data" / "lake" / "README.md")
+    assert "registry/isolation_forest/current" in lake
+    assert "batch_train" in lake
     service = _text(ROOT / "alert_service" / "README.md")
     assert "docs/proposal-pipeline-audit.md" in service
     assert "docs/architecture.md" in service
@@ -171,9 +199,11 @@ def test_data_sources_and_readmes_name_the_same_target():
     audit = _text(DOCS / "proposal-pipeline-audit.md")
     assert "Together shows the name of the model that wrote it" in audit
     assert "batches of eight" in audit
-    assert "revised target diagrams" in audit
     assert "Historical headlines are not part of the design" in audit
+    assert "batch_train" in audit
+    assert "local model registry" in audit
     batch = _text(ROOT / "batch_ingest" / "README.md")
     assert "Headlines stay on the near-term check path" in batch
-    lake = _text(ROOT / "data" / "lake" / "README.md")
-    assert "No historical headlines are stored here" in lake
+    assert "batch_train" in batch
+    lake_readme = _text(ROOT / "data" / "lake" / "README.md")
+    assert "No historical headlines are stored here" in lake_readme
