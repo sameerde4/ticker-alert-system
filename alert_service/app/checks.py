@@ -18,6 +18,7 @@ from .sectors import ensure_symbol_sectors
 from .evidence import attach_evidence_story
 from .perplexity import complete_reasoning
 from .perplexity_catalog import known_model
+from .watchlist_forest import apply_forest_to_drafts, load_watchlist_forest_scorer
 from .store import (
     clear_symbol_day,
     delete_all_alerts,
@@ -66,6 +67,7 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
 
     errors: list[dict[str, str]] = []
     alerts: list[Any] = []
+    forest = load_watchlist_forest_scorer()
     for symbol in symbols:
         try:
             bars = await asyncio.to_thread(
@@ -103,6 +105,18 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 live_session=live,
             )
             today = eastern_date(moment)
+            drafts = apply_forest_to_drafts(
+                drafts,
+                scorer=forest,
+                symbol=symbol,
+                bars=stored_bars,
+                session_day=today,
+                now=moment,
+                price_move_threshold=rules["price_move_threshold"],
+                sentiment_threshold=rules["sentiment_threshold"],
+                live_session=live,
+                origin="watchlist",
+            )
             kept = [attach_evidence_story(draft) for draft in drafts if draft.bar_date == today]
             await clear_symbol_day(conn, symbol, today)
             for draft in kept:
@@ -144,6 +158,7 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
         ]
 
     written: list[dict[str, Any]] = []
+    forest = load_watchlist_forest_scorer()
     for symbol in symbols:
         async with pool.acquire() as conn:
             bars = await load_bars(conn, symbol)
@@ -182,6 +197,17 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
                 sentiment_threshold=sentiment_threshold,
                 news_lookback_hours=settings.news_lookback_hours,
                 fusion_window_hours=settings.fusion_window_hours,
+            )
+            drafts = apply_forest_to_drafts(
+                [draft for draft in drafts if draft.bar_date == day],
+                scorer=forest,
+                symbol=symbol,
+                bars=bars_asof,
+                session_day=day,
+                now=as_of,
+                price_move_threshold=price_threshold,
+                sentiment_threshold=sentiment_threshold,
+                origin="watchlist",
             )
             drafts = [draft for draft in drafts if draft.bar_date == day]
             async with pool.acquire() as conn:
@@ -275,6 +301,7 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
 
     errors: list[dict[str, str]] = []
     pending: list[Any] = []
+    forest = load_watchlist_forest_scorer()
     fetch_days = days + settings.volume_lookback + 5
     for symbol in symbols:
         try:
@@ -317,6 +344,17 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
                     sentiment_threshold=rules["sentiment_threshold"],
                     news_lookback_hours=settings.news_lookback_hours,
                     fusion_window_hours=settings.fusion_window_hours,
+                )
+                drafts = apply_forest_to_drafts(
+                    [draft for draft in drafts if draft.bar_date == day],
+                    scorer=forest,
+                    symbol=symbol,
+                    bars=bars_asof,
+                    session_day=day,
+                    now=as_of,
+                    price_move_threshold=rules["price_move_threshold"],
+                    sentiment_threshold=rules["sentiment_threshold"],
+                    origin="watchlist",
                 )
                 for draft in drafts:
                     if draft.bar_date == day:

@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     lake_root: str = DEFAULT_LAKE_ROOT
     # Minimum seconds between live_feature_rows writes for one symbol (sink throttle).
     live_feature_min_interval_seconds: int = 60
-    # When true, an Isolation Forest anomaly can upsert a live price alert (if no news row).
+    # When true, an Isolation Forest anomaly can open/enrich a price alert on live
+    # and on Watchlist Scan today / rebuild (same lake registry).
     live_forest_alerts: bool = True
 
 
