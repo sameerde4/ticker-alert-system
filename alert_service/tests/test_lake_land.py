@@ -27,12 +27,26 @@ def test_parse_done_line_extracts_counts():
 def test_parse_done_line_detects_up_to_date_short_circuit():
     text = (
         "2026-11-19 INFO batch_ingest: Done. 0/503 symbols, 0 rows, "
-        "skipped_current=503, manifest=/tmp/run.json\n"
+        "skipped_current=503, session_target=2026-11-18, manifest=/tmp/run.json\n"
     )
     summary = _parse_done_line(text)
     assert summary["up_to_date"] is True
     assert summary["skipped_current"] == 503
+    assert summary["session_target"] == "2026-11-18"
     assert summary["rows_landed"] == 0
+    assert "already current" in summary["message"].lower()
+    assert "2026-11-18" in summary["message"]
+    assert "4:00 PM Eastern" in summary["message"]
+
+
+def test_parse_done_line_still_reads_legacy_skip_without_session_target():
+    text = (
+        "2026-11-19 INFO batch_ingest: Done. 0/503 symbols, 0 rows, "
+        "skipped_current=503, manifest=/tmp/run.json\n"
+    )
+    summary = _parse_done_line(text)
+    assert summary["up_to_date"] is True
+    assert summary["session_target"] is None
     assert "already current" in summary["message"].lower()
 
 

@@ -190,11 +190,12 @@ def run(args: argparse.Namespace) -> dict:
     landed = sum(1 for row in results if row["rows"] > 0)
     rows = sum(int(row["rows"]) for row in results)
     log.info(
-        "Done. %s/%s symbols, %s rows, skipped_current=%s, manifest=%s",
+        "Done. %s/%s symbols, %s rows, skipped_current=%s, session_target=%s, manifest=%s",
         landed,
         len(symbols),
         rows,
         skipped_current,
+        session_target.isoformat(),
         manifest,
     )
     return {
@@ -203,6 +204,7 @@ def run(args: argparse.Namespace) -> dict:
         "landed": landed,
         "rows": rows,
         "skipped_current": skipped_current,
+        "session_target": session_target.isoformat(),
         "manifest": str(manifest),
         "lake_root": str(lake_root),
     }

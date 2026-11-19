@@ -449,6 +449,7 @@ def _job_status(
     progress_done: Any = None,
     progress_total: Any = None,
     progress_pct: Any = None,
+    session_target: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "running": running,
@@ -470,6 +471,8 @@ def _job_status(
     }
     if days is not None:
         payload["days"] = days
+    if session_target:
+        payload["session_target"] = session_target
     return payload
 
 
@@ -644,6 +647,9 @@ async def _run_refresh(*, days: int) -> None:
         land_total = summary["symbols_landed"]
         if summary.get("up_to_date"):
             skipped = summary.get("skipped_current")
+            target = summary.get("session_target")
+            through = f" through {target}" if target else ""
+            count = f" ({skipped} symbols up to date)" if skipped is not None else ""
             _write_status(
                 _job_status(
                     running=False,
@@ -652,9 +658,9 @@ async def _run_refresh(*, days: int) -> None:
                     finished_at=datetime.now(UTC).isoformat(),
                     ok=True,
                     message=(
-                        "Lake already current"
-                        + (f" ({skipped} symbols up to date)" if skipped is not None else "")
-                        + "; skipped Yahoo and retrain."
+                        f"Lake already current{through}{count}; skipped Yahoo and retrain. "
+                        "Today's session lands after 4:00 PM Eastern "
+                        "(live Kafka bars do not write the lake)."
                     ),
                     symbols_landed=0,
                     rows_landed=0,
@@ -664,9 +670,10 @@ async def _run_refresh(*, days: int) -> None:
                     progress_done=land_total,
                     progress_total=land_total,
                     progress_pct=100.0,
+                    session_target=target,
                 )
             )
-            log.info("Lake refresh short-circuited: already current")
+            log.info("Lake refresh short-circuited: already current through %s", target)
             return
 
         _write_status(
@@ -838,6 +845,7 @@ def _parse_done_line(text: str) -> dict[str, Any]:
     rows = None
     manifest = None
     skipped_current = None
+    session_target = None
     for line in text.splitlines():
         if "Done." not in line:
             continue
@@ -851,13 +859,20 @@ def _parse_done_line(text: str) -> dict[str, Any]:
                 requested = int(requested_s.strip())
             else:
                 symbols = int(frac)
-            # Preferred: "N rows, skipped_current=M, manifest=..."
+            # Preferred: "N rows, skipped_current=M, session_target=YYYY-MM-DD, manifest=..."
             if "skipped_current=" in right:
                 mid, _, rest = right.partition(" rows, skipped_current=")
                 rows = int(mid.strip())
-                skip_bit, _, manifest_bit = rest.partition(", manifest=")
-                skipped_current = int(skip_bit.strip())
-                manifest = manifest_bit.strip() or None
+                if "session_target=" in rest:
+                    skip_bit, _, after_skip = rest.partition(", session_target=")
+                    skipped_current = int(skip_bit.strip())
+                    target_bit, _, manifest_bit = after_skip.partition(", manifest=")
+                    session_target = target_bit.strip() or None
+                    manifest = manifest_bit.strip() or None
+                else:
+                    skip_bit, _, manifest_bit = rest.partition(", manifest=")
+                    skipped_current = int(skip_bit.strip())
+                    manifest = manifest_bit.strip() or None
             else:
                 mid, _, rest = right.partition(" rows, manifest=")
                 rows = int(mid.strip())
@@ -871,6 +886,7 @@ def _parse_done_line(text: str) -> dict[str, Any]:
             "rows_landed": None,
             "manifest": None,
             "skipped_current": None,
+            "session_target": None,
             "up_to_date": False,
         }
     up_to_date = bool(
@@ -881,8 +897,11 @@ def _parse_done_line(text: str) -> dict[str, Any]:
         and symbols == 0
     )
     if up_to_date:
+        through = f" through {session_target}" if session_target else ""
         message = (
-            f"Lake already current ({skipped_current} symbols); no Yahoo updates needed."
+            f"Lake already current{through} ({skipped_current} symbols); "
+            "no Yahoo updates needed. Today's session lands after 4:00 PM Eastern "
+            "(live Kafka bars do not write the lake)."
         )
     else:
         message = f"Landed {symbols} S&P symbols ({rows} daily rows) into the local lake."
@@ -892,6 +911,7 @@ def _parse_done_line(text: str) -> dict[str, Any]:
         "rows_landed": rows,
         "manifest": manifest,
         "skipped_current": skipped_current,
+        "session_target": session_target,
         "up_to_date": up_to_date,
     }
 
