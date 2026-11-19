@@ -8,12 +8,18 @@ def test_health_and_ui_without_a_database():
     assert client.get("/health").json() == {"status": "ok"}
     page = client.get("/ui")
     assert page.status_code == 200
-    assert "Ticker Alert System" in page.text
+    assert "S&amp;P 500 Alert System" in page.text
+    assert "<span>S&amp;P 500</span> Alert System" in page.text
     assert 'id="liveStatus"' in page.text
     assert "Live alerts off" in page.text
     assert "live-pulse" in page.text
     assert "/v1/live/status" in page.text
-    assert "Ticker or company name" in page.text
+    assert "S&amp;P 500 ticker or company name" in page.text
+    assert "Choose S&amp;P 500 constituents" in page.text
+    assert "only for now" not in page.text
+    assert "Historical prices (lake)" in page.text
+    assert "Land S&amp;P 500 prices" in page.text
+    assert "/v1/admin/lake/land" in page.text
     assert "function rankSymbolUniverseMatches" in page.text
     assert "tickerAlertLastClosedAt" in page.text
     assert "tickerAlertHomeWatermark" not in page.text
@@ -26,8 +32,13 @@ def test_health_and_ui_without_a_database():
     universe = client.get("/ui/symbol_universe.json")
     assert universe.status_code == 200
     payload = universe.json()
-    assert payload["counts"]["total"] >= 2000
+    assert payload.get("universe") == "sp500"
+    assert payload["counts"]["total"] == 503
     assert any(row["symbol"] == "AAPL" and "Apple" in row["name"] for row in payload["symbols"])
+    assert not any(row["symbol"] == "BTC-USD" for row in payload["symbols"])
+    lake = client.get("/v1/admin/lake/status")
+    assert lake.status_code == 200
+    assert "running" in lake.json()
     assert "historyTab" in page.text
     assert "Alert History" in page.text
     assert "https://finance.yahoo.com/quote/" in page.text
@@ -121,23 +132,21 @@ def test_bad_symbol_is_rejected_before_the_database():
     assert response.status_code == 400
 
 
-def test_unknown_ticker_is_rejected_before_the_database(monkeypatch):
-    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: False)
+def test_unknown_ticker_is_rejected_before_the_database():
     client = TestClient(app)
     response = client.post("/v1/watchlist", json={"symbol": "ZZZZ"})
     assert response.status_code == 400
-    assert "not a ticker" in response.json()["detail"]
+    assert "S&P 500 constituent" in response.json()["detail"]
 
 
-def test_a_known_ticker_is_not_rejected_as_missing(monkeypatch):
-    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: False)
+def test_a_known_sp500_ticker_is_not_rejected_as_missing():
     client = TestClient(app)
     response = client.post("/v1/watchlist", json={"symbol": "AAPL"})
     assert response.status_code == 503
 
 
-def test_a_yahoo_listed_ticker_is_not_rejected_as_missing(monkeypatch):
-    monkeypatch.setattr("app.main.yahoo_lists_symbol", lambda symbol: True)
+def test_non_sp500_ticker_is_rejected_even_if_it_looks_valid():
     client = TestClient(app)
-    response = client.post("/v1/watchlist", json={"symbol": "ZZZZ"})
-    assert response.status_code == 503
+    response = client.post("/v1/watchlist", json={"symbol": "BTC-USD"})
+    assert response.status_code == 400
+    assert "S&P 500 constituent" in response.json()["detail"]

@@ -540,5 +540,6 @@ def test_continuous_markets_and_the_local_symbol_list():
     assert not trades_all_day("AAPL")
     assert not trades_all_day("BRK-B")
     assert known_universe_symbol("AAPL")
-    assert known_universe_symbol("BTC-USD")
+    assert known_universe_symbol("MSFT")
+    assert not known_universe_symbol("BTC-USD")
     assert not known_universe_symbol("ZZZZ")

@@ -8,7 +8,8 @@ from pathlib import Path
 
 _SYMBOL = re.compile(r"[A-Z][A-Z0-9]{0,9}(?:-[A-Z0-9]{1,4})?$")
 _UNIVERSE: set[str] | None = None
-_UNIVERSE_PATH = Path(__file__).resolve().parents[1] / "ui" / "symbol_universe.json"
+# Watchlist autocomplete covers the S&P 500.
+_UNIVERSE_PATH = Path(__file__).resolve().parents[1] / "ui" / "sp500_universe.json"
 
 
 def normalize_symbol(raw: str) -> str:

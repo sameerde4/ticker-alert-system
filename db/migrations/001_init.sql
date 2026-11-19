@@ -1,4 +1,4 @@
--- Ticker Alert System — initial schema
+-- S&P 500 Alert System — initial schema
 -- PostgreSQL 15+
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

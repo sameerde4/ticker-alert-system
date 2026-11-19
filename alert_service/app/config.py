@@ -23,7 +23,7 @@ def sentiment_threshold_value(score: float) -> float:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TICKER_ALERT_", env_file=".env", extra="ignore")
 
-    app_name: str = "ticker-alert-system"
+    app_name: str = "S&P 500 Alert System"
     app_env: str = "dev"
     app_port: int = 8010
     database_url: str = "postgresql://postgres:postgres@localhost:5432/ticker_alert_db"

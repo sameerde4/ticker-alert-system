@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ticker Alert System</title>
+  <title>S&amp;P 500 Alert System</title>
   <style>
     :root {
       --bg: #12110e;
@@ -375,7 +375,7 @@
 </head>
 <body>
   <header>
-    <h1><span>Ticker</span> Alert System</h1>
+    <h1><span>S&amp;P 500</span> Alert System</h1>
     <nav class="tabs" role="tablist">
       <button class="tab-btn active" type="button" data-tab="homeTab" role="tab" aria-selected="true">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -415,9 +415,10 @@
     <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesMiddle"></span><button type="button" class="linkish" id="priceExplain">matches the price move</button><span id="rulesAfter"></span></p>
     <section class="card">
       <h2>Watchlist</h2>
+      <p class="hint">Choose S&amp;P 500 constituents to check for price and news alerts.</p>
       <form id="add-form">
         <span class="symbol-suggest">
-          <input id="symbol" name="symbol" placeholder="Ticker or company name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="symbolSuggestList" />
+          <input id="symbol" name="symbol" placeholder="S&amp;P 500 ticker or company name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="symbolSuggestList" />
           <div class="symbol-suggest-frame" hidden>
             <div class="symbol-suggest-list" id="symbolSuggestList" hidden></div>
           </div>
@@ -462,7 +463,7 @@
           <label class="field">
             <span>Price alert percentage</span>
             <input id="pricePercent" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" required />
-            <p class="hint">While the market is open, the latest price is compared with the opening price. After the close, a stock is compared with the prior close. A market that trades all day uses the last 24 hours. A headline is included when it was published during the part of the day that moved. Default is 3%.</p>
+            <p class="hint">While the market is open, the latest price is compared with the opening price. After the close, a stock is compared with the prior close. A headline is included when it was published during the part of the day that moved. Default is 3%.</p>
           </label>
           <label class="field">
             <span>Sentiment score threshold</span>
@@ -494,6 +495,17 @@
             <button type="button" id="clearPerplexity" class="ghost">Clear key</button>
             <p class="status" id="perplexityStatus"></p>
           </div>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Historical prices (lake)</h2>
+        <p class="hint">Land about one year of Yahoo daily OHLCV for every S&amp;P 500 constituent into the data lake as Parquet (<code>data/lake/raw/prices/daily/</code>). This is the batch raw zone for training features. It does not change saved alerts. The run usually takes a few minutes.</p>
+        <form id="lake-form" class="settings-form">
+          <div class="settings-actions">
+            <button type="submit" id="landLake">Land S&amp;P 500 prices</button>
+            <p class="status" id="lakeStatus"></p>
+          </div>
+          <p class="hint" id="lakeDetail"></p>
         </form>
       </section>
       <section class="card">
@@ -532,9 +544,9 @@
       </div>
       <div class="modal-body">
         <h3 class="section">The price rule</h3>
-        <p class="summary">A price alert uses the percent in Settings. The default is 3%. While the market is open, a stock is compared with its opening price, so a check during the day does not wait for the close. After 4:00 PM it is the close compared with the prior close. For a symbol that trades all day, such as BTC-USD, it is the change over the 24 hours before the check.</p>
+        <p class="summary">A price alert uses the percent in Settings. The default is 3%. While the market is open, a stock is compared with its opening price, so a check during the day does not wait for the close. After 4:00 PM it is the close compared with the prior close.</p>
         <h3 class="section">The part of the day</h3>
-        <p class="summary">A headline can explain only the price that was in progress when it was published, in US Eastern. Before 9:30 AM that is the overnight gap, from the prior close to the open. From 9:30 AM to 4:00 PM it is the regular session, from the open to the latest price, which becomes the 4:00 PM close after the market closes. After 4:00 PM, and a weekend story kept with Friday, it is the close versus the prior close. For a 24-hour market it is the four hours after the headline.</p>
+        <p class="summary">A headline can explain only the price that was in progress when it was published, in US Eastern. Before 9:30 AM that is the overnight gap, from the prior close to the open. From 9:30 AM to 4:00 PM it is the regular session, from the open to the latest price, which becomes the 4:00 PM close after the market closes. After 4:00 PM, and a weekend story kept with Friday, it is the close versus the prior close.</p>
         <h3 class="section">A candidate reason</h3>
         <p class="summary">The card calls the headline a candidate reason when that part of the day clears the same percent. A story published at noon does not explain a gap from before the open. A premarket story does not explain the move from the open to the close.</p>
         <h3 class="section">News and price on their own</h3>
@@ -1314,6 +1326,78 @@
       else if (!detailModal.hidden) closeDetail();
     });
 
+    let lakePollTimer = null;
+
+    function setLakeStatus(text, isError) {
+      const el = document.querySelector("#lakeStatus");
+      el.textContent = text || "";
+      el.className = isError ? "status error" : "status";
+    }
+
+    function renderLakeStatus(status) {
+      if (!status) return;
+      const detail = document.querySelector("#lakeDetail");
+      const button = document.querySelector("#landLake");
+      if (status.running) {
+        setLakeStatus(status.message || "Landing S&P 500 prices…");
+        button.disabled = true;
+        detail.textContent = "The land usually takes a few minutes. Leave this page open; status refreshes automatically.";
+        return;
+      }
+      button.disabled = false;
+      if (status.ok) {
+        setLakeStatus(status.message || "Land finished.");
+        const bits = [];
+        if (status.symbols_landed != null) bits.push(status.symbols_landed + " symbols");
+        if (status.rows_landed != null) bits.push(status.rows_landed + " rows");
+        if (status.finished_at) bits.push("finished " + status.finished_at);
+        detail.textContent = bits.join(" · ");
+        return;
+      }
+      if (status.ok === false) {
+        setLakeStatus(status.message || "Land failed.", true);
+        detail.textContent = status.finished_at ? ("Finished " + status.finished_at) : "";
+        return;
+      }
+      setLakeStatus("");
+      detail.textContent = status.message || "";
+    }
+
+    async function refreshLakeStatus() {
+      try {
+        const status = await readJson(await fetch("/v1/admin/lake/status"));
+        renderLakeStatus(status);
+        return status;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function pollLakeWhileRunning() {
+      if (lakePollTimer) return;
+      lakePollTimer = setInterval(async () => {
+        const status = await refreshLakeStatus();
+        if (!status || !status.running) {
+          clearInterval(lakePollTimer);
+          lakePollTimer = null;
+        }
+      }, 3000);
+    }
+
+    document.querySelector("#lake-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setLakeStatus("Starting S&P 500 land…");
+      document.querySelector("#landLake").disabled = true;
+      try {
+        const status = await readJson(await fetch("/v1/admin/lake/land", { method: "POST" }));
+        renderLakeStatus(status);
+        pollLakeWhileRunning();
+      } catch (err) {
+        setLakeStatus(err.message, true);
+        document.querySelector("#landLake").disabled = false;
+      }
+    });
+
     document.querySelector("#rebuild-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const days = Number(document.querySelector("#rebuildDays").value);
@@ -1440,6 +1524,9 @@
 
     refresh().catch((err) => setStatus(err.message, true));
     refreshLiveStatus().catch(() => {});
+    refreshLakeStatus().then((status) => {
+      if (status && status.running) pollLakeWhileRunning();
+    }).catch(() => {});
     setInterval(() => {
       pollLive().catch(() => {});
     }, 5000);

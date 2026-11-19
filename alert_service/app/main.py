@@ -1,4 +1,4 @@
-"""Ticker Alert System API and single-page UI."""
+"""S&P 500 Alert System API and single-page UI."""
 
 from __future__ import annotations
 
@@ -36,12 +36,12 @@ from .store import (
     save_perplexity_api_key,
     save_perplexity_model,
 )
-from .prices import yahoo_lists_symbol
+from .lake_land import lake_land_status, start_lake_land
 from .symbols import known_universe_symbol, normalize_symbol
 
 _UI_DIR = Path(__file__).resolve().parents[1] / "ui"
 _UI = _UI_DIR / "index.html"
-_SYMBOL_UNIVERSE = _UI_DIR / "symbol_universe.json"
+_SYMBOL_UNIVERSE = _UI_DIR / "sp500_universe.json"
 
 
 @asynccontextmanager
@@ -123,7 +123,9 @@ async def ui() -> FileResponse:
 
 
 @app.get("/ui/symbol_universe.json")
+@app.get("/ui/sp500_universe.json")
 async def symbol_universe() -> FileResponse:
+    """S&P 500 tickers for watchlist autocomplete."""
     return FileResponse(_SYMBOL_UNIVERSE, media_type="application/json")
 
 
@@ -189,8 +191,11 @@ async def post_watchlist(body: WatchlistIn) -> dict:
         symbol = normalize_symbol(body.symbol)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not known_universe_symbol(symbol) and not yahoo_lists_symbol(symbol):
-        raise HTTPException(status_code=400, detail=f"{symbol} is not a ticker Yahoo recognizes.")
+    if not known_universe_symbol(symbol):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{symbol} is not an S&P 500 constituent.",
+        )
     async with _pool().acquire() as conn:
         return await add_symbol(conn, symbol)
 
@@ -242,3 +247,18 @@ async def post_rebuild(body: RebuildIn) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await rebuild_history(_pool(), days=body.days)
+
+
+@app.get("/v1/admin/lake/status")
+async def get_lake_status() -> dict[str, object]:
+    """Progress for the Settings historical-price land into data/lake."""
+    return lake_land_status()
+
+
+@app.post("/v1/admin/lake/land")
+async def post_lake_land() -> dict[str, object]:
+    """Pull ~1 year of Yahoo daily bars for the S&P 500 into the local lake (background)."""
+    try:
+        return await start_lake_land(days=365)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
