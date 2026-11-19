@@ -54,6 +54,13 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "live price → near-term news" in audit.lower() or "price → near-term news" in audit.lower()
     assert "live_feature_rows" in audit
     assert "Three to four sentences for news" in audit or "three to four short sentences" in audit
+    assert "Live plus Watchlist" in audit
+    assert "Watchlist **as-built**" in audit or "Watchlist **as-built**:" in audit
+    assert "training only" in audit.lower()
+    assert "Home Recent" in audit
+    assert "Today's results" in audit
+    assert "Scan today" in audit
+    assert "alerts.origin" in audit
 
 
 def test_architecture_points_at_the_audit_and_names_the_target():
@@ -61,7 +68,15 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "# S&P 500 Alert System architecture" in architecture
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in architecture
     assert "Perplexity richer news / news+price reasoning" in architecture
-    assert "focus set for Run check" in architecture
+    assert "focus set" in architecture
+    assert "As-built: Live and Watchlist side by side" in architecture
+    assert "As-built Watchlist Scan today" in architecture
+    assert "Today's results" in architecture
+    assert "Recent alerts" in architecture
+    assert "S&P 500 / Watchlist" in architecture or "scope: full S&P 500 or Watchlist" in architecture
+    assert "Home Recent" in architecture
+    assert "alerts.origin" in architecture
+    assert "training lake" in architecture.lower() or "training only" in architecture.lower()
     assert "Spark-role curated feature table" in architecture
     assert "Live scorer Flink role" in architecture or "Flink role" in architecture
     assert "Cassandra" in architecture and "Dropped" in architecture
@@ -99,11 +114,14 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "percent rule" in architecture.lower() or "percent-rule" in architecture
     assert "live_feature_rows" in architecture
     assert "not scored live yet" not in architecture
-    assert "price noticed → news looked up → evidence or none" in architecture
+    assert "price noticed → news looked up → alignment grade" in architecture
     assert "Live price → near-term news" in architecture
     assert "Upgrade to news or news_price" in architecture or "upgrade to news or news_price" in architecture.lower()
-    assert "Fetch near-term headlines for symbol" in architecture
-    assert "Popup evidence story" in architecture
+    assert "Fetch near-term headlines for symbol" in architecture or "fetches near-term Yahoo headlines" in architecture
+    assert "Evidence story with granular second-side alignment" in architecture
+    assert "somewhat supports" in architecture
+    assert "**As-built**" in architecture
+    assert "evidence story" in architecture.lower()
     assert "HIST_NEWS" not in architecture
     assert "Persisted scored headlines" not in architecture
     assert "HN[Persisted scored headlines]" not in architecture
@@ -136,7 +154,50 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Mac notification" in ui
     assert "function alertMetrics" in ui
     assert "head.append(kindPill(alert.kind), symbol, when)" in ui
+    assert "renderEvidenceStory" in ui
+    assert "What happened" in ui
+    assert '"Summary"' in ui
+    assert "evidence-story" in ui
+    assert "alert-card" in ui
+    assert "addCollapsibleSection" in ui
+    assert 'price: "price-led"' in ui
+    assert 'news: "news-led"' in ui
+    assert 'news_price: "aligned"' in ui
+    assert "kindPill(alert.kind)" in ui
     assert "function badgeClass" not in ui
+    assert 'appendPlain("Together"' not in ui
+    assert 'id="clearRecent"' in ui
+    assert "Clear alerts" in ui
+    assert "tickerAlertHomeClearedAt" in ui
+    assert "clearRecentAlerts" in ui
+    assert "openHomeAlertKeys" in ui
+    assert "openWatchAlertKeys" in ui
+    assert "homeAlertFingerprint" in ui
+    assert "renderWatchlistCheckAlerts" in ui
+    assert "watchlistTab" in ui
+    assert "tip-btn" in ui
+    assert "<h2>Recent alerts</h2>" in ui
+    assert "Incoming alerts stay here across refresh until you clear" in ui
+    assert "When new live alerts arrive, this tab gets a count badge" in ui
+    assert "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive." in ui
+    assert "function setRecentTip" in ui
+    assert "function setHomeScope" in ui
+    assert "function alertsForHome" in ui
+    assert "homeScope === \"watchlist\"" in ui or "homeScope === 'watchlist'" in ui
+    assert "tickerAlertHomeScope" in ui
+    assert "scope-toggle" in ui
+    assert 'data-scope="sp500"' in ui
+    assert 'data-scope="watchlist"' in ui
+    assert 'id="recentTip"' in ui
+    assert 'id="notifyHint"' not in ui
+    assert "Choose S&amp;P 500 constituents, then Scan today" in ui
+    assert "Scan today" in ui
+    assert "Today's results" in ui
+    assert "buildHistoryHeaders" in ui
+    assert "originLabel" in ui
+    assert 'id="homeScope"' not in ui
+    assert 'id="watchlistAlerts"' in ui
+    assert 'id="watchlistTab"' in ui
     sw = _text(ROOT / "alert_service" / "ui" / "sw-notifications.js")
     assert "notificationclick" in sw
     assert "clients.openWindow" in sw
@@ -165,6 +226,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Slack or email" not in sources
     assert "demo stack is **local**" in sources or "demo stack is local" in sources.lower()
     assert "BTC-USD" not in sources
+    assert "Watchlist Scan today" in sources
+    assert "Home Recent" in sources
+    assert "training only" in sources.lower() or "Isolation Forest training" in sources
+    assert "Origin" in sources
     readme = _text(ROOT / "README.md")
     assert "[docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md)" in readme
     assert "Isolation Forest" in readme
@@ -173,7 +238,9 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Live alerts on" in readme
     assert "Mac desktop notification" in readme
     assert "Enable desktop notifications" in readme
-    assert "014_live_feature_rows.sql" in readme
+    assert "015_alert_origin.sql" in readme
+    assert "alerts.origin" in readme
+    assert "live_feature_rows" in readme
     assert "./dev.sh start" in readme
     assert "./dev.sh restart" in readme
     assert "S&P 500" in readme
@@ -182,6 +249,11 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "batch_train" in readme
     assert "AWS production deploy is not required" in readme
     assert "As-built vs local final target" in readme
+    assert "Home" in readme and "Watchlist" in readme and "History" in readme
+    assert "Origin" in readme
+    assert "Today's results" in readme
+    assert "Scan today" in readme
+    assert "Two product paths sit side by side" in readme
     assert "about 5,400 symbols" not in readme
     assert "only for now" not in readme
     assert "Ticker Alert System" not in readme
@@ -197,10 +269,11 @@ def test_data_sources_and_readmes_name_the_same_target():
     service = _text(ROOT / "alert_service" / "README.md")
     assert "docs/proposal-pipeline-audit.md" in service
     assert "docs/architecture.md" in service
-    assert "This process runs a Kafka consumer for session-move price alerts" in service
+    assert "Kafka consumer for session-move price alerts" in service
+    assert "Watchlist Scan today" in service or "Watchlist (focus set" in service
     assert "Flink and Spark are the stream and batch engines on the class diagrams" in service
     assert "A saved Perplexity key writes richer news / news + price reasoning" in service
-    assert "live price stream" in service
+    assert "live price stream" in service or "Live vs Watchlist" in service
     assert "five ChatGPT, five OpenAI, or five Gemini" in service
     assert "at most eight alerts" in service
     assert "ui/sw-notifications.js" in service

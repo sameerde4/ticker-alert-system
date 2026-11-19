@@ -24,7 +24,7 @@ The architecture has to read as big data on the diagram, not only as a Python jo
 
 Cassandra, a second relational database, a separate analyst BI tool, a historical news lake, FinBERT fine-tuning, VWAP as a stream stage, and a mandatory AWS production deploy stay off the diagram. One serving database is enough, and the alert screen is the dashboard.
 
-The product universe is the S&P 500. A watchlist of constituents drives Run check; the live and batch paths cover the index. The architecture is the big-data shape the course asked for: a lake, a batch compute job, a log, and a stream processor, with the model crossing from the batch path to the stream path. Minute bars, not raw quotes, are the grain. A session move is the latest trade against the open. Aggregating at the source keeps Kafka and the live scorer on the decision instead of on reaggregation.
+The product universe is the S&P 500. Three paths share that universe with different jobs: the **batch lake** trains Isolation Forest on historical prices; the **live stream** applies that model and the percent rule as the session unfolds (Home Recent); the **Watchlist** is a focus set with on-demand **Scan today** over today’s daily bars and near-term headlines (Today's results). Watchlist is not the training lake — it is the useful session-batch product pass beside Live. History tags each row’s `origin` as live, watchlist, or both. The architecture is the big-data shape the course asked for: a lake, a batch compute job, a log, and a stream processor, with the model crossing from the batch path to the stream path. Minute bars, not raw quotes, are the grain. A session move is the latest trade against the open. Aggregating at the source keeps Kafka and the live scorer on the decision instead of on reaggregation.
 
 ## Verdict
 
@@ -35,7 +35,8 @@ The historical path exists to train the anomaly model on S&P daily history. The 
 | Choice | What it means |
 |---|---|
 | Two engines, one feature list | `batch_train` fits the forest on price history. The live scorer scores the same features from Kafka. |
-| Lake plus log | `data/lake` holds training prices. Docker Kafka holds live bars and near-term news. |
+| Lake plus log | `data/lake` holds training prices. Docker Kafka holds live bars. |
+| Live plus Watchlist | Live = continuous feed → Home Recent alerts (S&P 500 or Watchlist scope). Watchlist Scan today = on-demand session pass → Today's results. Same `alerts` table; Origin separates them. |
 | Local demo, not AWS prod | Same architecture boxes; S3/Aurora/Dataproc names are optional slide aliases. |
 | Three outcomes | News, price, or both. The forest does not require a headline. |
 | AI after the decision | Perplexity explains the row. It does not create it. |
@@ -45,7 +46,7 @@ The historical path exists to train the anomaly model on S&P daily history. The 
 
 The deck names Isolation Forest and FinBERT and never says which one the alert waits for, or what the training rows are. This is that plan.
 
-FinBERT is the news model. Use the published ProsusAI/finbert weights. A headline is scored 0 to 100, with 50 neutral, and it qualifies when the score is at least the configured distance from 50. Do not fine-tune it. A fine-tune needs labeled headlines this project does not have. Score headlines on the **near-term** path (Run check today; live news topic on the class stream). Do **not** pull months of old articles into the lake. An eight-month-old story does not explain today’s move and does not belong in forest training.
+FinBERT is the news model. Use the published ProsusAI/finbert weights. A headline is scored 0 to 100, with 50 neutral, and it qualifies when the score is at least the configured distance from 50. Do not fine-tune it. A fine-tune needs labeled headlines this project does not have. Score headlines on the **near-term** path (Scan today; live news topic on the class stream). Do **not** pull months of old articles into the lake. An eight-month-old story does not explain today’s move and does not belong in forest training.
 
 Isolation Forest is the price model, and the batch lake is why it exists. Spark builds one row per symbol per session from historical **bars only**:
 
@@ -56,7 +57,7 @@ Isolation Forest is the price model, and the batch lake is why it exists. Spark 
 
 The forest is fit on those rows. Unsupervised fits this data, because there is no labeled set of true anomalies. The score cutoff is chosen by replaying the same table and seeing which cutoff marks the sessions worth an alert. Spark writes the model, the feature list, and that cutoff into the registry.
 
-Flink computes that same vector on the live window and scores it with the registered model. The preferred live product path is **price first, then news**: when the percent rule or the forest marks a session anomalous, the scorer writes a price alert, then pulls near-term headlines for that symbol, scores them with FinBERT, and upgrades the day to news or news+price when the same Eastern-day slice matches. A strong headline with no price move can still open a news-only row (Run check today). The card shows the percent and the model score when present. A rebuild of recent alert history replays product rules; it does not replace lake training.
+Flink computes that same vector on the live window and scores it with the registered model. The preferred live product path is **price first, then news**: when the percent rule or the forest marks a session anomalous, the scorer writes a price alert, then pulls near-term headlines for that symbol, scores them with FinBERT, and upgrades the day to news or news+price when the same Eastern-day slice matches. Watchlist **Scan today** applies the same join on Yahoo daily bars for the focus set (including after the close, and after you change Settings). A strong headline with no price move can still open a news-only row on Scan today. The card shows the percent and the model score when present. A rebuild of recent alert history replays product rules for the watchlist; it does not replace lake training.
 
 ## AI usage
 
@@ -92,7 +93,7 @@ Kafka stays the bus for minute bars. The batch ingest lands prices in the lake, 
 | Anomaly detection | Keep | Registered forest on the live price/volume vector. |
 | Correlation | Keep | Join on symbol and slice. Allow price-only and news-only. |
 | Perplexity summary | Keep | Richer news / news+price reasoning after the decision. Price-only stays deterministic. Deterministic fallback. |
-| API and dashboard | Keep | One screen reads the alert table. |
+| API and dashboard | Keep | Home Recent, Watchlist Today's results, and History with Origin all read the alert table. |
 | Notification | Keep | Desktop (OS) notification and tab badge after the row exists. Slack and email are not used. |
 
 ## Slide 7 — Batch historical ELT
@@ -151,7 +152,7 @@ Cassandra is the box to remove. One alert per symbol per day is a Postgres write
 
 ## Slide 9 — End-to-end sequence
 
-The happy path is **price noticed → news looked up → evidence or none**. Days can stay price-only when no same-day headline matches, or news-only when FinBERT clears the gate with no price move (Run check). The model score appears on the sequence when the forest trips.
+The happy path is **price noticed → news looked up → evidence or none**. Days can stay price-only when no same-day headline matches, or news-only when FinBERT clears the gate with no price move (Scan today). The model score appears on the sequence when the forest trips.
 
 Stream a minute bar. Flink micro-batches the Kafka topic. Compute the trained returns and the volume z-score. Write a price alert when the percent rule or the registered cutoff trips. Then fetch near-term headlines for that symbol, score them with FinBERT, and upgrade the day only when the publish time falls in the slice that moved.
 
@@ -180,14 +181,15 @@ A workflow tool can fire a webhook and can call Perplexity. It cannot hold Flink
 
 A reviewer should be able to point at the diagram and name the batch path, the stream path, the lake, the model that crosses from one to the other, and the AI call that does not — all runnable locally.
 
-- Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry.
-- Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule + Isolation Forest price alerts, `live_feature_rows` sink, FinBERT on Run check, desktop notifications.
-- Streaming **local final gap**: live **price → near-term news** upgrade (fetch/score headlines after a price or forest alert; same-day slice only). Optional Kafka news topic. Popup evidence-story UX and forest-aware price-only wording.
+- Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry — **training only**.
+- Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule + Isolation Forest, live **price → near-term news** upgrade, `live_feature_rows` sink, Home Recent, desktop notifications.
+- Watchlist **as-built**: focus set, Scan today over today’s bars/headlines, Today's results panel, `alerts.origin`, rebuild of recent sessions.
+- Streaming **local final gap**: optional Kafka news topic; forest-aware price-only wording. Evidence-story alignment grades are as-built.
 - The handoff: live scorer scores Kafka bars with the model `batch_train` fitted on price history.
 - AI: Perplexity writes richer news / news+price reasoning from the finished payload, with the template sentence as fallback; price-only stays deterministic for now.
-- Product rules that stay: S&P 500 universe, one alert per symbol per day, three outcomes, and the headline joined to the slice that was in progress (price first on the live path).
+- Product rules that stay: S&P 500 universe, one alert per symbol per day, three outcomes, headline joined to the slice in progress (price first on live; same join on Watchlist Scan today).
 - Deploy: local machine. AWS production is not part of the final target.
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The as-built and local final target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last percent and Isolation Forest price alerts (`python -m app.live`) with a `live_feature_rows` sink and a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. `batch_train` curates session price/volume features and fits Isolation Forest into a local model registry (the Spark training box on the diagram, run with pandas/scikit-learn — not a Dataproc cluster). Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. The remaining stream product gap is live price → near-term news (upgrade the day when headlines match the slice). Historical headlines are not part of the design. AWS production deploy is out of scope for the demo.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The as-built and local final target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: **Live** (`python -m app.live`) for continuous price → news alerts on Home Recent; **Watchlist Scan today** for an on-demand session pass over the focus set; Perplexity when a key is saved; `live_feature_rows` and a Home “Live alerts on” cue; History with Origin; desktop notifications and a tab badge; and a batch land of index daily prices into the lake for **forest training**. `batch_train` curates session price/volume features and fits Isolation Forest into a local model registry (the Spark training box on the diagram, run with pandas/scikit-learn — not a Dataproc cluster). Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. Live price → near-term news is as-built; remaining gaps are an optional Kafka news topic and richer forest-aware price-only wording. Historical headlines are not part of the design. AWS production deploy is out of scope for the demo.

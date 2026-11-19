@@ -1,6 +1,13 @@
 # S&P 500 Alert System architecture
 
-Local decision-support service for the **S&P 500**. A watchlist of index constituents becomes one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
+Local decision-support service for the **S&P 500**. One alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
+
+Two product paths sit side by side:
+
+- **Live** — continuous Kafka minute bars → Home **Recent** (market awareness while the session is open).
+- **Watchlist** — a focus set of index constituents plus on-demand **Scan today** → Watchlist **Today's results** (session / day review under current rules, including after the close).
+
+Both write the same Postgres `alerts` table. History shows an **Origin** column (`live` / `watchlist` / `both`). The **batch lake** (`batch_ingest` + `batch_train`) trains Isolation Forest on historical prices; it is not the Watchlist UI. Watchlist Scan today is the useful product pass over **today’s** daily bars and near-term headlines for the focus set.
 
 The class design (CISC 525) is a **local** lambda architecture: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. The plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
 
@@ -9,36 +16,38 @@ The class design (CISC 525) is a **local** lambda architecture: Docker Kafka on 
 This repository runs today:
 
 - Alpaca delayed SIP minute bars onto local Kafka (`stream_ingest/`)
-- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts for the watchlist (percent rule **and** registered Isolation Forest when the lake registry is present)
+- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts from the stream (percent rule **and** registered Isolation Forest when the lake registry is present), then upgrades with near-term news when the slice matches
 - Live feature vectors + forest scores into Postgres `live_feature_rows` (Timescale stand-in)
-- Yahoo daily bars and FinBERT headlines on **Run check** (near-term news only) — the live path does **not** yet pull headlines after a price alert
-- Perplexity richer reasoning for news / news+price when a key is saved (price-only stays deterministic)
-- Batch land of about one year of S&P daily prices into `data/lake/raw/` (`batch_ingest/` or Settings)
+- **Watchlist** tab: focus-set search, **Scan today** over Yahoo daily bars + FinBERT headlines for those symbols, Today's results panel separate from Home Recent
+- Perplexity richer reasoning for news / news+price when a key is saved (price-only stays deterministic); granular evidence story on Home, Watchlist, and Details
+- Batch land of about one year of S&P daily prices into `data/lake/raw/` (`batch_ingest/` or Settings) for **model training**
 - Curated session features + Isolation Forest registry (`batch_train/`)
-- Mac/Chrome desktop notifications and a tab badge when new alerts arrive
+- Alert History with Origin + draggable columns; Mac/Chrome desktop notifications and a tab badge when new alerts arrive
 
-Still open for the **local final** stack: after a live price move or forest anomaly, **pull near-term headlines for that symbol**, score them with FinBERT, and upgrade the day to news or news+price when the same-day slice lines up (skip stale prior-day stories). A dedicated near-term news topic on Kafka is optional; Run check already scores headlines for the watchlist. Popup “evidence story” UX (price noticed → news checked → evidence / none) and forest-aware price-only wording are also remaining. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
+Still open for the **local final** stack: an optional near-term news **topic on Kafka** (today live and Scan today fetch Yahoo headlines directly), and forest-aware price-only wording. Live price → news upgrade and the evidence-story popup are as-built. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
 
 ## Status
 
 | Capability | Status |
 |---|---|
-| Watchlist of S&P 500 constituents (focus set for Run check, rebuild, and live price alerts), with ticker and company-name search. Add accepts index constituents only | **As-built** |
-| Yahoo daily bars into `daily_bars` for a check | **As-built** |
+| Watchlist tab: S&P 500 focus set (search + chips), Scan today, Today's results separate from Home Recent | **As-built** |
+| Home tab: **Recent alerts** feed with S&P 500 / Watchlist scope switch; Clear alerts; desktop notification controls | **As-built** |
+| History tab: full list with Origin (`live` / `watchlist` / `both`), sortable + draggable columns | **As-built** |
+| Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) | **As-built** |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares | **As-built** |
 | Price alert: open→last while the market is open; close versus prior close after the close. Volume spike note on the completed close | **As-built** |
 | News alert and news + price when the headline’s price slice clears the same percent | **As-built** |
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic) | **As-built** |
-| Home inbox, Alert History, saved thresholds, admin rebuild of recent sessions | **As-built** |
+| Saved thresholds; admin rebuild of recent sessions for the watchlist | **As-built** |
 | Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500) | **As-built** |
 | Live Kafka consumer: open→last price alerts (`python -m app.live`); Home “Live alerts on” heartbeat | **As-built** |
-| Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone | **As-built** |
+| Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone (**training lake**, not the Watchlist UI) | **As-built** |
 | Spark-role curated feature table (gap, session, close, volume z-score) and Isolation Forest registry via `batch_train` (local pandas/scikit-learn) | **As-built** |
 | Live scorer loads the registry and scores session features from Kafka bars (Flink role); Postgres `live_feature_rows` sink | **As-built** |
-| Mac/Chrome desktop notification (Notification Center) plus tab title/favicon badge when new alerts arrive from Run check or live | **As-built** |
-| Live price → near-term news: after a percent or forest price alert, fetch/score headlines and upgrade to news / news+price when the same-day slice matches | **Local final target** |
-| Near-term news topic on Kafka with FinBERT scores (optional bus; Run check remains the near-term headline path today) | **Local final target** |
-| Popup evidence story (price noticed → news checked → evidence / none) | **Local final target** |
+| Mac/Chrome desktop notification (Notification Center) plus tab title/favicon badge when new alerts arrive from Scan today or live | **As-built** |
+| Live price → near-term news: after a percent or forest price alert, fetch/score headlines and upgrade to news / news+price when the same-day slice matches; Perplexity on news kinds | **As-built** |
+| Evidence story with granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts) on Home, Watchlist, and Details | **As-built** |
+| Near-term news topic on Kafka with FinBERT scores (optional bus; live and Scan today fetch Yahoo near-term headlines today) | **Local final target** |
 | Richer forest-aware price-only wording | **Local final target** |
 
 Dropped from both the running design and the local final target: Cassandra, FinBERT fine-tuning, VWAP as a stream stage, a generic LLM box, a historical news lake, sentiment features inside Isolation Forest training, and a mandatory AWS production deploy.
@@ -54,11 +63,12 @@ A normal check writes the current Eastern trading day. The admin rebuild deletes
 | Local final target | This app today |
 |---|---|
 | Minute bars on Kafka, scored by the registered forest | Minute bars on Kafka from Alpaca. `python -m app.live` applies the open→last **percent** rule and scores session features with the registered Isolation Forest; rows land in `live_feature_rows` |
-| FinBERT on near-term headlines | FinBERT on each headline during a check. Weights on this machine. No historical news land. Live path does not yet pull headlines after a price alert |
-| Slice join, news-only and price-only | Same Eastern day; gap, session, or close slice. On Run check, fusion when that slice clears the price rule. **Local final:** live price first, then look up news for that move |
+| FinBERT on near-term headlines | FinBERT on Watchlist Scan today and after a live price / forest alert. Weights on this machine. No historical news land |
+| Slice join, news-only and price-only | Same Eastern day; gap, session, or close slice. Live and Scan today: price first, then news when the slice matches; news-only still allowed on Scan today |
+| Watchlist focus set beside the live feed | Watchlist tab for Scan today / Today's results; Home Recent for live; History Origin distinguishes the writer |
 | Perplexity after the decision | When a key is saved for news / news+price; model name under Together; price-only keeps the rule sentence |
-| Lake, Spark-role training, registry | Raw under `data/lake/raw/` via `batch_ingest`. `batch_train` writes curated features and `data/lake/registry/isolation_forest/current/` |
-| One alert per symbol per day | One row per symbol per day |
+| Lake, Spark-role training, registry | Raw under `data/lake/raw/` via `batch_ingest`. `batch_train` writes curated features and `data/lake/registry/isolation_forest/current/` (training only) |
+| One alert per symbol per day | One row per symbol per day (`alerts.origin` tracks live / watchlist / both) |
 | Notify the trader after the row exists | OS desktop notification + tab badge (`ui/sw-notifications.js`). Slack and email are not used |
 
 ### Local stand-ins (no AWS required)
@@ -75,12 +85,12 @@ A normal check writes the current Eastern trading day. The admin rebuild deletes
 
 ## As-built: system overview
 
-Everything that runs on one machine today. Live price alerts use the **percent rule** and, when the registry is present, the registered Isolation Forest on the same four session features.
+Everything that runs on one machine today. Three paths stay distinct: the **training lake**, **Live** (continuous), and **Watchlist Scan today** (on-demand session pass). Live uses the **percent rule** and, when the registry is present, the registered Isolation Forest.
 
 ```mermaid
 flowchart TB
-    subgraph batch [Batch path as-built]
-        YF[Yahoo daily OHLCV] --> LAND[batch_ingest / Settings land]
+    subgraph batch [Batch lake — train Isolation Forest]
+        YF[Yahoo daily OHLCV ~1y] --> LAND[batch_ingest / Settings land]
         LAND --> RAW[(data/lake/raw/prices/daily)]
         RAW --> BT[batch_train pandas ELT]
         BT --> CUR[(curated/features/session)]
@@ -88,37 +98,54 @@ flowchart TB
         IF --> REG[(registry/isolation_forest/current)]
     end
 
-    subgraph stream [Live path as-built]
+    subgraph stream [Live — continuous market feed]
         ALP[Alpaca delayed_sip] --> PROD[stream_ingest]
         PROD --> KAFKA[(Docker Kafka prices.raw.bars)]
         KAFKA --> LIVE[python -m app.live]
-        LIVE -->|percent rule or forest anomaly| PG[(Postgres alerts)]
-        LIVE --> FEAT[(live_feature_rows)]
         REG --> LIVE
+        LIVE -->|percent or forest then news upgrade| PG[(Postgres alerts)]
+        LIVE --> FEAT[(live_feature_rows)]
+        LIVE --> HOME[Home Recent alerts]
     end
 
-    subgraph check [Run check as-built]
-        WL[Watchlist] --> RUN[Run check]
-        RUN --> YB[Yahoo bars + headlines]
+    subgraph watch [Watchlist — on-demand session check]
+        WL[Focus set chips] --> RUN[Scan today]
+        RUN --> YB[Yahoo daily bars + near-term headlines]
         YB --> FB[Local FinBERT]
-        FB --> PG
-        RUN -->|percent + news rules| PG
+        RUN -->|price + news rules for today| PG
+        RUN --> CHECK[Today's results]
     end
 
-    subgraph serve [Serving as-built]
-        PG --> API[FastAPI + UI]
+    subgraph serve [Serving]
+        PG --> HIST[History Origin live / watchlist / both]
+        PG --> API[FastAPI + UI tabs]
         API --> NOTE[Desktop notification and tab badge]
+        HOME --> API
+        CHECK --> API
+        HIST --> API
     end
 ```
 
-## As-built check
+## As-built: Live and Watchlist side by side
 
-**Run check** or rebuild. Live Kafka price path is the next diagram.
+| | Live | Watchlist Scan today |
+|---|---|---|
+| Job | Continuous awareness while RTH is open | Deliberate review of the focus set under **current** rules |
+| UI | Home → **Recent alerts** (scope: full S&P 500 or Watchlist only) | Watchlist → chips + **Scan today** → **Today's results** |
+| Inputs | Kafka minute bars (+ near-term Yahoo headlines after a price/forest hit) | Yahoo `daily_bars` + near-term headlines for watchlist symbols |
+| When it shines | Deployed day; laptop left open on the stream | After the close; after changing Settings; catch-up if live was down; class demo without Kafka |
+| Origin on the row | `live` (or `both` if Scan today also wrote the day) | `watchlist` (or `both` if live also wrote the day) |
+
+The lake batch path does **not** replace Watchlist. Lake Parquet trains the forest. Watchlist Scan today is the product pass over **this session’s** bars and headlines for names you care about.
+
+## As-built Watchlist Scan today
+
+**Scan today** or rebuild on the Watchlist tab. Live Kafka price path is the next diagram.
 
 ```mermaid
 flowchart TB
     subgraph ingest [Ingestion]
-        WL[S&P 500 watchlist] --> RUN[Run check or rebuild]
+        WL[S&P 500 watchlist] --> RUN[Scan today or rebuild]
         RUN --> PX[Yahoo daily bars]
         RUN --> NW[Near-term Yahoo headlines]
         PX --> BARS[(daily_bars)]
@@ -148,24 +175,23 @@ flowchart TB
         KEY -->|no or call failed| ALERTS[(alerts)]
         KEY -->|yes, news kinds, batches of eight| PPLX[Perplexity richer reasoning]
         PPLX --> ALERTS
-        ALERTS --> UI[Home, History, Details]
+        ALERTS --> UI[Watchlist Today's results, History, Details]
         UI --> NOTE[Desktop notification and tab badge]
         PPLX -.->|model name under Together| UI
         RULE -.->|Rule section when replaced| UI
     end
 ```
 
-Home asks for notification permission (Enable desktop notifications). When Run check or a live refresh adds alert rows, the open tab raises a Mac/Chrome Notification Center popup and sets `(N)` on the title with a favicon badge. Opening Home clears the unread count. Slack and email are not used.
+Home asks for notification permission (Enable desktop notifications). When Scan today or a live refresh adds alert rows, the open tab raises a Mac/Chrome Notification Center popup and sets `(N)` on the title with a favicon badge. Opening Home clears the unread count. Scan today results stay on the Watchlist tab so Home Recent is not overwritten. Slack and email are not used.
 
 ## As-built live price stream
 
-Docker Kafka, Alpaca producer, and `python -m app.live`. Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). Anomalous forest scores can also upsert a price alert. Feature vectors land in Postgres `live_feature_rows` (Timescale stand-in). Near-term headlines still come from **Run check** today; the local final step after a live price alert is to fetch and score headlines and upgrade the day when the same-day slice matches. Home reads `/v1/live/status`.
+Docker Kafka, Alpaca producer, and `python -m app.live`. Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and upgrades the day to news or news+price when the same-day slice matches — the same join as Watchlist Scan today. News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`. Home Recent polls alerts; `/v1/live/status` drives the Live alerts on pill. Rows are tagged `origin=live` (or merge to `both`).
 
 ```mermaid
 flowchart LR
     subgraph sources [Sources]
         ALP[Alpaca delayed_sip]
-        WL2[Watchlist in Postgres]
         REG[Lake Isolation Forest registry]
     end
 
@@ -179,24 +205,25 @@ flowchart LR
         BOOK[Open latest volume from RTH bars]
         RULE2{Move at or beyond saved percent}
         FOREST[Score with registry cutoff]
+        NEWSU[Near-term news upgrade]
     end
 
     subgraph out2 [Output]
-        PG[(Postgres alerts)]
+        PG[(Postgres alerts origin live)]
         FEAT[(live_feature_rows)]
         BEAT[live_consumer_heartbeat_at]
         API[GET /v1/live/status]
-        UI2[Home Live alerts on]
+        UI2[Home Recent + Live alerts on]
         NOTE2[Desktop notification and tab badge]
     end
 
     ALP --> PROD --> TOPIC --> LIVE
-    WL2 --> LIVE
     REG --> LIVE
     LIVE --> BOOK --> RULE2
     BOOK --> FOREST
-    RULE2 -->|yes, and day is price-only| PG
-    FOREST -->|anomalous and day is price-only| PG
+    RULE2 -->|yes| NEWSU
+    FOREST -->|anomalous| NEWSU
+    NEWSU --> PG
     FOREST --> FEAT
     LIVE --> BEAT --> API --> UI2
     PG --> UI2 --> NOTE2
@@ -255,7 +282,7 @@ flowchart LR
 
 ## Local final target: high-level lambda architecture
 
-Batch trains on **price history** (as-built). Stream scores minute bars with that model (as-built) and, for the product join, **looks up near-term news after a live price alert** (remaining). Everything stays on the local machine. No historical news lake. No AWS requirement.
+Batch trains on **price history** (as-built). Stream scores minute bars with that model and looks up near-term news after a live price alert (as-built). Watchlist Scan today is the on-demand session product path beside the stream (as-built). Optional Kafka news topic remains a local final nicety. Everything stays on the local machine. No historical news lake. No AWS requirement.
 
 ```mermaid
 flowchart LR
@@ -263,23 +290,26 @@ flowchart LR
         BARS_LIVE[S&P minute bars Alpaca]
         LIVE_NEWS[Near-term headlines]
         HIST_PX[Historical daily OHLCV Yahoo]
+        FOCUS[Watchlist focus set]
     end
 
     subgraph ingest [Ingestion]
         KAFKA[Docker Kafka]
         BATCH[batch_ingest into data/lake]
+        DAY[Yahoo daily bars for Scan today]
     end
 
     subgraph process [Processing]
         LIVE_SCORE[Live scorer Flink role]
         TRAIN_JOB[batch_train Spark role]
+        RUNCHK[Watchlist Scan today]
     end
 
     subgraph storage [Storage on disk and local DB]
         RAW[data/lake raw prices]
         TS[(Feature rows Timescale or Postgres)]
         CURATED[data/lake curated features]
-        ALERTS[(Postgres alerts)]
+        ALERTS[(Postgres alerts + origin)]
         REG[(data/lake registry)]
     end
 
@@ -291,24 +321,32 @@ flowchart LR
     end
 
     subgraph serve [Serving]
-        API[Alert API and dashboard]
+        HOME[Home Recent]
+        WATCHUI[Watchlist Today's results]
+        HIST[History Origin]
         NOTE[Desktop notification and tab badge]
     end
 
     BARS_LIVE --> KAFKA --> LIVE_SCORE --> TS
-    LIVE_NEWS --> KAFKA
+    LIVE_NEWS --> SENT
     HIST_PX --> BATCH --> RAW
     RAW --> TRAIN_JOB --> CURATED
     CURATED --> REG
     REG --> ANOM
     LIVE_SCORE --> ANOM
-    KAFKA --> SENT
-    SENT --> CORR
     ANOM --> CORR
+    SENT --> CORR
     CORR --> ALERTS
+    FOCUS --> RUNCHK
+    DAY --> RUNCHK
+    RUNCHK --> SENT
+    RUNCHK --> ALERTS
     ALERTS --> PPLX
-    PPLX --> API --> NOTE
-    ALERTS --> API
+    ALERTS --> HOME
+    ALERTS --> WATCHUI
+    ALERTS --> HIST
+    HOME --> NOTE
+    WATCHUI --> NOTE
 ```
 
 ## Local final target: batch historical ELT
@@ -332,7 +370,7 @@ flowchart LR
 
 ## Local final target: streaming ETL
 
-Minute bars scored by the registered forest (as-built). **Product join is price-first:** when the percent rule or forest marks a live move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and upgrades the day to news or news+price when the same Eastern-day slice matches. Stale prior-day stories stay out. A Kafka news topic is optional; Yahoo near-term pull on the alert is enough for the demo. Postgres holds the alert. Perplexity writes after news / news+price rows exist.
+Minute bars scored by the registered forest (as-built). **Product join is price-first (as-built on live and Watchlist Scan today):** when the percent rule or forest marks a live move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and upgrades the day to news or news+price when the same Eastern-day slice matches. Stale prior-day stories stay out. A Kafka news topic remains optional. Postgres holds the alert with `origin`. Perplexity writes after news / news+price rows exist. The details popup shows the evidence story with a granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts).
 
 ```mermaid
 flowchart TD
@@ -357,7 +395,7 @@ flowchart TD
 
 ## Local final target: end-to-end alert sequence
 
-Price-only and news-only are allowed. The happy path below is **price noticed → news looked up → evidence or none**. Perplexity never decides the alert. The forest features are price and volume only.
+Price-only and news-only are allowed. The happy path below is **price noticed → news looked up → alignment grade**. Perplexity never decides the alert. The forest features are price and volume only. Watchlist Scan today uses the same join on daily bars for the focus set.
 
 ```mermaid
 sequenceDiagram
@@ -397,9 +435,9 @@ sequenceDiagram
 
 ## Local schema
 
-`watchlist` holds S&P 500 symbols a check will refresh. `symbols` caches the Yahoo sector or fund category. `daily_bars` and `headlines` are check inputs (near-term headlines only). `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, the selected Perplexity model, and `live_consumer_heartbeat_at` for the Home live cue. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`. `live_feature_rows` stores live session feature vectors and Isolation Forest scores from `python -m app.live`.
+`watchlist` holds the S&P 500 focus set for Scan today and rebuild. `symbols` caches the Yahoo sector or fund category. `daily_bars` and `headlines` are Watchlist Scan today inputs (near-term headlines only). `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, the selected Perplexity model, and `live_consumer_heartbeat_at` for the Home live cue. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`. `alerts.origin` is `live`, `watchlist`, or `both`. `live_feature_rows` stores live session feature vectors and Isolation Forest scores from `python -m app.live`.
 
-One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. When Perplexity rewrites Together, the alert `sections` keep the rule sentence, the model id, and the model label shown under Together. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
+One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. When live and watchlist both write the same day, `origin` becomes `both`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. When Perplexity rewrites Together, the alert `sections` keep the rule sentence, the model id, and the model label shown under Together. Evidence steps live under `sections.evidence` with an `alignment` grade. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
 
 `sentiment_scorer` stays `finbert`. FinBERT loads ProsusAI/finbert on this machine. The stored score is 0 to 100, with 50 neutral. Confidence is the winning class probability. A headline is eligible when the score is at least the saved number of points from 50.
 

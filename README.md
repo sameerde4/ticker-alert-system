@@ -1,6 +1,6 @@
 # S&P 500 Alert System
 
-Decision-support alerts for the **S&P 500**. Add constituents to a watchlist, run a check, and keep a live open→last price path on Kafka for names you are streaming. Each symbol gets one alert per day:
+Decision-support alerts for the **S&P 500**. Two product paths sit side by side: **Live** (Kafka open→last feed → Home Recent alerts) and **Watchlist** (focus set + Scan today → Today's results). The batch lake trains Isolation Forest; it is not the Watchlist UI. Each symbol gets one alert per day:
 
 - **Price** — while the market is open, the latest price versus the opening price. After the close, the close versus the prior close.
 - **News** — headlines that clear the FinBERT sentiment rule. The alert lists each score and link.
@@ -8,7 +8,7 @@ Decision-support alerts for the **S&P 500**. Add constituents to a watchlist, ru
 
 Each alert stores a plain-English explanation assembled from the alert fields. When a Perplexity key is saved, a check sends news and news + price facts and stores a richer three-to-four-sentence reply (what happened, why the headlines matter with titles/links, FinBERT reading, cautious forward look). Price-only alerts keep the rule sentence for now. Price, News, and Rule stay the sentences the app wrote. Together is the reply, and the model name is listed under it on Home and in the details popup. A check or rebuild sends at most eight alerts in one reply. FinBERT only produces the headline score. It does not write the paragraph. The rule sentence remains when no key is saved or the call fails. The time on a card is when the condition was met, in US Eastern: the 4:00 PM close for a stock price move, the earliest headline for news, and the later of the price time and the headline when both fire.
 
-Home lists alerts saved after you last had the page open. Reloading the page starts that visit again, so older cards stay on Alert History. When Run check or the live path adds alerts, the open UI tab shows a count on the title and favicon, and Chrome raises a Mac desktop notification (Notification Center) if you allowed notifications—use Enable desktop notifications on Home if the OS popup never appears. Alert History is the full list, newest first: symbol, sector, time, and one Alert details column. That column starts with a colored type pill, then the score out of 100, the price change, or both, and the details link. Sorting Alert details orders the rows by type. A stock shows its Yahoo sector. An ETF or mutual fund shows the category of the product it targets, such as Technology or Large Blend. Those labels are cached. The card clock is when the condition was met. "New" uses the time the alert was first saved.
+The UI tabs are **Home** (Recent alerts, with an S&P 500 / Watchlist scope switch), **Watchlist** (add symbols, Scan today, Today's results), **History**, and **Settings**. Home Recent alerts keep across refresh until you click Clear alerts. Watchlist Scan today shows results on the Watchlist tab so it does not overwrite Home. Alert History always has the full list, with an **Origin** column (`Live` / `Watchlist` / `Both`); drag column headings to reorder. When Scan today or the live path adds alerts, the open UI tab shows a count on the title and favicon, and Chrome raises a Mac desktop notification (Notification Center) if you allowed notifications—use Enable desktop notifications on Home if the OS popup never appears. Alert details starts with a colored kind pill (price-led / news-led / aligned), then the score out of 100, the price change, or both, and the details link. A stock shows its Yahoo sector. An ETF or mutual fund shows the category of the product it targets, such as Technology or Large Blend. Those labels are cached. The card clock is when the condition was met. "New" uses the time the alert was first saved.
 
 A symbol on a Home card, in the History symbol column, and in the details title opens that ticker's Yahoo Finance quote in a new tab.
 
@@ -16,11 +16,11 @@ A headline belongs to the Eastern trading day it was published. Saturday and Sun
 
 Each alert keeps the price and sentiment thresholds from when it fired. Those values are shown in the details popup. Changing the settings can replace today's alert on the next check. Earlier days stay as they were saved.
 
-Settings stores the price percent, the FinBERT threshold, and an optional Perplexity key. The key is write-only: the field shows dots when a key is saved, and the API reports only whether a key is saved. Clear key removes it. The model dropdown offers five ChatGPT models, five OpenAI models, and five Gemini models. A saved key rewrites news and news + price cards on the next check or rebuild, using the selected model. The details popup shows that reply under Together, and the rule sentence under Rule. FinBERT is the only headline scorer. The model weights download once; checks score headlines on this computer. The first FinBERT in the Home rules line opens an explanation of the model, the 0–100 score, the confidence, and the 25-point default. The words "matches the price move" in that same line open an explanation of the percent rule and the part of the day a headline can explain. The Watchlist box suggests an S&P 500 ticker or company name. Choosing a suggestion or pressing Enter only fills the box. Add accepts constituents on that list. Under each headline, the sentiment score is bold and colored, then confidence, then the positive, negative, and neutral shares in brackets. Save and Reset to default change the two thresholds, and the Home rules line follows them. The next check rescores every saved headline. Volume stays an environment setting. Historical prices (lake) lands about one year of Yahoo daily bars for the full S&P 500 into `data/lake/raw/`. Rebuild history deletes every saved alert, then reruns the current rules for each watchlist symbol over the last 1–40 calendar days, including today. A finished session uses that day's close. The rebuild pages Yahoo quote news back through the first day and scores each story on the trading day it was published.
+Settings stores the price percent, the FinBERT threshold, and an optional Perplexity key. The key is write-only: the field shows dots when a key is saved, and the API reports only whether a key is saved. Clear key removes it. The model dropdown offers five ChatGPT models, five OpenAI models, and five Gemini models. A saved key rewrites news and news + price cards on the next check or rebuild, using the selected model. The details popup shows that reply under Together, and the rule sentence under Rule. FinBERT is the only headline scorer. The model weights download once; checks score headlines on this computer. The first FinBERT in the Home rules line opens an explanation of the model, the 0–100 score, the confidence, and the 25-point default. The words "matches the price move" in that same line open an explanation of the percent rule and the part of the day a headline can explain. The Watchlist tab suggests an S&P 500 ticker or company name. Choosing a suggestion or pressing Enter only fills the box. Add accepts constituents on that list. Use Scan today to re-evaluate the focus set under current rules (after the close, after changing thresholds, or when live was down). Under each headline, the sentiment score is bold and colored, then confidence, then the positive, negative, and neutral shares in brackets. Save and Reset to default change the two thresholds, and the Home rules line follows them. The next check rescores every saved headline. Volume stays an environment setting. Historical prices (lake) lands about one year of Yahoo daily bars for the full S&P 500 into `data/lake/raw/` for **model training**. Rebuild history deletes every saved alert, then reruns the current rules for each watchlist symbol over the last 1–40 calendar days, including today. A finished session uses that day's close. The rebuild pages Yahoo quote news back through the first day and scores each story on the trading day it was published.
 
 This is a separate repository from Vajra Astra Capital. Shared ideas (FastAPI, PostgreSQL migrations, Yahoo bars, the keyword sentiment lexicon) are copied here. Nothing imports the other repo.
 
-The class architecture is a **local** batch lake and live stream: Docker Kafka, a Spark-role training job (`batch_train`), Isolation Forest on lake price/volume features, FinBERT, and a Perplexity summary. AWS production deploy is not required. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). As-built vs local final target diagrams are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
+The class architecture is a **local** lambda stack: Docker Kafka (live), a batch lake + Spark-role training job (`batch_train`), Watchlist Scan today as the on-demand session product path, Isolation Forest on lake price/volume features, FinBERT, and a Perplexity summary. AWS production deploy is not required. That plan is [docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md). As-built vs local final target diagrams (including Live vs Watchlist) are in [docs/architecture.md](docs/architecture.md). Vendor details are in [docs/data-sources.md](docs/data-sources.md).
 
 ## Layout
 
@@ -61,7 +61,7 @@ for f in db/migrations/*.sql; do
 done
 ```
 
-The files are `001_init.sql` through `014_live_feature_rows.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, the FinBERT score on a 0–100 scale with a 25-point gate around 50, the Perplexity key and selected model used for alert reasoning, the live-consumer heartbeat used by the Home “Live alerts on” cue, and `live_feature_rows` for live Isolation Forest feature vectors (Timescale stand-in).
+The files are `001_init.sql` through `015_alert_origin.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, the FinBERT score on a 0–100 scale with a 25-point gate around 50, the Perplexity key and selected model used for alert reasoning, the live-consumer heartbeat used by the Home “Live alerts on” cue, `live_feature_rows` for live Isolation Forest feature vectors (Timescale stand-in), and `alerts.origin` (`live` / `watchlist` / `both`) so History can tell how a row was written.
 
 ## Run
 
@@ -77,7 +77,7 @@ Open **http://127.0.0.1:8010/ui**. After backend edits, restart only the API (Ka
 ./dev.sh restart
 ```
 
-Useful extras: `./dev.sh status`, `./dev.sh logs`, `./dev.sh restart-live`, `./dev.sh stop`, `./dev.sh down`. Override producer tickers with `DEV_SYMBOLS=AAPL,MSFT,NVDA ./dev.sh start`.
+Useful extras: `./dev.sh status`, `./dev.sh logs`, `./dev.sh restart-live`, `./dev.sh restart-producer`, `./dev.sh stop`, `./dev.sh down`. By default the producer covers the full S&P 500 (WebSocket first 30 on Alpaca Basic, REST for the rest). Narrow it with `DEV_SYMBOLS=AAPL,MSFT,NVDA ./dev.sh start` if you want a short list.
 
 Manual equivalent (three terminals) if you prefer not to use the script:
 
@@ -87,9 +87,9 @@ source .venv/bin/activate
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-Add an S&P 500 ticker, then **Run check**. The watchlist is the **focus set** for Run check, rebuild, and live price alerts. The product universe is the full index (lake land, symbol search); checks do not automatically run all 500 names.
+On the **Watchlist** tab, add an S&P 500 ticker, then **Scan today**. The watchlist is the **focus set** for Scan today and rebuild. Live covers the streamed index on Home Recent. The product universe is the full index (lake land, symbol search, stream); Scan today does not automatically run all 500 names.
 
-On **Settings → Historical prices (lake)**, **Land S&P 500 prices** writes about one year of Yahoo daily bars for the index into `data/lake/raw/` (same job as `batch_ingest` on the CLI).
+On **Settings → Historical prices (lake)**, **Land S&P 500 prices** writes about one year of Yahoo daily bars for the index into `data/lake/raw/` (same job as `batch_ingest` on the CLI) for Isolation Forest training.
 
 To build curated features and fit Isolation Forest into the local registry:
 
@@ -117,7 +117,7 @@ cd alert_service && source .venv/bin/activate
 python -m app.live
 ```
 
-Home shows a pulsing **Live alerts on** pill while the consumer heartbeats. That process writes **price** rows for watchlist symbols on the stream. It does not replace a news or news_price card for the day. **Run check** refreshes headlines and FinBERT. Diagrams: [docs/architecture.md](docs/architecture.md).
+Home shows a pulsing **Live alerts on** pill while the consumer heartbeats. That process writes session price alerts from the stream (then near-term news upgrade when the slice matches) onto Home Recent with `origin=live`. **Watchlist Scan today** is the separate on-demand pass for the focus set. Diagrams: [docs/architecture.md](docs/architecture.md).
 
 The service listens on port **8010** so it can run beside another app on port 8000.
 
