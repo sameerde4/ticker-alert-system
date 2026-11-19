@@ -32,6 +32,11 @@ def test_health_and_ui_without_a_database():
     assert "enableNotify" in page.text
     assert "showOsNotifications" in page.text
     assert "sw-notifications.js" in page.text
+    assert "function alertMetrics" in page.text
+    assert "alert-metric-value" in page.text
+    assert "Price change" in page.text
+    assert "head.append(kindPill(alert.kind), symbol, when)" in page.text
+    assert "function badgeClass" not in page.text
     worker = client.get("/ui/sw-notifications.js")
     assert worker.status_code == 200
     assert "notificationclick" in worker.text
