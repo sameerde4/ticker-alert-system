@@ -14,7 +14,13 @@ from datetime import date
 from pathlib import Path
 
 from .config import settings
-from .land import write_run_manifest, write_symbol_parquet
+from .land import (
+    expected_latest_session,
+    merge_fetch_start,
+    raw_daily_dir,
+    write_run_manifest,
+    write_symbol_parquet,
+)
 from .symbols import load_symbols
 from .yahoo_daily import fetch_daily_bars, window_for_days
 
@@ -94,42 +100,80 @@ def run(args: argparse.Namespace) -> dict:
     pause = settings.request_pause_seconds if args.pause < 0 else max(0.0, args.pause)
     merge = bool(args.merge)
     run_id = date.today().isoformat() + "-" + uuid.uuid4().hex[:8]
+    # Merge refreshes: expect the last *completed* session (not a pre-open "today").
+    session_target = expected_latest_session() if merge else end
     log.info(
-        "Landing %s symbol(s) daily bars %s → %s into %s (%s)",
+        "Landing %s symbol(s) daily bars %s → %s into %s (%s; session target %s)",
         len(symbols),
         start.isoformat(),
         end.isoformat(),
         lake_root,
         "merge" if merge else "replace",
+        session_target.isoformat(),
     )
 
     results: list[dict] = []
+    skipped_current = 0
     for index, symbol in enumerate(symbols, start=1):
+        did_fetch = False
         try:
-            rows = fetch_daily_bars(symbol, start=start, end=end)
+            if merge:
+                fetch_start = merge_fetch_start(
+                    lake_root,
+                    symbol,
+                    window_start=start,
+                )
+                if fetch_start is None:
+                    skipped_current += 1
+                    results.append(
+                        {
+                            "symbol": symbol,
+                            "rows": 0,
+                            "path": str(raw_daily_dir(lake_root, symbol) / "part-000.parquet"),
+                            "error": None,
+                            "skipped": "up_to_date",
+                            "fetch_start": None,
+                        }
+                    )
+                    log.info(
+                        "[%s/%s] %s already current through %s (skipped Yahoo)",
+                        index,
+                        len(symbols),
+                        symbol,
+                        session_target.isoformat(),
+                    )
+                    continue
+            else:
+                fetch_start = start
+
+            rows = fetch_daily_bars(symbol, start=fetch_start, end=end)
             path = write_symbol_parquet(lake_root, symbol, rows, merge=merge)
+            did_fetch = True
             results.append(
                 {
                     "symbol": symbol,
                     "rows": len(rows),
                     "path": str(path) if path else None,
                     "error": None,
+                    "fetch_start": fetch_start.isoformat(),
                 }
             )
             log.info(
-                "[%s/%s] %s landed %s row(s)%s",
+                "[%s/%s] %s landed %s row(s)%s%s",
                 index,
                 len(symbols),
                 symbol,
                 len(rows),
                 " (merged)" if merge else "",
+                f" from {fetch_start.isoformat()}" if merge else "",
             )
         except Exception as exc:
             log.warning("[%s/%s] %s failed: %s", index, len(symbols), symbol, exc)
             results.append(
                 {"symbol": symbol, "rows": 0, "path": None, "error": str(exc)}
             )
-        if pause and index < len(symbols):
+        # Only throttle actual Yahoo calls — local up-to-date skips stay instant.
+        if pause and did_fetch and index < len(symbols):
             time.sleep(pause)
 
     manifest = write_run_manifest(
@@ -140,14 +184,17 @@ def run(args: argparse.Namespace) -> dict:
         symbols_requested=symbols,
         results=results,
         merge=merge,
+        skipped_current=skipped_current,
+        session_target=session_target,
     )
     landed = sum(1 for row in results if row["rows"] > 0)
     rows = sum(int(row["rows"]) for row in results)
     log.info(
-        "Done. %s/%s symbols, %s rows, manifest=%s",
+        "Done. %s/%s symbols, %s rows, skipped_current=%s, manifest=%s",
         landed,
         len(symbols),
         rows,
+        skipped_current,
         manifest,
     )
     return {
@@ -155,6 +202,7 @@ def run(args: argparse.Namespace) -> dict:
         "symbols": len(symbols),
         "landed": landed,
         "rows": rows,
+        "skipped_current": skipped_current,
         "manifest": str(manifest),
         "lake_root": str(lake_root),
     }
