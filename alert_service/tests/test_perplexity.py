@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 from app.checks import _reason
 from app.engine import AlertDraft
 from app.main import _settings_payload, app
-from app.perplexity import apply_reasoning, complete_reasoning, reasoning_payload
+from app.perplexity import (
+    apply_reasoning,
+    complete_reasoning,
+    linkify_summary_citations,
+    reasoning_payload,
+)
 from app.perplexity_catalog import known_model, model_groups, model_label, resolve_model
 
 
@@ -370,3 +375,47 @@ def test_a_blank_perplexity_key_is_rejected_before_the_database():
     assert response.status_code == 400
     spaced = client.put("/v1/settings/perplexity", json={"perplexity_api_key": "pplx secret"})
     assert spaced.status_code == 400
+
+
+def test_linkify_summary_citations_replaces_url_with_title_markdown():
+    title = "Palo Alto Networks Shares Jump 9% on AI Acquisition"
+    url = "https://investorshub.advfn.com/market-news/article/40345/example"
+    text = (
+        f'PANW rose. The key story was "{title}" from InvestorsHub: {url}, '
+        "alongside stronger earnings."
+    )
+    linked = linkify_summary_citations(text, [{"title": title, "url": url}])
+    assert url not in linked or f"]({url})" in linked
+    assert f"[{title}]({url})" in linked
+    assert f'"{title}"' not in linked
+
+
+def test_linkify_summary_citations_leaves_unmatched_urls_alone():
+    text = "See https://example.com/unrelated for context."
+    assert linkify_summary_citations(text, [{"title": "Other", "url": "https://other.test/a"}]) == text
+
+
+def test_linkify_summary_citations_strips_trailing_punctuation_from_urls():
+    title = "Shares jump on guidance"
+    url = "https://finance.yahoo.com/news/example"
+    linked = linkify_summary_citations(
+        f"Read {url}.",
+        [{"title": title, "url": url}],
+    )
+    assert f"[{title}]({url})" in linked
+    assert f"{url}." not in linked
+
+
+def test_apply_reasoning_linkifies_article_urls_in_new_summaries():
+    draft = _draft("PANW")
+    article = draft.articles[0]
+    raw = (
+        f'The key story was "{article["title"]}" from Yahoo: {article["url"]}, '
+        "and FinBERT is negative."
+    )
+    updated = apply_reasoning(
+        [draft],
+        {"alerts": [{"symbol": "PANW", "bar_date": "2026-11-16", "summary": raw}]},
+    )
+    assert f'[{article["title"]}]({article["url"]})' in updated[0].summary
+    assert "Do not paste raw https URLs" in reasoning_payload([draft])["instructions"]

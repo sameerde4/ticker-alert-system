@@ -8,14 +8,18 @@ failed call leaves the deterministic summary.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from datetime import date
-from typing import Any
+from typing import Any, Sequence
 from urllib import request
 from urllib.error import HTTPError
+from urllib.parse import urlsplit, urlunsplit
 
 from .config import settings
 from .engine import AlertDraft
+
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 
 # Any alert with a news side (aligned or not) gets richer wording. Bare price with no
 # headlines keeps the deterministic sentence.
@@ -36,7 +40,8 @@ _INSTRUCTIONS = (
     "for news, say this is a news-only alert and give the combined FinBERT score out of 100. "
     "(2) Why it likely moved or why the news matters — ground the reason in the specific headlines "
     "(company action, guidance, product, legal, sector, etc.), not generic market chatter. "
-    "Name the most relevant headline title; include its url when one is present. "
+    "Name the most relevant headline by its title. Do not paste raw https URLs into the summary; "
+    "the app already links titles to their sources. "
     "(3) How the FinBERT scores support that reading (strong negative, positive, or mixed). "
     "(4) Forward look — one cautious sentence on what a trader might watch next given these stories "
     "(follow-up prints, guidance, sector peers). This is not personalized financial advice; "
@@ -87,6 +92,66 @@ def reasoning_payload(drafts: list[AlertDraft]) -> dict[str, Any]:
     }
 
 
+def normalize_citation_url(url: str) -> str:
+    """Strip fragments and trailing punctuation so pasted links still match article urls."""
+    text = (url or "").strip()
+    while text and text[-1] in ".,;:!?)]}>'\"":
+        text = text[:-1]
+    parts = urlsplit(text)
+    path = parts.path.rstrip("/") or ""
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+
+
+def linkify_summary_citations(summary: str, articles: Sequence[dict[str, Any]] | None) -> str:
+    """Turn bare article URLs into ``[title](url)`` using the alert's headline list.
+
+    Also collapses redundant ``"Title" from Source: URL`` into a single markdown link.
+    """
+    text = (summary or "").strip()
+    if not text:
+        return text
+    by_url: dict[str, tuple[str, str]] = {}
+    for article in articles or ():
+        if not isinstance(article, dict):
+            continue
+        url = str(article.get("url") or "").strip()
+        title = str(article.get("title") or "").strip()
+        if not url or not title:
+            continue
+        by_url[normalize_citation_url(url)] = (title, url)
+
+    def _replace_url(match: re.Match[str]) -> str:
+        raw = match.group(0)
+        key = normalize_citation_url(raw)
+        hit = by_url.get(key)
+        if not hit:
+            return raw
+        title, url = hit
+        return f"[{title}]({url})"
+
+    linked = _URL_RE.sub(_replace_url, text)
+    for title, url in by_url.values():
+        # "Title" from InvestorsHub: [Title](url)  →  [Title](url)
+        pattern = (
+            r'[“"\']'
+            + re.escape(title)
+            + r'[”"\']'
+            + r"\s*(?:from\s+[^:\[\]]{1,40}:\s*)?"
+            + re.escape(f"[{title}]({url})")
+        )
+        linked = re.sub(pattern, f"[{title}]({url})", linked, flags=re.IGNORECASE)
+        # Same cleanup when the model left a bare URL after a quoted title.
+        bare = (
+            r'[“"\']'
+            + re.escape(title)
+            + r'[”"\']'
+            + r"\s*(?:from\s+[^:\[\]]{1,40}:\s*)?"
+            + re.escape(url)
+        )
+        linked = re.sub(bare, f"[{title}]({url})", linked, flags=re.IGNORECASE)
+    return linked
+
+
 def apply_reasoning(
     drafts: list[AlertDraft], parsed: dict[str, Any] | None, model: str | None = None
 ) -> list[AlertDraft]:
@@ -105,7 +170,11 @@ def apply_reasoning(
     updated = []
     for draft in drafts:
         text = by_key.get((draft.symbol.upper(), _date_text(draft.bar_date)))
-        updated.append(_with_summary(draft, text, model) if text else draft)
+        if text:
+            text = linkify_summary_citations(text, draft.articles)
+            updated.append(_with_summary(draft, text, model))
+        else:
+            updated.append(draft)
     return updated
 
 
