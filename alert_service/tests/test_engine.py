@@ -53,8 +53,10 @@ def test_price_alert_includes_volume_spike():
     drafts = _evaluate(_bars(104, 100, latest_volume=3_000_000, prior_volume=1_000_000), [])
     assert [d.kind for d in drafts] == ["price"]
     assert drafts[0].volume_spike is True
-    assert "spike rule" in drafts[0].summary
-    assert "+4.00%" in drafts[0].summary
+    assert "spike rule" in drafts[0].sections["price"]
+    assert "+4.00%" in drafts[0].sections["price"]
+    assert drafts[0].sections["entry"] == "price"
+    assert "Price led" in drafts[0].summary
 
 
 def test_news_alert_without_a_price_move():
@@ -64,7 +66,9 @@ def test_news_alert_without_a_price_move():
     assert drafts[0].price_change_pct is None
     assert drafts[0].latest_close is None
     assert "candidate reason" not in drafts[0].summary
-    assert "Combined sentiment is 17/100" in drafts[0].summary
+    assert "Combined sentiment is 17/100" in drafts[0].sections["news"]
+    assert "does not support a price alert" in drafts[0].summary
+    assert drafts[0].sections["entry"] == "news"
     assert "plunge" in drafts[0].articles[0]["reason"]
     assert drafts[0].articles[0]["published_at"] == (NOW - timedelta(hours=2)).isoformat()
     assert drafts[0].triggered_at == NOW - timedelta(hours=2)
@@ -86,7 +90,7 @@ def test_mixed_headlines_become_one_news_alert():
     news = [d for d in drafts if d.kind == "news"]
     assert len(news) == 1
     assert news[0].sentiment_score == 50
-    assert "disagree" in news[0].summary
+    assert "disagree" in news[0].sections["news"]
     assert [article["url"] for article in news[0].articles] == [
         "https://example.com/surge",
         "https://example.com/plunge",
@@ -181,7 +185,7 @@ def test_around_the_clock_symbol_uses_the_last_24_hours():
     )
     assert [draft.kind for draft in drafts] == ["price"]
     assert drafts[0].price_change_pct == 0.05
-    assert "24 hours before this check" in drafts[0].summary
+    assert "24 hours before this check" in drafts[0].sections["price"]
     assert drafts[0].triggered_at == NOW
     quiet = evaluate_symbol(
         symbol="BTC-USD",
@@ -291,9 +295,12 @@ def test_a_crypto_headline_does_not_borrow_the_trailing_day():
     )
     assert [draft.kind for draft in drafts] == ["price"]
     assert drafts[0].price_change_pct == 0.10
-    assert "No headline lined up with this move." in drafts[0].summary
+    assert "did not line up" in drafts[0].summary
+    assert drafts[0].sections["entry"] == "price"
+    assert drafts[0].sections["second_supports"] is False
     assert "candidate reason" not in drafts[0].summary
     assert drafts[0].articles[0]["title"] == "Shares plunge after guidance cut"
+    assert drafts[0].sentiment_score is not None
 
 
 def test_a_premarket_headline_lines_up_with_the_overnight_gap():
@@ -318,7 +325,8 @@ def test_a_midday_headline_does_not_explain_the_overnight_gap():
     drafts = _evaluate(bars, [_headline(published_at=published, sentiment_score=80, title="Shares surge at noon")])
     assert [draft.kind for draft in drafts] == ["price"]
     assert drafts[0].price_change_pct == 0.06
-    assert "No headline lined up with this move." in drafts[0].summary
+    assert "did not line up" in drafts[0].summary
+    assert drafts[0].sections["second_supports"] is False
     assert "candidate reason" not in drafts[0].summary
     assert "overnight gap" not in drafts[0].summary
 
@@ -442,8 +450,8 @@ def test_a_live_session_alerts_from_the_open_before_the_close():
     assert [draft.kind for draft in drafts] == ["price"]
     assert drafts[0].price_change_pct == 0.06
     assert drafts[0].triggered_at == now.astimezone(UTC)
-    assert "from the open of $100.00" in drafts[0].summary
-    assert "prior close" not in drafts[0].summary
+    assert "from the open of $100.00" in drafts[0].sections["price"]
+    assert "prior close" not in drafts[0].sections["price"]
 
 
 def test_a_small_move_from_the_open_does_not_borrow_the_partial_close():
@@ -468,7 +476,7 @@ def test_a_down_move_from_the_open_is_timed_at_the_check():
     assert [draft.kind for draft in drafts] == ["price"]
     assert drafts[0].price_change_pct == -0.06
     assert drafts[0].triggered_at == now.astimezone(UTC)
-    assert "down -6.00%" in drafts[0].summary
+    assert "down -6.00%" in drafts[0].sections["price"]
 
 
 def test_a_premarket_headline_uses_the_gap_while_the_session_is_open():

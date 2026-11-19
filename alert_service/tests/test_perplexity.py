@@ -14,7 +14,25 @@ from app.perplexity import apply_reasoning, complete_reasoning, reasoning_payloa
 from app.perplexity_catalog import known_model, model_groups, model_label, resolve_model
 
 
-def _draft(symbol: str, kind: str = "news_price") -> AlertDraft:
+def _draft(symbol: str, kind: str = "news_price", *, with_articles: bool | None = None) -> AlertDraft:
+    include_articles = kind != "price" if with_articles is None else with_articles
+    articles = (
+        (
+            {
+                "title": f"{symbol} falls after a forecast cut",
+                "url": "https://finance.yahoo.com/news/example",
+                "source": "Yahoo Finance",
+                "published_at": "2026-11-16T14:30:00+00:00",
+                "sentiment_score": 8.0,
+                "confidence": 0.91,
+                "positive_pct": 4.0,
+                "negative_pct": 88.0,
+                "neutral_pct": 8.0,
+            },
+        )
+        if include_articles
+        else ()
+    )
     return AlertDraft(
         kind=kind,
         symbol=symbol,
@@ -28,19 +46,7 @@ def _draft(symbol: str, kind: str = "news_price") -> AlertDraft:
         sentiment_score=23.8,
         headline_title=None,
         summary=f"{symbol} rule sentence.",
-        articles=(
-            {
-                "title": f"{symbol} falls after a forecast cut",
-                "url": "https://finance.yahoo.com/news/example",
-                "source": "Yahoo Finance",
-                "published_at": "2026-11-16T14:30:00+00:00",
-                "sentiment_score": 8.0,
-                "confidence": 0.91,
-                "positive_pct": 4.0,
-                "negative_pct": 88.0,
-                "neutral_pct": 8.0,
-            },
-        ),
+        articles=articles,
         sections={"synthesis": f"{symbol} rule sentence."} if kind == "news_price" else {},
         price_move_threshold=0.03,
         sentiment_threshold=25.0,
@@ -48,7 +54,9 @@ def _draft(symbol: str, kind: str = "news_price") -> AlertDraft:
 
 
 def test_one_payload_carries_every_symbol_price_headline_and_finbert_detail():
-    payload = reasoning_payload([_draft("AVGO"), _draft("LITE", "news"), _draft("MSFT", "price")])
+    payload = reasoning_payload(
+        [_draft("AVGO"), _draft("LITE", "news"), _draft("MSFT", "price", with_articles=False)]
+    )
     instructions = payload["instructions"].lower()
     assert "three to four" in instructions
     assert "do not decide" in instructions
@@ -74,10 +82,16 @@ def test_one_payload_carries_every_symbol_price_headline_and_finbert_detail():
 def test_price_only_drafts_are_skipped_for_reasoning():
     from app.perplexity import drafts_for_reasoning
 
-    price = _draft("MSFT", "price")
+    price = _draft("MSFT", "price", with_articles=False)
     news = _draft("AAPL", "news")
+    price_with_news = _draft("NVDA", "price", with_articles=True)
+    price_with_news = replace(
+        price_with_news,
+        sections={"news": "Headlines checked; none lined up.", "entry": "price"},
+    )
     assert drafts_for_reasoning([price]) == []
     assert [d.symbol for d in drafts_for_reasoning([price, news])] == ["AAPL"]
+    assert [d.symbol for d in drafts_for_reasoning([price_with_news])] == ["NVDA"]
 
 
 def test_a_reply_replaces_the_summary_and_keeps_the_rule_sentence():

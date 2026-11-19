@@ -16,8 +16,25 @@ from .engine import AlertDraft
 _ALERT_COLUMNS = """
     id, symbol, kind, bar_date, headline_id, price_change_pct, latest_close, prior_close,
     volume_ratio, volume_spike, sentiment_score, headline_title, summary, articles, sections,
-    triggered_at, updated_at, created_at, price_move_threshold, sentiment_threshold
+    triggered_at, updated_at, created_at, price_move_threshold, sentiment_threshold, origin
 """
+
+_ORIGIN_VALUES = frozenset({"live", "watchlist", "both"})
+
+
+def normalize_alert_origin(value: str | None) -> str:
+    origin = str(value or "watchlist").strip().lower()
+    return origin if origin in _ORIGIN_VALUES else "watchlist"
+
+
+def merge_alert_origin(existing: str | None, incoming: str | None) -> str:
+    left = normalize_alert_origin(existing)
+    right = normalize_alert_origin(incoming)
+    if left == right:
+        return left
+    if left == "both" or right == "both":
+        return "both"
+    return "both"
 
 
 def alert_record(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
@@ -48,6 +65,7 @@ def alert_record(row: asyncpg.Record | dict[str, Any]) -> dict[str, Any]:
             data[key] = json.loads(value)
         elif value is None:
             data[key] = empty
+    data["origin"] = normalize_alert_origin(data.get("origin"))
     return data
 
 
@@ -495,15 +513,19 @@ async def clear_symbol_day(conn: asyncpg.Connection, symbol: str, bar_date) -> N
 async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str, Any]:
     if draft.bar_date is None:
         raise ValueError("An alert needs a bar date so a symbol has one row per day.")
+    origin = normalize_alert_origin(getattr(draft, "origin", None))
     conflict = "ON CONFLICT (symbol, bar_date)"
     row = await conn.fetchrow(
         f"""
         INSERT INTO alerts (
           symbol, kind, bar_date, headline_id, price_change_pct, latest_close, prior_close,
           volume_ratio, volume_spike, sentiment_score, headline_title, summary, articles, sections,
-          triggered_at, price_move_threshold, sentiment_threshold
+          triggered_at, price_move_threshold, sentiment_threshold, origin
         )
-        VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15, $16, $17)
+        VALUES (
+          $1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb,
+          $15, $16, $17, $18
+        )
         {conflict}
         DO UPDATE SET
           kind = EXCLUDED.kind,
@@ -521,6 +543,11 @@ async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str,
           triggered_at = EXCLUDED.triggered_at,
           price_move_threshold = EXCLUDED.price_move_threshold,
           sentiment_threshold = EXCLUDED.sentiment_threshold,
+          origin = CASE
+            WHEN alerts.origin = EXCLUDED.origin THEN alerts.origin
+            WHEN alerts.origin = 'both' OR EXCLUDED.origin = 'both' THEN 'both'
+            ELSE 'both'
+          END,
           updated_at = NOW()
         RETURNING {_ALERT_COLUMNS}
         """,
@@ -541,6 +568,7 @@ async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str,
         draft.triggered_at,
         draft.price_move_threshold,
         draft.sentiment_threshold,
+        origin,
     )
     return alert_record(row)
 

@@ -52,6 +52,7 @@ def price_draft_from_session(
         triggered_at=state.last_ts.astimezone(UTC) if state.last_ts.tzinfo else state.last_ts.replace(tzinfo=UTC),
         price_move_threshold=price_move_threshold,
         sentiment_threshold=sentiment_threshold,
+        origin="live",
     )
 
 
@@ -107,6 +108,7 @@ def forest_price_draft_from_session(
         triggered_at=state.last_ts.astimezone(UTC) if state.last_ts.tzinfo else state.last_ts.replace(tzinfo=UTC),
         price_move_threshold=price_move_threshold,
         sentiment_threshold=sentiment_threshold,
+        origin="live",
     )
 
 
@@ -117,7 +119,10 @@ def eastern_day_mismatch(state: SessionState, now: datetime) -> bool:
 
 
 def should_write_live_price(existing: dict[str, Any] | None) -> bool:
-    """Live path only inserts or refreshes a price row. News / news_price stay untouched."""
+    """Legacy helper: live may refresh a missing or price-only day.
+
+    Prefer ``should_write_live_alert`` when the draft may upgrade to news / news_price.
+    """
     if existing is None:
         return True
     return existing.get("kind") == "price"

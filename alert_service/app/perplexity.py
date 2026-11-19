@@ -17,13 +17,16 @@ from urllib.error import HTTPError
 from .config import settings
 from .engine import AlertDraft
 
-# Price-only stays on the rule sentence for now; Isolation Forest wording comes later.
-REASONING_KINDS = frozenset({"news", "news_price"})
+# Any alert with a news side (aligned or not) gets richer wording. Bare price with no
+# headlines keeps the deterministic sentence.
+REASONING_KINDS = frozenset({"news", "news_price", "price"})
 
 _INSTRUCTIONS = (
     "You write trader-facing reasoning for equity alerts that have already been decided. "
-    "Each alert in the JSON is either kind=news (headline sentiment only) or kind=news_price "
-    "(price move plus headlines). Do not decide whether an alert should exist. "
+    "Every alert checked both price and near-term news. kind=news_price means both sides "
+    "support each other; kind=price means price led and news was checked (it may not line up); "
+    "kind=news means news led and price was checked (it may not line up). "
+    "Do not decide whether an alert should exist. "
     "Use only facts in the payload: prices, percents, FinBERT scores, headline titles, sources, "
     "publish times, and urls. Do not invent a price, score, ticker, or article that is not listed. "
     "You may quote or paraphrase headline titles and cite their urls from the payload. "
@@ -65,8 +68,15 @@ _SCHEMA = {
 
 
 def drafts_for_reasoning(drafts: list[AlertDraft]) -> list[AlertDraft]:
-    """News and news+price only. Price-only keeps the deterministic sentence."""
-    return [draft for draft in drafts if draft.kind in REASONING_KINDS]
+    """Alerts that have a news side (articles or a news section). Bare price stays deterministic."""
+    out: list[AlertDraft] = []
+    for draft in drafts:
+        if draft.kind in ("news", "news_price"):
+            out.append(draft)
+            continue
+        if draft.kind == "price" and (draft.articles or (draft.sections or {}).get("news")):
+            out.append(draft)
+    return out
 
 
 def reasoning_payload(drafts: list[AlertDraft]) -> dict[str, Any]:
@@ -192,7 +202,7 @@ def _with_summary(draft: AlertDraft, summary: str, model: str | None = None) -> 
     sections = dict(draft.sections)
     if draft.summary:
         sections["rules"] = draft.summary
-    if draft.kind in REASONING_KINDS:
+    if draft.kind in ("news", "news_price") or draft.articles or sections.get("news"):
         sections["synthesis"] = summary
     if model:
         sections["model"] = known_model(model)

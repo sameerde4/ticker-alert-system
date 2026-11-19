@@ -1,4 +1,4 @@
-"""Kafka consumer: minute bars → open-to-last price alerts + live forest feature rows."""
+"""Kafka consumer: minute bars → price alerts, forest scores, then price→news upgrade."""
 
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from .forest_live import (
 from .live_alerts import (
     forest_price_draft_from_session,
     price_draft_from_session,
-    should_write_live_price,
 )
-from .live_session import SessionBook
+from .live_session import SessionBook, SessionState
+from .live_upgrade import should_write_live_alert, upgrade_price_draft_with_news
 from .store import (
     clear_live_consumer_heartbeat,
     fetch_recent_daily_bars,
@@ -40,7 +40,7 @@ log = logging.getLogger(__name__)
 
 
 class LiveBarConsumer:
-    """Consume ``prices.raw.bars``: percent-rule alerts, forest scores, feature sink."""
+    """Consume ``prices.raw.bars``: percent + forest, then near-term news upgrade."""
 
     def __init__(
         self,
@@ -71,6 +71,8 @@ class LiveBarConsumer:
         self._history: dict[str, SymbolHistory] = {}
         self._last_feature_write: dict[str, float] = {}
         self._feature_min_interval = max(5, int(settings.live_feature_min_interval_seconds))
+        self._last_news_lookup: dict[str, float] = {}
+        self._news_lookup_min_interval = 120.0
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -174,27 +176,29 @@ class LiveBarConsumer:
         if state is None:
             return
 
-        await self._score_forest(state)
+        forest_draft = await self._score_forest(state)
 
-        draft = price_draft_from_session(
+        percent_draft = price_draft_from_session(
             state,
             price_move_threshold=self._price_threshold,
             sentiment_threshold=self._sentiment_threshold,
             now=datetime.now(UTC),
         )
+        # Prefer forest wording when both fire; percent alone is enough otherwise.
+        draft = forest_draft or percent_draft
         if draft is None:
             return
-        await self._maybe_write_price(draft)
+        if forest_draft is not None and percent_draft is not None:
+            # Keep forest sections but allow percent snapshot fields from the shared state.
+            draft = forest_draft
+        await self._maybe_write_alert(draft, state)
 
-    async def _score_forest(self, state) -> None:
+    async def _score_forest(self, state: SessionState):
         if not self.forest.enabled:
-            return
+            return None
         hist = self._history.get(state.symbol)
-        if hist is None:
-            return
-        # Re-fit history exclusion to this bar's session day when needed.
-        if hist.prior_close <= 0:
-            return
+        if hist is None or hist.prior_close <= 0:
+            return None
         scored = self.forest.score_session(
             open_px=state.open,
             last_px=state.last,
@@ -203,7 +207,7 @@ class LiveBarConsumer:
             prior_volumes=hist.prior_volumes,
         )
         if scored is None:
-            return
+            return None
 
         now_mono = asyncio.get_running_loop().time()
         last_write = self._last_feature_write.get(state.symbol, 0.0)
@@ -234,46 +238,81 @@ class LiveBarConsumer:
                 log.warning("Could not sink live feature row for %s: %s", state.symbol, exc)
 
         if scored.anomalous and settings.live_forest_alerts:
-            forest_draft = forest_price_draft_from_session(
+            return forest_price_draft_from_session(
                 state,
                 scored,
                 price_move_threshold=self._price_threshold,
                 sentiment_threshold=self._sentiment_threshold,
                 now=datetime.now(UTC),
             )
-            if forest_draft is not None:
-                await self._maybe_write_price(forest_draft)
+        return None
 
-    async def _maybe_write_price(self, draft) -> None:
+    async def _maybe_write_alert(self, draft, state: SessionState) -> None:
         async with self.pool.acquire() as conn:
             existing = await get_alert_for_day(conn, draft.symbol, draft.bar_date)
-            if not should_write_live_price(existing):
-                log.debug(
-                    "Skip live price for %s %s; existing kind=%s",
-                    draft.symbol,
-                    draft.bar_date,
-                    (existing or {}).get("kind"),
-                )
-                return
-            if existing and _same_price_snapshot(existing, draft):
-                return
-            # Prefer keeping a richer forest summary if we already have one and this
-            # draft is only the percent-rule text with the same prints.
-            if (
-                existing
-                and isinstance((existing.get("sections") or {}), dict)
-                and (existing.get("sections") or {}).get("forest")
-                and "forest" not in (draft.sections or {})
-                and _same_price_snapshot(existing, draft)
-            ):
-                return
-            saved = await upsert_alert(conn, draft)
-            log.info(
-                "Live price alert %s %s change=%s",
-                saved["symbol"],
-                saved["bar_date"],
-                f"{float(saved['price_change_pct'] or 0) * 100:.2f}%",
+
+        if not should_write_live_alert(existing, draft):
+            log.debug(
+                "Skip live alert for %s %s; existing kind=%s draft=%s",
+                draft.symbol,
+                draft.bar_date,
+                (existing or {}).get("kind"),
+                draft.kind,
             )
+            return
+
+        same_prints = bool(existing and _same_price_snapshot(existing, draft))
+        has_evidence = isinstance((existing or {}).get("sections"), dict) and (
+            (existing or {}).get("sections") or {}
+        ).get("evidence")
+        now_mono = asyncio.get_running_loop().time()
+        last_news = self._last_news_lookup.get(state.symbol, 0.0)
+        news_due = (now_mono - last_news) >= self._news_lookup_min_interval
+
+        if same_prints and has_evidence and not news_due and existing.get("kind") in (
+            "news",
+            "news_price",
+            "price",
+        ):
+            return
+
+        # Price noticed → fetch/score headlines → maybe upgrade → Perplexity for news kinds.
+        try:
+            upgraded = await upgrade_price_draft_with_news(
+                self.pool,
+                draft,
+                state,
+                price_move_threshold=self._price_threshold,
+                sentiment_threshold=self._sentiment_threshold,
+                now=datetime.now(UTC),
+            )
+            self._last_news_lookup[state.symbol] = now_mono
+        except Exception as exc:
+            log.warning("Live price→news upgrade failed for %s: %s", state.symbol, exc)
+            from .evidence import attach_evidence_story
+
+            upgraded = attach_evidence_story(draft)
+
+        if not should_write_live_alert(existing, upgraded):
+            return
+
+        if (
+            existing
+            and _same_price_snapshot(existing, upgraded)
+            and existing.get("kind") == upgraded.kind
+            and _same_evidence_outcome(existing, upgraded)
+        ):
+            return
+
+        async with self.pool.acquire() as conn:
+            saved = await upsert_alert(conn, upgraded)
+        log.info(
+            "Live alert %s %s kind=%s change=%s",
+            saved["symbol"],
+            saved["bar_date"],
+            saved["kind"],
+            f"{float(saved['price_change_pct'] or 0) * 100:.2f}%",
+        )
 
 
 def _same_price_snapshot(existing: dict[str, Any], draft) -> bool:
@@ -285,6 +324,12 @@ def _same_price_snapshot(existing: dict[str, Any], draft) -> bool:
     except (TypeError, ValueError):
         return False
     return same_change and same_last and same_open
+
+
+def _same_evidence_outcome(existing: dict[str, Any], draft) -> bool:
+    left = ((existing.get("sections") or {}).get("evidence") or {}).get("headline")
+    right = ((draft.sections or {}).get("evidence") or {}).get("headline")
+    return left == right and existing.get("kind") == draft.kind
 
 
 def _decode_json(raw: bytes | None) -> Any:

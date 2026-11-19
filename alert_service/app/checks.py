@@ -15,6 +15,7 @@ from .prices import fetch_daily_bars, fetch_last_24h, fetch_open_to_last
 from .symbols import trades_all_day
 from .scoring import attach_scores
 from .sectors import ensure_symbol_sectors
+from .evidence import attach_evidence_story
 from .perplexity import complete_reasoning
 from .perplexity_catalog import known_model
 from .store import (
@@ -102,11 +103,12 @@ async def run_check(pool: asyncpg.Pool, *, now: datetime | None = None) -> dict[
                 live_session=live,
             )
             today = eastern_date(moment)
-            kept = [draft for draft in drafts if draft.bar_date == today]
+            kept = [attach_evidence_story(draft) for draft in drafts if draft.bar_date == today]
             await clear_symbol_day(conn, symbol, today)
             for draft in kept:
                 alerts.append(draft)
-    reasoned, reasoning, reasoning_error = await _reason(pool, alerts)
+    reasoned, reasoning, reasoning_error = await reason_alert_drafts(pool, alerts)
+    reasoned = [attach_evidence_story(draft) for draft in reasoned]
     saved = []
     async with pool.acquire() as conn:
         for draft in reasoned:
@@ -191,10 +193,13 @@ async def realign_saved_alerts(pool: asyncpg.Pool, *, now: datetime | None = Non
     return {"alerts": written}
 
 
-async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str, str | None]:
+async def reason_alert_drafts(
+    pool: asyncpg.Pool, drafts: list[Any]
+) -> tuple[list[Any], str, str | None]:
     """Ask Perplexity for richer news / news+price write-ups when a key is saved.
 
-    Price-only alerts keep the deterministic rule sentence.
+    Price-only alerts keep the deterministic rule sentence. Used by Scan today and
+    the live price → news upgrade path.
     """
     from .perplexity import drafts_for_reasoning
 
@@ -220,10 +225,12 @@ async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str
         updated = [by_key.get((draft.symbol, draft.bar_date), draft) for draft in updated]
         if error:
             errors.append(error)
+    from .perplexity import drafts_for_reasoning as _eligible
+
     missed = [
         draft
-        for draft in updated
-        if draft.kind in ("news", "news_price") and "model_label" not in draft.sections
+        for draft in _eligible(updated)
+        if "model_label" not in (draft.sections or {})
     ]
     if missed and len(missed) < len(eligible):
         part, error = await asyncio.to_thread(complete_reasoning, key, missed, model)
@@ -236,6 +243,10 @@ async def _reason(pool: asyncpg.Pool, drafts: list[Any]) -> tuple[list[Any], str
     if errors:
         return updated, "perplexity", errors[0]
     return updated, "perplexity", None
+
+
+# Back-compat for any older imports / tests.
+_reason = reason_alert_drafts
 
 
 def rebuild_start(today: date, days: int) -> date:
@@ -310,7 +321,9 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
                 for draft in drafts:
                     if draft.bar_date == day:
                         pending.append(draft)
-    reasoned, reasoning, reasoning_error = await _reason(pool, pending)
+    pending = [attach_evidence_story(draft) for draft in pending]
+    reasoned, reasoning, reasoning_error = await reason_alert_drafts(pool, pending)
+    reasoned = [attach_evidence_story(draft) for draft in reasoned]
     saved: list[dict[str, Any]] = []
     async with pool.acquire() as conn:
         for draft in reasoned:

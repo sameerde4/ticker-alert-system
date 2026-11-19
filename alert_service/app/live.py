@@ -1,7 +1,7 @@
 """Entry point: python -m app.live
 
 Consumes Kafka minute bars and writes open→last price alerts for the watchlist.
-Run check still handles news. Leave this process running beside the API during RTH.
+Watchlist Scan today still handles the on-demand news/session pass. Leave this process running beside the API during RTH.
 """
 
 from __future__ import annotations

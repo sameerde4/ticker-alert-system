@@ -32,6 +32,8 @@ class AlertDraft:
     triggered_at: datetime | None = None
     price_move_threshold: float | None = None
     sentiment_threshold: float | None = None
+    # live = Kafka consumer; watchlist = Scan today / rebuild; both = each path wrote this day.
+    origin: str = "watchlist"
 
 
 EASTERN = ZoneInfo("America/New_York")
@@ -532,6 +534,7 @@ def evaluate_symbol(
                 "because they line up with a different price."
             )
         known_at = max(row["known_at"] for row in matched)
+        entry = "price" if price_draft is not None else "news"
         return [
             AlertDraft(
                 kind="news_price",
@@ -547,7 +550,13 @@ def evaluate_symbol(
                 headline_title=None,
                 summary=synthesis,
                 articles=articles,
-                sections={"price": price_text, "news": news_text, "synthesis": synthesis},
+                sections={
+                    "price": price_text,
+                    "news": news_text,
+                    "synthesis": synthesis,
+                    "entry": entry,
+                    "second_supports": True,
+                },
                 triggered_at=known_at,
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
@@ -556,25 +565,94 @@ def evaluate_symbol(
 
     if price_draft is not None and news_items:
         articles = tuple(article_view(item) for item in news_items)
-        note = " No headline lined up with this move."
+        news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        news_text = (
+            news_summary(
+                symbol,
+                list(articles),
+                sentiment_threshold=sentiment_threshold,
+                news_lookback_hours=news_lookback_hours,
+            )
+            + " None of these headlines lined up with the price slice that moved, so news does not "
+            "support the price alert as a candidate reason."
+        )
+        synthesis = (
+            f"Price led for {symbol}: the move cleared the rule, near-term news was checked, "
+            f"and the headlines did not line up with that slice. Combined news sentiment is "
+            f"{_score(news_score)} ({_tone(news_score)})."
+        )
         return [
             replace(
                 price_draft,
-                summary=price_draft.summary + note,
+                summary=synthesis,
                 articles=articles,
+                sentiment_score=news_score,
+                sections={
+                    "price": price_draft.summary,
+                    "news": news_text,
+                    "synthesis": synthesis,
+                    "entry": "price",
+                    "second_supports": False,
+                },
             )
         ]
     if price_draft is not None:
-        return [price_draft]
+        news_text = (
+            f"No near-term headlines for {symbol} cleared the {sentiment_threshold:.0f}-point "
+            "FinBERT gate on this trading day, so there is no news evidence beside the price move."
+        )
+        synthesis = (
+            f"Price led for {symbol}: the move cleared the rule, and news was checked with no "
+            "qualifying headlines."
+        )
+        return [
+            replace(
+                price_draft,
+                summary=synthesis,
+                sections={
+                    "price": price_draft.summary,
+                    "news": news_text,
+                    "synthesis": synthesis,
+                    "entry": "price",
+                    "second_supports": False,
+                },
+            )
+        ]
     if news_items:
         articles = tuple(article_view(item) for item in news_items)
         news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        news_text = news_summary(
+            symbol,
+            list(articles),
+            sentiment_threshold=sentiment_threshold,
+            news_lookback_hours=news_lookback_hours,
+        )
+        price_text, observed_change = _price_side_when_news_only(
+            symbol=symbol,
+            ordered=ordered,
+            session_day=session_day,
+            live_session=live_session,
+            trailing_24h=trailing_24h,
+            price_move_threshold=price_move_threshold,
+            measured=measured,
+        )
+        synthesis = (
+            f"News led for {symbol}: FinBERT cleared the gate, price was checked, and the "
+            f"session move does not support a price alert"
+            + (
+                f" (observed {observed_change * 100:+.2f}%, under the "
+                f"{price_move_threshold * 100:.1f}% rule)."
+                if observed_change is not None
+                else "."
+            )
+        )
         return [
             AlertDraft(
                 kind="news",
                 symbol=symbol,
                 bar_date=session_day,
                 headline_id=None,
+                # Keep price_change_pct empty so the top metric strip stays news-led.
                 price_change_pct=None,
                 latest_close=None,
                 prior_close=None,
@@ -582,19 +660,80 @@ def evaluate_symbol(
                 volume_spike=False,
                 sentiment_score=news_score,
                 headline_title=None,
-                summary=news_summary(
-                    symbol,
-                    list(articles),
-                    sentiment_threshold=sentiment_threshold,
-                    news_lookback_hours=news_lookback_hours,
-                ),
+                summary=synthesis,
                 articles=articles,
+                sections={
+                    "price": price_text,
+                    "news": news_text,
+                    "synthesis": synthesis,
+                    "entry": "news",
+                    "second_supports": False,
+                    "observed_price_change_pct": observed_change,
+                },
                 triggered_at=earliest_published(news_items),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
             )
         ]
     return []
+
+
+def _price_side_when_news_only(
+    *,
+    symbol: str,
+    ordered: list[dict[str, Any]],
+    session_day: date,
+    live_session: dict[str, float] | None,
+    trailing_24h: dict[str, Any] | None,
+    price_move_threshold: float,
+    measured: list[dict[str, Any]],
+) -> tuple[str, float | None]:
+    """Explain the price check when news led and the move did not clear the rule."""
+    if measured:
+        strongest = max(measured, key=lambda row: abs(float(row["change"])))
+        change = float(strongest["change"])
+        label = SLICE_LABEL.get(strongest["name"], "the headline's price slice")
+        return (
+            f"{symbol} price was checked against {label}. The observed move was "
+            f"{_direction(change)} {_fmt_pct(change)}, under the "
+            f"{price_move_threshold * 100:.1f}% rule.",
+            change,
+        )
+    if live_session is not None:
+        change = price_change_pct(float(live_session["price"]), float(live_session["open"]))
+        if change is not None:
+            return (
+                f"{symbol} is at {_money(float(live_session['price']))}, "
+                f"{_direction(change)} {_fmt_pct(change)} from the open of "
+                f"{_money(float(live_session['open']))}. That is under the "
+                f"{price_move_threshold * 100:.1f}% rule.",
+                change,
+            )
+    if trailing_24h is not None:
+        change = price_change_pct(float(trailing_24h["price"]), float(trailing_24h["prior_price"]))
+        if change is not None:
+            return (
+                f"{symbol} is {_direction(change)} {_fmt_pct(change)} over the last 24 hours, "
+                f"under the {price_move_threshold * 100:.1f}% rule.",
+                change,
+            )
+    if len(ordered) >= 2 and ordered[-1]["dt"] == session_day:
+        latest = ordered[-1]
+        prior = ordered[-2]
+        change = price_change_pct(float(latest["close"]), float(prior["close"]))
+        if change is not None:
+            return (
+                f"{symbol} closed at {_money(float(latest['close']))}, "
+                f"{_direction(change)} {_fmt_pct(change)} from the prior close of "
+                f"{_money(float(prior['close']))}. That is under the "
+                f"{price_move_threshold * 100:.1f}% rule.",
+                change,
+            )
+    return (
+        f"{symbol} price was checked; no session move cleared the "
+        f"{price_move_threshold * 100:.1f}% rule beside this news.",
+        None,
+    )
 
 
 def _headline_windows(
