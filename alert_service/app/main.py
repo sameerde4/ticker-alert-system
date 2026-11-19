@@ -1,4 +1,4 @@
-"""S&P 500 Alert System API and single-page UI."""
+"""S&P 500 Radar API and single-page UI."""
 
 from __future__ import annotations
 

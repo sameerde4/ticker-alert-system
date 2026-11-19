@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command local stack for the S&P 500 Alert System.
+# One-command local stack for the S&P 500 Radar.
 #
 #   ./dev.sh start          Docker Kafka + producer + live consumer + API/UI
 #   ./dev.sh restart        Restart API/UI only (Kafka, producer, live stay up)

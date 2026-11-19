@@ -1,4 +1,4 @@
-/* Desktop (OS) notifications for the S&P 500 Alert System UI. */
+/* Desktop (OS) notifications for the S&P 500 Radar UI. */
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
