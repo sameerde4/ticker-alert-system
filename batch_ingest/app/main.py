@@ -62,6 +62,14 @@ def parse_args() -> argparse.Namespace:
         default=-1,
         help="Seconds to sleep between Yahoo calls (default from settings)",
     )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help=(
+            "Merge new daily rows into existing Parquet by date (incremental refresh). "
+            "Without this flag the partition is replaced (full land)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -84,20 +92,22 @@ def run(args: argparse.Namespace) -> dict:
 
     lake_root = Path(args.lake_root or settings.lake_root).resolve()
     pause = settings.request_pause_seconds if args.pause < 0 else max(0.0, args.pause)
+    merge = bool(args.merge)
     run_id = date.today().isoformat() + "-" + uuid.uuid4().hex[:8]
     log.info(
-        "Landing %s symbol(s) daily bars %s → %s into %s",
+        "Landing %s symbol(s) daily bars %s → %s into %s (%s)",
         len(symbols),
         start.isoformat(),
         end.isoformat(),
         lake_root,
+        "merge" if merge else "replace",
     )
 
     results: list[dict] = []
     for index, symbol in enumerate(symbols, start=1):
         try:
             rows = fetch_daily_bars(symbol, start=start, end=end)
-            path = write_symbol_parquet(lake_root, symbol, rows)
+            path = write_symbol_parquet(lake_root, symbol, rows, merge=merge)
             results.append(
                 {
                     "symbol": symbol,
@@ -107,11 +117,12 @@ def run(args: argparse.Namespace) -> dict:
                 }
             )
             log.info(
-                "[%s/%s] %s landed %s row(s)",
+                "[%s/%s] %s landed %s row(s)%s",
                 index,
                 len(symbols),
                 symbol,
                 len(rows),
+                " (merged)" if merge else "",
             )
         except Exception as exc:
             log.warning("[%s/%s] %s failed: %s", index, len(symbols), symbol, exc)
@@ -128,6 +139,7 @@ def run(args: argparse.Namespace) -> dict:
         end=end,
         symbols_requested=symbols,
         results=results,
+        merge=merge,
     )
     landed = sum(1 for row in results if row["rows"] > 0)
     rows = sum(int(row["rows"]) for row in results)

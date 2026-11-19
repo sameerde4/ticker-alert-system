@@ -25,12 +25,15 @@ Uses `stream_ingest/data/sp500_symbols.txt`.
 ## Run
 
 ```bash
+# Full cold-start land (~1 year, replaces each symbol partition)
 python -m app.main
 python -m app.main --symbols AAPL,MSFT,NVDA --days 30
 python -m app.main --max-symbols 5 --days 60
+# Incremental refresh: merge recent sessions into existing Parquet
+python -m app.main --days 14 --merge
 ```
 
-Or use **Settings → Historical prices (lake)** in the UI.
+Or use **Settings → Historical prices (lake)** in the UI: **Land** (full) or **Refresh lake + retrain** (merge + `batch_train`).
 
 ## Next on this path
 

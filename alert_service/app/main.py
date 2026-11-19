@@ -36,7 +36,12 @@ from .store import (
     save_perplexity_api_key,
     save_perplexity_model,
 )
-from .lake_land import lake_land_status, start_lake_land
+from .lake_land import (
+    DEFAULT_REFRESH_DAYS,
+    lake_land_status,
+    start_lake_land,
+    start_lake_refresh,
+)
 from .symbols import known_universe_symbol, normalize_symbol
 
 _UI_DIR = Path(__file__).resolve().parents[1] / "ui"
@@ -270,5 +275,14 @@ async def post_lake_land() -> dict[str, object]:
     """Pull ~1 year of Yahoo daily bars for the S&P 500 into the local lake (background)."""
     try:
         return await start_lake_land(days=365)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/v1/admin/lake/refresh")
+async def post_lake_refresh() -> dict[str, object]:
+    """Merge recent Yahoo dailies into the lake, then curate + retrain Isolation Forest."""
+    try:
+        return await start_lake_refresh(days=DEFAULT_REFRESH_DAYS)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

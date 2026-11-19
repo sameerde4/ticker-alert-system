@@ -18,14 +18,39 @@ def raw_daily_dir(lake_root: Path, symbol: str) -> Path:
     return lake_root / "raw" / "prices" / "daily" / f"symbol={symbol.upper()}"
 
 
-def write_symbol_parquet(lake_root: Path, symbol: str, rows: list[dict[str, Any]]) -> Path | None:
-    """Replace one symbol's raw daily file. Returns the path, or None when empty."""
+def write_symbol_parquet(
+    lake_root: Path,
+    symbol: str,
+    rows: list[dict[str, Any]],
+    *,
+    merge: bool = False,
+) -> Path | None:
+    """Write one symbol's raw daily file.
+
+    ``merge=False`` (full land) replaces the partition.
+    ``merge=True`` (incremental refresh) unions by ``dt`` and keeps the newest row.
+    """
+    import pandas as pd
+
     frame = bars_frame(rows)
-    if frame.empty:
-        return None
     folder = raw_daily_dir(lake_root, symbol)
-    folder.mkdir(parents=True, exist_ok=True)
     path = folder / "part-000.parquet"
+    if frame.empty:
+        if merge and path.is_file():
+            return path
+        return None
+    folder.mkdir(parents=True, exist_ok=True)
+    if merge and path.is_file():
+        try:
+            existing = pd.read_parquet(path)
+        except Exception as exc:
+            log.warning("Could not read %s for merge (%s); replacing", path, exc)
+            existing = None
+        if existing is not None and not existing.empty:
+            existing = bars_frame(existing.to_dict("records"))
+            frame = pd.concat([existing, frame], ignore_index=True)
+            frame = frame.drop_duplicates(subset=["dt"], keep="last")
+            frame = frame.sort_values("dt").reset_index(drop=True)
     frame.to_parquet(path, index=False, engine="pyarrow")
     return path
 
@@ -38,6 +63,7 @@ def write_run_manifest(
     end: date,
     symbols_requested: list[str],
     results: list[dict[str, Any]],
+    merge: bool = False,
 ) -> Path:
     """Record what this land run pulled. Lives under raw/_runs/ (not symbol partitions)."""
     folder = lake_root / "raw" / "_runs"
@@ -49,6 +75,8 @@ def write_run_manifest(
         "landed_at": datetime.now(UTC).isoformat(),
         "source": "yahoo",
         "grain": "daily",
+        "mode": "incremental_merge" if merge else "full_replace",
+        "merge": bool(merge),
         "start": start.isoformat(),
         "end": end.isoformat(),
         "symbols_requested": len(symbols_requested),
