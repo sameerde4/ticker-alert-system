@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .checks import rebuild_history, rebuild_start, run_check
+from .screener import DEFAULT_SCREENER_LIMIT, run_screener
 from .config import (
     DEFAULT_PRICE_MOVE_THRESHOLD,
     DEFAULT_SENTIMENT_THRESHOLD,
@@ -74,6 +75,13 @@ class WatchlistIn(BaseModel):
 
 class RebuildIn(BaseModel):
     days: int
+
+
+class ScreenerIn(BaseModel):
+    """Signed percent filter: 3 = up at least 3%, -3 = down at least 3%."""
+
+    change_percent: float
+    limit: int = DEFAULT_SCREENER_LIMIT
 
 
 class AlertRulesIn(BaseModel):
@@ -257,6 +265,30 @@ async def get_live_status() -> dict[str, object]:
 @app.post("/v1/checks/run")
 async def post_check() -> dict:
     return await run_check(_pool())
+
+
+@app.post("/v1/screener/run")
+async def post_screener(body: ScreenerIn) -> dict:
+    """Experimental full-index screen: top session movers from the lake, then headlines.
+
+    Results are ephemeral (not written to Alert History).
+    """
+    if body.change_percent == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Enter a non-zero percent filter (for example 3 or -3).",
+        )
+    if abs(body.change_percent) > 50:
+        raise HTTPException(status_code=400, detail="Percent filter must be at most 50.")
+    try:
+        pool = None if os.environ.get("TICKER_ALERT_SKIP_DB") == "1" else _pool()
+        return await run_screener(
+            pool,
+            change_percent=body.change_percent,
+            limit=body.limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/v1/admin/rebuild")

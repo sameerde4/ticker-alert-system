@@ -25,8 +25,7 @@ def trades_all_day(symbol: str) -> bool:
     return symbol.upper().endswith("-USD")
 
 
-def known_universe_symbol(symbol: str) -> bool:
-    """True when the local ticker list already contains this symbol."""
+def _load_universe() -> set[str]:
     global _UNIVERSE
     if _UNIVERSE is None:
         try:
@@ -34,7 +33,18 @@ def known_universe_symbol(symbol: str) -> bool:
             _UNIVERSE = {
                 str(row.get("symbol") or "").upper()
                 for row in payload.get("symbols") or []
+                if str(row.get("symbol") or "").strip()
             }
         except (OSError, json.JSONDecodeError):
             _UNIVERSE = set()
-    return symbol in _UNIVERSE
+    return _UNIVERSE
+
+
+def known_universe_symbol(symbol: str) -> bool:
+    """True when the local ticker list already contains this symbol."""
+    return symbol.upper() in _load_universe()
+
+
+def universe_symbols() -> list[str]:
+    """Sorted S&P 500 tickers from the local universe file."""
+    return sorted(_load_universe())
