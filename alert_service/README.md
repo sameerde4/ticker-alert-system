@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake for training, live stream, Watchlist Scan today, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for Live vs Watchlist, the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process serves the UI tabs (Home Recent, Watchlist Today's results, History with Origin) and runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes richer news / news + price reasoning (price-only stays deterministic; Isolation Forest alerts get richer forest-aware wording without Perplexity). The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply. When Scan today or live adds alerts, the open UI can raise a Mac/Chrome desktop notification and a tab badge (`ui/sw-notifications.js`). Slack and email are not used.
+FastAPI process for the S&P 500 Alert System — price movements and anomalies, with same-day headline checks that grade how well the news explains the session. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake for training, live stream, Watchlist Scan today, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for Live vs Watchlist, the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process serves the UI tabs (Home Recent, Watchlist results, History with Origin) and runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes richer news / news + price reasoning (price-only stays deterministic; Isolation Forest alerts get richer forest-aware wording without Perplexity). The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply. When Scan today or live adds alerts, the open UI can raise a Mac/Chrome desktop notification and a tab badge (`ui/sw-notifications.js`). Slack and email are not used.
 
 | Path | Purpose |
 |---|---|
@@ -21,10 +21,11 @@ FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run 
 | `app/forest_wording.py` | Deterministic forest-aware Summary / Price copy for price-only Isolation Forest alerts |
 | `app/watchlist_forest.py` | Same Isolation Forest OR-gate on Scan today / rebuild as live |
 | `app/live.py` | `python -m app.live` entry point; heartbeats so Home can show Live alerts on |
-| `ui/index.html` | Home Recent, Watchlist (focus set + Scan today + Today's results), History with Origin/Company/Type + row click + draggable columns, settings (lake progress), header lake cue, rebuild, Yahoo quote links, symbol search, desktop notifications and tab badge |
+| `ui/index.html` | Home Recent, Watchlist, History (Origin/Company/Type/Price/Sentiment score + row click + draggable columns), settings, lake cue, rebuild, Yahoo links, symbol search, desktop notifications |
 | `ui/sw-notifications.js` | Service worker for OS/Chrome Notification Center popups |
 | `ui/sp500_universe.json` | S&P 500 ticker and company-name list for the Watchlist box |
 | `app/lake_land.py` | Auto first-boot land+train, daily refresh+retrain (skip when current), progress status, Settings overrides |
+| `app/screener.py` | Optional Settings-gated test feature (hidden by default; not part of the class architecture) |
 | `app/engine.py` `scan_focus_moment` | Scan today focus session: today vs last completed session before the open |
 | `tests/` | Rules, parsing, and API smoke tests |
 

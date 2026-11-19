@@ -50,15 +50,17 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "Local stand-in" in audit
     assert "AWS production deploy is out of scope" in audit or "AWS production is not part of the final target" in audit
     assert "as-built and local final target diagrams" in audit
-    assert "price first, then news" in audit.lower() or "Price first, then news" in audit
-    assert "live price → near-term news" in audit.lower() or "price → near-term news" in audit.lower()
+    assert "price first, then headline grade" in audit.lower() or "headline grade" in audit.lower()
+    assert "same-day headline" in audit.lower() or "grade how well the news explains" in audit.lower()
     assert "live_feature_rows" in audit
     assert "Three to four sentences for news" in audit or "three to four short sentences" in audit
     assert "Live plus Watchlist" in audit
     assert "Watchlist **as-built**" in audit or "Watchlist **as-built**:" in audit
     assert "training only" in audit.lower()
     assert "Home Recent" in audit
-    assert "Today's results" in audit
+    assert "Watchlist results" in audit
+    assert "Screener" not in audit
+    assert "/v1/screener/run" not in audit
     assert "Scan today" in audit
     assert "alerts.origin" in audit
 
@@ -71,7 +73,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "focus set" in architecture
     assert "As-built: Live and Watchlist side by side" in architecture
     assert "As-built Watchlist Scan today" in architecture
-    assert "Today's results" in architecture
+    assert "Watchlist results" in architecture
+    assert "Screener" not in architecture
     assert "Recent alerts" in architecture
     assert "S&P 500 / Watchlist" in architecture or "scope: full S&P 500 or Watchlist" in architecture
     assert "Home Recent" in architecture
@@ -127,7 +130,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "last completed session" in architecture
     assert "Focus session today or last completed" in architecture
     assert "Watchlist Scan today focus session" in architecture
-    assert "Origin + Company + Type" in architecture or "Origin, Company" in architecture
+    assert "Price change" in architecture and "Sentiment score" in architecture
+    assert "Origin" in architecture and "Company" in architecture and "Type" in architecture
     assert "REG --> SCAN[Watchlist Scan today]" in architecture or "REG --> SCAN" in architecture
     assert "Watchlist Scan today percent or forest" in architecture
     assert "Local final target (deferred)" in architecture or "deferred" in architecture.lower()
@@ -150,11 +154,13 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "percent rule" in architecture.lower() or "percent-rule" in architecture
     assert "live_feature_rows" in architecture
     assert "not scored live yet" not in architecture
-    assert "price noticed → news looked up → alignment grade" in architecture
-    assert "Live price → near-term news" in architecture
+    assert "price noticed → headlines checked → grade how well the news explains the session" in architecture
+    assert "Live price → same-day headline grade" in architecture
     assert "Upgrade to news or news_price" in architecture or "upgrade to news or news_price" in architecture.lower()
     assert "Fetch near-term headlines for symbol" in architecture or "fetches near-term Yahoo headlines" in architecture
     assert "Evidence story with granular second-side alignment" in architecture
+    assert "decision-support" not in architecture.lower()
+    assert "grade how well the news explains the session" in architecture
     assert "somewhat supports" in architecture
     assert "**As-built**" in architecture
     assert "evidence story" in architecture.lower()
@@ -191,8 +197,12 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "function alertMetrics" in ui
     assert "head.append(kindPill(alert.kind), symbol)" in ui
     assert "companyNameEl(alert.symbol)" in ui
-    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type"]' in ui
+    assert "function alertHeadMetrics" in ui
+    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"]' in ui
     assert "renderEvidenceStory" in ui
+    assert "renderEvidenceOutcome" in ui
+    assert "evidence-outcome-chip" in ui
+    assert "alignment-emphasis" in ui
     assert "What happened" in ui
     assert '"Summary"' in ui
     assert 'appendPlain("Forest"' in ui
@@ -207,7 +217,11 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Two price gates" in ui
     assert "Isolation Forest (trained on the lake)" in ui or "Isolation Forest" in ui
     assert 'id="homeLede"' in ui
-    assert "Decision-support alerts for the S&amp;P 500" in ui
+    assert "S&amp;P 500 alerts for price movements and anomalies" in ui
+    assert "grade how well the news explains the session" in ui
+    assert "Decision-support" not in ui
+    modal_h3 = ui.split(".modal-header h3 {", 1)[1].split("}", 1)[0]
+    assert "font-family: ui-sans-serif, system-ui, sans-serif" in modal_h3
     assert "Price: ${move}% move threshold" in ui
     assert "evidence-story" in ui
     assert "alert-card" in ui
@@ -248,7 +262,10 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Choose S&amp;P 500 constituents, then Scan today" in ui
     assert "last completed session" in ui
     assert "Scan today" in ui
-    assert "Today's results" in ui
+    assert "Watchlist results" in ui
+    assert 'id="enableScreener"' in ui
+    assert "Show Screener tab" in ui
+    assert "function applyScreenerVisibility" in ui
     assert "buildHistoryHeaders" in ui
     assert "originLabel" in ui
     assert 'id="homeScope"' not in ui
@@ -284,9 +301,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "python -m app.live" in sources
     assert "stream_ingest" in sources
     assert "S&P 500" in sources
-    assert "price first, then news" in sources.lower()
+    assert "headline grade" in sources.lower() or "grade how well the news explains" in sources.lower()
     assert "live_feature_rows" in sources
     assert "Historical headlines are not pulled into the lake" in sources
+    assert "decision-support" not in sources.lower()
     assert "Mac/Chrome desktop notification" in sources
     assert "Slack and email are not used" in sources
     assert "Slack or email" not in sources
@@ -296,8 +314,13 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Home Recent" in sources
     assert "training only" in sources.lower() or "Isolation Forest training" in sources
     assert "Origin" in sources
+    assert "Screener" not in sources
     readme = _text(ROOT / "README.md")
     assert "[docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md)" in readme
+    assert "price movements and anomalies" in readme
+    assert "grade how well the news explains the session" in readme
+    assert "Decision-support" not in readme
+    assert "Screener" not in readme
     assert "Isolation Forest" in readme
     assert "Perplexity" in readme
     assert "docker compose up -d" in readme
@@ -317,7 +340,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "As-built vs local final target" in readme
     assert "Home" in readme and "Watchlist" in readme and "History" in readme
     assert "Origin" in readme
-    assert "Today's results" in readme
+    assert "Watchlist results" in readme
     assert "Scan today" in readme
     assert "Refresh lake + retrain" in readme
     assert "--days 14 --merge" in readme
