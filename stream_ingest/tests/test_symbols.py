@@ -1,9 +1,22 @@
-from app.symbols import load_symbols, normalize_symbol, shard_symbols
+from app.symbols import (
+    from_alpaca_symbol,
+    load_symbols,
+    normalize_symbol,
+    shard_symbols,
+    to_alpaca_symbol,
+)
 
 
 def test_normalize_class_shares():
     assert normalize_symbol("brk.b") == "BRK-B"
     assert normalize_symbol(" AAPL ") == "AAPL"
+
+
+def test_alpaca_class_share_dot_form():
+    assert to_alpaca_symbol("BRK-B") == "BRK.B"
+    assert to_alpaca_symbol("BF-B") == "BF.B"
+    assert from_alpaca_symbol("BRK.B") == "BRK-B"
+    assert to_alpaca_symbol("AAPL") == "AAPL"
 
 
 def test_load_symbols_from_csv_and_file(tmp_path):

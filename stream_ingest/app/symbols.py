@@ -6,8 +6,18 @@ from pathlib import Path
 
 
 def normalize_symbol(raw: str) -> str:
-    """Alpaca uses hyphen class shares (BRK-B), matching the Yahoo form."""
+    """Canonical form matches Yahoo / this repo: class shares use a hyphen (BRK-B)."""
     return raw.strip().upper().replace(".", "-")
+
+
+def to_alpaca_symbol(symbol: str) -> str:
+    """Alpaca REST/WebSocket expect a dot for class shares (BRK.B), not a hyphen."""
+    return normalize_symbol(symbol).replace("-", ".")
+
+
+def from_alpaca_symbol(symbol: str) -> str:
+    """Map an Alpaca ticker back to the canonical hyphen form."""
+    return normalize_symbol(symbol)
 
 
 def load_symbols(*, symbols_csv: str = "", symbols_file: str = "") -> list[str]:

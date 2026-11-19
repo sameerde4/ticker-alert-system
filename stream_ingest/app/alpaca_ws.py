@@ -11,6 +11,7 @@ import websockets
 
 from .messages import bar_from_alpaca
 from .publisher import BarPublisher
+from .symbols import to_alpaca_symbol
 
 log = logging.getLogger(__name__)
 
@@ -69,9 +70,10 @@ class AlpacaBarStream:
             )
             await self._await_msg(ws, wanted="authenticated")
             log.info("Alpaca WebSocket authenticated (%s)", self.feed)
-            await ws.send(json.dumps({"action": "subscribe", "bars": self.symbols}))
+            api_symbols = [to_alpaca_symbol(symbol) for symbol in self.symbols]
+            await ws.send(json.dumps({"action": "subscribe", "bars": api_symbols}))
             sub = await self._await_type(ws, wanted="subscription")
-            bars = (sub or {}).get("bars") or self.symbols
+            bars = (sub or {}).get("bars") or api_symbols
             log.info("Subscribed to %s bar symbol(s) on %s", len(bars), self.feed)
             async for raw in ws:
                 if self._stop.is_set():

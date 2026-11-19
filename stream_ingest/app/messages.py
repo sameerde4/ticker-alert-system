@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from .symbols import from_alpaca_symbol, normalize_symbol
+
 
 def bar_from_alpaca(raw: dict[str, Any], *, feed: str, source: str) -> dict[str, Any] | None:
     """Turn an Alpaca minute-bar message into a flat Kafka JSON object."""
     if raw.get("T") not in ("b", "bar"):
         return None
-    symbol = str(raw.get("S") or "").upper()
+    symbol = from_alpaca_symbol(str(raw.get("S") or ""))
     if not symbol:
         return None
     return {
@@ -39,7 +41,7 @@ def bar_from_rest(
         return None
     return {
         "schema": "prices.raw.bars.v1",
-        "symbol": symbol.upper(),
+        "symbol": normalize_symbol(symbol),
         "ts": raw.get("t"),
         "open": raw.get("o"),
         "high": raw.get("h"),

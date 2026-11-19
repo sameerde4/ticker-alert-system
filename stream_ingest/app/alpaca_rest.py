@@ -11,6 +11,7 @@ import httpx
 
 from .messages import bar_from_rest
 from .publisher import BarPublisher
+from .symbols import from_alpaca_symbol, to_alpaca_symbol
 
 log = logging.getLogger(__name__)
 
@@ -121,8 +122,9 @@ async def fetch_stock_bars(
     start: datetime,
     end: datetime,
 ) -> dict[str, list[dict[str, Any]]]:
+    api_symbols = [to_alpaca_symbol(symbol) for symbol in symbols]
     params = {
-        "symbols": ",".join(symbols),
+        "symbols": ",".join(api_symbols),
         "timeframe": "1Min",
         "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "end": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -145,7 +147,11 @@ async def fetch_stock_bars(
     bars = body.get("bars") or {}
     if not isinstance(bars, dict):
         return {}
-    return {str(symbol).upper(): list(rows or []) for symbol, rows in bars.items()}
+    # Keys come back as Alpaca form (BRK.B); map to canonical BRK-B for the rest of the app.
+    return {
+        from_alpaca_symbol(str(symbol)): list(rows or [])
+        for symbol, rows in bars.items()
+    }
 
 
 async def probe_latest_bars(
