@@ -4,13 +4,14 @@
 #   ./dev.sh start          Docker Kafka + producer + live consumer + API/UI
 #   ./dev.sh restart        Restart API/UI only (Kafka, producer, live stay up)
 #   ./dev.sh restart-live   Restart the Kafka live consumer only
+#   ./dev.sh restart-producer Restart the Alpaca → Kafka producer only
 #   ./dev.sh stop           Stop producer, live, API (leave Kafka running)
 #   ./dev.sh down           stop + docker compose stop
 #   ./dev.sh status         What is running
 #   ./dev.sh logs [name]    Tail logs (app|live|producer|all)
 #
 # Optional env:
-#   DEV_SYMBOLS=AAPL,MSFT,NVDA   Producer WebSocket symbols (default below)
+#   DEV_SYMBOLS=AAPL,MSFT,NVDA   Limit producer to these tickers (default: full S&P 500 file)
 #   DEV_SKIP_PRODUCER=1         Start without Alpaca producer
 #   DEV_SKIP_LIVE=1             Start without live consumer
 #   DEV_PORT=8010               API port
@@ -23,7 +24,8 @@ COMPOSE_FILE="${ROOT}/docker-compose.yml"
 APP_DIR="${ROOT}/alert_service"
 INGEST_DIR="${ROOT}/stream_ingest"
 PORT="${DEV_PORT:-8010}"
-SYMBOLS="${DEV_SYMBOLS:-AAPL,MSFT,NVDA}"
+# Empty = full S&P 500 list from stream_ingest (WS ≤30 on Basic + REST for the rest).
+SYMBOLS="${DEV_SYMBOLS:-}"
 HOST="127.0.0.1"
 UI_URL="http://${HOST}:${PORT}/ui"
 
@@ -111,16 +113,24 @@ check_postgres() {
   fi
 }
 
+kafka_broker_ready() {
+  # TCP open is not enough — aiokafka needs the broker API to answer.
+  docker exec ticker-alert-kafka \
+    /opt/kafka/bin/kafka-broker-api-versions.sh \
+    --bootstrap-server 127.0.0.1:9092 >/dev/null 2>&1
+}
+
 wait_kafka() {
-  info "Waiting for Kafka on 127.0.0.1:9092"
+  info "Waiting for Kafka broker API on 127.0.0.1:9092"
   local i
-  for i in $(seq 1 60); do
-    if (echo > /dev/tcp/127.0.0.1/9092) >/dev/null 2>&1; then
+  for i in $(seq 1 90); do
+    if kafka_broker_ready; then
+      info "Kafka broker is ready"
       return 0
     fi
     sleep 1
   done
-  die "Kafka did not become ready on 127.0.0.1:9092"
+  die "Kafka broker API did not become ready on 127.0.0.1:9092"
 }
 
 start_kafka() {
@@ -128,6 +138,25 @@ start_kafka() {
   info "Starting Docker Kafka"
   docker compose -f "${COMPOSE_FILE}" up -d
   wait_kafka
+}
+
+_launch_producer() {
+  rm -f "$(pid_file producer)"
+  (
+    cd "${INGEST_DIR}"
+    # Ensure we publish to Kafka even if DRY_RUN=1 is left in .env
+    export DRY_RUN=0
+    if [[ -n "${SYMBOLS}" ]]; then
+      # Explicit short list: WebSocket only for those names.
+      nohup .venv/bin/python -m app.main --ws-only --symbols "${SYMBOLS}" \
+        >"$(log_file producer)" 2>&1 &
+    else
+      # Full S&P 500 file: WebSocket first 30 (Basic cap) + REST for the rest.
+      nohup .venv/bin/python -m app.main \
+        >"$(log_file producer)" 2>&1 &
+    fi
+    echo $! >"$(pid_file producer)"
+  )
 }
 
 start_producer() {
@@ -141,15 +170,24 @@ start_producer() {
     info "Producer already running (pid $(read_pid producer))"
     return 0
   fi
-  info "Starting Alpaca → Kafka producer (symbols: ${SYMBOLS})"
-  (
-    cd "${INGEST_DIR}"
-    # Ensure we publish to Kafka even if DRY_RUN=1 is left in .env
-    export DRY_RUN=0
-    nohup .venv/bin/python -m app.main --ws-only --symbols "${SYMBOLS}" \
-      >"$(log_file producer)" 2>&1 &
-    echo $! >"$(pid_file producer)"
-  )
+  local label attempt
+  if [[ -n "${SYMBOLS}" ]]; then
+    label="symbols: ${SYMBOLS} (ws-only)"
+  else
+    label="full S&P 500 (WS + REST)"
+  fi
+  for attempt in 1 2 3 4 5; do
+    info "Starting Alpaca → Kafka producer (${label}) attempt ${attempt}/5"
+    _launch_producer
+    sleep 3
+    if is_running producer; then
+      info "Producer running (pid $(read_pid producer))"
+      return 0
+    fi
+    info "Producer exited early — see $(log_file producer); retrying after Kafka settle"
+    sleep 2
+  done
+  die "Producer failed to stay up after 5 attempts — see $(log_file producer)"
 }
 
 start_live() {
@@ -168,6 +206,10 @@ start_live() {
     nohup .venv/bin/python -m app.live >"$(log_file live)" 2>&1 &
     echo $! >"$(pid_file live)"
   )
+  sleep 1
+  if ! is_running live; then
+    die "Live consumer failed to stay up — see $(log_file live)"
+  fi
 }
 
 start_app() {
@@ -221,6 +263,14 @@ cmd_restart_live() {
   stop_named live
   start_live
   info "Live consumer restarted"
+}
+
+cmd_restart_producer() {
+  check_docker
+  wait_kafka
+  stop_named producer
+  start_producer
+  info "Producer restarted"
 }
 
 cmd_stop() {
@@ -297,6 +347,7 @@ main() {
     start|up)       cmd_start ;;
     restart|restart-app) cmd_restart ;;
     restart-live)   cmd_restart_live ;;
+    restart-producer) cmd_restart_producer ;;
     stop)           cmd_stop ;;
     down)           cmd_down ;;
     status)         cmd_status ;;
