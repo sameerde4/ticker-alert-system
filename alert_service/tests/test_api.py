@@ -52,6 +52,8 @@ def test_health_and_ui_without_a_database():
     assert "Price change" in page.text
     assert "head.append(kindPill(alert.kind), symbol)" in page.text
     assert "if (company) head.append(company)" in page.text
+    assert "function alertHeadMetrics" in page.text
+    assert "for (const bit of alertHeadMetrics(alert)) head.append(bit)" in page.text
     assert "function badgeClass" not in page.text
     worker = client.get("/ui/sw-notifications.js")
     assert worker.status_code == 200
@@ -69,10 +71,22 @@ def test_health_and_ui_without_a_database():
     assert "running" in lake.json()
     assert "historyTab" in page.text
     assert "watchlistTab" in page.text
+    assert "screenerTab" in page.text
+    assert 'id="screenerTabBtn"' in page.text
+    assert 'id="enableScreener"' in page.text
+    assert "Show Screener tab" in page.text
+    assert "tickerAlertScreenerEnabled" in page.text
+    assert "function applyScreenerVisibility" in page.text
     assert "Alert History" in page.text
-    assert "Today's results" in page.text
+    assert "Watchlist results" in page.text
     assert "Scan today" in page.text
     assert "renderWatchlistCheckAlerts" in page.text
+    assert "renderScreenerAlerts" in page.text
+    assert "/v1/screener/run" in page.text
+    assert 'id="screenerChange"' in page.text
+    # Screener tab button is hidden by default (Settings opt-in for demos).
+    btn_chunk = page.text.split('id="screenerTabBtn"', 1)[1].split("</button>", 1)[0]
+    assert "hidden" in btn_chunk
     assert "function selectTab" in page.text
     assert "DEFAULT_HISTORY_COLS" in page.text
     assert 'id="historyHead"' in page.text
@@ -90,7 +104,9 @@ def test_health_and_ui_without_a_database():
     assert "requestSubmit" not in page.text
     for column in ("symbol", "company", "origin", "type", "when"):
         assert f'"{column}"' in page.text
-    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type"]' in page.text
+    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"]' in page.text
+    assert 'label: "Price change"' in page.text
+    assert 'label: "Sentiment score"' in page.text
     assert 'label: "Company"' in page.text
     assert 'label: "Sector"' not in page.text
     assert 'label: "Type"' in page.text
@@ -100,7 +116,24 @@ def test_health_and_ui_without_a_database():
     assert "Click a row for the full write-up" in page.text
     assert "Click a column heading to sort" in page.text
     assert "Combined news sentiment " not in page.text
-    assert 'metric.textContent = formatScore(alert.sentiment_score) + "/100"' in page.text
+    assert 'label.textContent = "Sentiment"' in page.text
+    assert "type-stat-label" in page.text
+    assert "FinBERT sentiment score (0–100)" in page.text
+    assert "function historyTypePriceStat" in page.text
+    assert "function historyTypeSentimentStat" in page.text
+    assert "function alertDisplayPriceChange" in page.text
+    assert "type-stat" in page.text
+    assert "detailParts.push(...alertHeadMetrics(alert))" not in page.text
+    assert "modal-header h3 .company-name" in page.text
+    assert "font-size: 18px" in page.text
+    assert "tickerAlertWatchlistResults" in page.text
+    assert "tickerAlertScreenerResults" in page.text
+    assert "function restoreToolResults" in page.text
+    assert 'id="watchlistRunStamp"' in page.text
+    assert 'id="screenerRunStamp"' in page.text
+    assert "historyTypePriceStat(alert), historyTypeSentimentStat(alert)" in page.text
+    assert 'if (key === "price")' in page.text
+    assert 'if (key === "sentiment")' in page.text
     assert "kind-news" in page.text and "kind-price" in page.text and "kind-fusion" in page.text
     assert "companyNameEl(alert.symbol)" in page.text
     assert "function companyNameForSymbol" in page.text
@@ -131,7 +164,11 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     rules = page.text.split('id="rules"', 1)[1].split("</p>", 1)[0]
     assert rules.index('id="rulesBefore"') < rules.index('id="finbertExplain"') < rules.index('id="priceExplain"') < rules.index('id="rulesAfter"')
     assert "homeLede" in page.text
-    assert "Decision-support alerts for the S&amp;P 500" in page.text
+    assert "S&amp;P 500 alerts for price movements and anomalies" in page.text
+    assert "grade how well the news explains the session" in page.text
+    assert ".modal-header h3" in page.text
+    modal_h3 = page.text.split(".modal-header h3 {", 1)[1].split("}", 1)[0]
+    assert "font-family: ui-sans-serif, system-ui, sans-serif" in modal_h3
     assert "matches the " in page.text or 'id="priceExplain">price move' in page.text
     assert "Price move threshold" in page.text
     assert "Isolation Forest" in page.text
@@ -176,7 +213,8 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "scope-toggle" in page.text
     assert 'id="homeScope"' not in page.text
     home_panel = page.text.split('id="homeTab"', 1)[1].split('id="watchlistTab"', 1)[0]
-    watch_panel = page.text.split('id="watchlistTab"', 1)[1].split('id="historyTab"', 1)[0]
+    watch_panel = page.text.split('id="watchlistTab"', 1)[1].split('id="screenerTab"', 1)[0]
+    screener_panel = page.text.split('id="screenerTab"', 1)[1].split('id="historyTab"', 1)[0]
     assert 'id="add-form"' not in home_panel
     assert 'id="alerts"' in home_panel
     assert "scope-toggle" in home_panel
@@ -184,6 +222,9 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert 'id="add-form"' in watch_panel
     assert 'id="run"' in watch_panel
     assert 'id="watchlistAlerts"' in watch_panel
+    assert 'id="screener-form"' in screener_panel
+    assert 'id="screenerAlerts"' in screener_panel
+    assert "Screener results" in screener_panel
     assert "Sentiment score " in page.text
     assert "(Positive " in page.text
     actions = page.text.split('class="settings-actions"', 1)[1].split("</div>", 1)[0]
@@ -193,6 +234,13 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "not a hosted analysis API" in page.text
     assert "Why the default threshold is 25" in page.text
     assert 'name="sentimentScorer"' not in page.text
+
+
+def test_screener_rejects_zero_percent_without_a_database():
+    client = TestClient(app)
+    response = client.post("/v1/screener/run", json={"change_percent": 0})
+    assert response.status_code == 400
+    assert "non-zero" in response.json()["detail"].lower()
 
 
 def test_removed_scorer_switch_is_not_an_endpoint():

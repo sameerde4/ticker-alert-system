@@ -324,7 +324,33 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .modal-header h3 .company-name { max-width: min(36ch, 55vw); }
+    .modal-header h3 .company-name {
+      max-width: min(36ch, 55vw);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .alert-head-metric {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .alert-head-metric-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .run-stamp {
+      margin: 0;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .run-stamp:empty { display: none; }
     .when { margin-left: auto; color: var(--muted); font-size: 13px; }
     .alert-metrics {
       display: flex;
@@ -335,12 +361,14 @@
     .alert-metric {
       display: flex;
       flex-direction: column;
+      align-items: center;
       gap: 4px;
       min-width: 8.5rem;
       padding: 10px 14px;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: rgba(36, 33, 25, 0.9);
+      text-align: center;
     }
     .alert-metric-label {
       font-family: ui-sans-serif, system-ui, sans-serif;
@@ -357,12 +385,61 @@
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
       letter-spacing: -0.02em;
+      text-align: center;
     }
     .alert-metric-value.up { color: var(--up); }
     .alert-metric-value.down { color: var(--down); }
     .alert-metric-value.mixed { color: var(--gold); }
     .rule-note { color: var(--muted); font-size: 13px; margin: 4px 0 10px; line-height: 1.4; }
     .summary { margin: 8px 0; line-height: 1.45; }
+    .evidence-outcome {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+      margin: 0 0 12px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    .evidence-path {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .evidence-outcome-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      padding: 5px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(36, 33, 25, 0.92);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.25;
+      letter-spacing: 0.01em;
+      color: var(--text);
+    }
+    .evidence-outcome-chip.ok {
+      border-color: rgba(94, 200, 140, 0.45);
+      background: rgba(94, 200, 140, 0.12);
+      color: var(--up);
+    }
+    .evidence-outcome-chip.partial {
+      border-color: rgba(212, 175, 55, 0.5);
+      background: rgba(212, 175, 55, 0.12);
+      color: var(--gold);
+    }
+    .evidence-outcome-chip.neutral {
+      border-color: rgba(111, 103, 88, 0.55);
+      background: rgba(111, 103, 88, 0.16);
+      color: #c4bba8;
+    }
+    .evidence-outcome-chip.no {
+      border-color: rgba(220, 100, 100, 0.5);
+      background: rgba(220, 100, 100, 0.12);
+      color: var(--down);
+    }
     .evidence-story { margin: 8px 0 14px; padding: 0; list-style: none; }
     .evidence-story li {
       display: grid;
@@ -386,6 +463,13 @@
     .evidence-story .mark.neutral { background: #6f6758; }
     .evidence-story .mark.no { background: var(--down); }
     .evidence-story .label { color: var(--gold); font-weight: 650; font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; }
+    .evidence-story li.alignment-emphasis .label {
+      color: var(--down);
+      font-weight: 750;
+    }
+    .evidence-story li.alignment-emphasis .mark {
+      box-shadow: 0 0 0 3px rgba(220, 100, 100, 0.22);
+    }
     .evidence-story .detail { color: var(--text); margin-top: 2px; }
     .evidence-headline { color: var(--muted); font-size: 13px; margin: 0 0 8px; font-family: ui-sans-serif, system-ui, sans-serif; }
     .combined { margin: 0 0 8px; font-weight: 700; }
@@ -540,18 +624,18 @@
       background: transparent;
       color: var(--muted);
       border: 1px solid transparent;
-      border-radius: 10px;
-      min-width: 88px;
-      min-height: 54px;
-      padding: 8px 12px;
+      border-radius: 8px;
+      min-width: 76px;
+      min-height: 46px;
+      padding: 5px 8px;
       display: inline-flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       font-size: 12px;
       font-weight: 650;
     }
-    .tab-btn svg { width: 20px; height: 20px; }
+    .tab-btn svg { width: 22px; height: 22px; }
     .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
       background: var(--elevated);
@@ -592,11 +676,37 @@
     table.history th[draggable="true"] { cursor: grab; }
     table.history th.drag-over { box-shadow: inset 0 -2px 0 var(--gold); }
     table.history th.is-dragging { opacity: 0.55; }
-    .alert-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
     .badge.origin-live { background: rgba(80, 160, 220, 0.18); color: #9fd0f0; }
     .badge.origin-watchlist { background: rgba(212, 175, 55, 0.16); color: var(--gold); }
     .badge.origin-both { background: rgba(180, 140, 220, 0.18); color: #d2b8f0; }
     .alert-bit { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+    .type-stat {
+      display: inline-flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(36, 33, 25, 0.88);
+      box-sizing: border-box;
+      white-space: nowrap;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+    .type-stat-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .type-stat-empty { color: var(--muted); font-weight: 500; }
+    table.history td.num {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 650;
+    }
     table.history thead th {
       background: var(--elevated);
       border-bottom: 1px solid var(--line);
@@ -682,6 +792,7 @@
       margin: 0;
       flex: 1;
       min-width: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
       font-size: 20px;
       line-height: 1.3;
       display: flex;
@@ -723,6 +834,12 @@
         </svg>
         Watchlist
       </button>
+      <button class="tab-btn" type="button" data-tab="screenerTab" role="tab" aria-selected="false" title="Screener" aria-label="Screener" id="screenerTabBtn" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 4h16v4l-6 7v5l-4-2v-3L4 8V4z"></path>
+        </svg>
+        Screener
+      </button>
       <button class="tab-btn" type="button" data-tab="historyTab" role="tab" aria-selected="false" title="Alert History" aria-label="Alert History">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
@@ -759,7 +876,7 @@
       <div
         class="live-status"
         id="liveStatus"
-        title="Shows when python -m app.live is connected: percent threshold or Isolation Forest, then near-term news upgrade"
+        title="Shows when python -m app.live is connected: percent threshold or Isolation Forest, then a same-day headline check that grades how well the news explains the session"
         aria-live="polite"
       >
         <span class="live-dot" aria-hidden="true"></span>
@@ -770,7 +887,8 @@
   <main>
     <section id="homeTab" class="tab-panel">
     <p class="lede" id="homeLede">
-      Decision-support alerts for the S&amp;P 500. <strong>Live</strong> watches the Kafka price stream: a day opens when the move clears the Settings threshold <em>or</em> Isolation Forest marks the session anomalous, then near-term headlines are checked.
+      S&amp;P 500 alerts for price movements and anomalies, with same-day headline checks that grade how well the news explains the session.
+      <strong>Live</strong> watches the Kafka price stream: a day opens when the move clears the Settings threshold <em>or</em> Isolation Forest marks the session anomalous, then near-term headlines are checked and graded.
       <strong>Watchlist → Scan today</strong> runs those same gates on demand for your focus set.
     </p>
     <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesMiddle"></span><button type="button" class="linkish" id="priceExplain">price move</button><span id="rulesAfter"></span></p>
@@ -829,17 +947,56 @@
     <section class="card">
       <div class="section-head">
         <div class="heading-with-tip">
-          <h2>Today's results</h2>
+          <h2>Watchlist results</h2>
           <button
             type="button"
             class="tip-btn"
-            title="Shows what the last Scan today wrote for your watchlist (percent threshold, Isolation Forest, and FinBERT). Home Recent stays on the live Kafka feed."
-            aria-label="About Today's results: Shows what the last Scan today wrote for your watchlist (percent threshold, Isolation Forest, and FinBERT). Home Recent stays on the live Kafka feed."
+            title="Shows what the last Scan today wrote for your watchlist (percent threshold, Isolation Forest, and FinBERT). Home Recent stays on the live Kafka feed. Last results are kept in this browser across refresh."
+            aria-label="About Watchlist results: Shows what the last Scan today wrote for your watchlist. Last results are kept in this browser across refresh."
           >?</button>
         </div>
+        <p class="run-stamp" id="watchlistRunStamp"></p>
       </div>
       <div id="watchlistAlerts"></div>
         <p class="empty" id="watchlistEmpty">No results yet. Add tickers and click Scan today (same percent / forest / FinBERT gates as live).</p>
+    </section>
+    </section>
+    <section id="screenerTab" class="tab-panel" hidden>
+    <section class="card">
+      <div class="section-head">
+        <div class="heading-with-tip">
+          <h2>Screener</h2>
+          <button
+            type="button"
+            class="tip-btn"
+            title="Test feature: screens the full S&amp;P 500 from the local lake for the focus session, keeps the top 10 movers that clear your signed percent filter, then pulls headlines and FinBERT for those names only. Results stay on this tab and are not saved to Alert History."
+            aria-label="About Screener: Test feature that screens the full S&amp;P 500 from the local lake, keeps the top 10 movers for your signed percent filter, then pulls headlines for those names only. Results are not saved to Alert History."
+          >?</button>
+        </div>
+      </div>
+      <p class="hint">Enter a signed percent (for example <strong>3</strong> for up at least 3%, or <strong>-3</strong> for down at least 3%). Scan ranks the top 10 lake movers that clear that bar, then grades same-day headlines for those names.</p>
+      <form id="screener-form">
+        <label for="screenerChange">Min price change %</label>
+        <input id="screenerChange" name="change_percent" type="number" step="0.1" value="3" placeholder="3 or -3" style="width: 12ch;" />
+        <button type="submit" id="screenerRun">Scan today</button>
+        <p class="status" id="screenerStatus"></p>
+      </form>
+    </section>
+    <section class="card">
+      <div class="section-head">
+        <div class="heading-with-tip">
+          <h2>Screener results</h2>
+          <button
+            type="button"
+            class="tip-btn"
+            title="Cards from the last screener run. Not written to History or Home Recent. Kept in this browser across refresh."
+            aria-label="About Screener results: Cards from the last screener run. Not written to History. Kept in this browser across refresh."
+          >?</button>
+        </div>
+        <p class="run-stamp" id="screenerRunStamp"></p>
+      </div>
+      <div id="screenerAlerts"></div>
+      <p class="empty" id="screenerEmpty">No screener results yet. Set a signed percent and click Scan today.</p>
     </section>
     </section>
     <section id="historyTab" class="tab-panel" hidden>
@@ -940,6 +1097,17 @@
           </div>
         </form>
       </section>
+      <section class="card">
+        <h2>UI options</h2>
+        <p class="hint">Local preferences for this browser only. Leave Screener off for demos — it is a private test feature and is not part of the product architecture.</p>
+        <form id="ui-options-form" class="settings-form" onsubmit="return false;">
+          <label class="choice">
+            <input id="enableScreener" type="checkbox" />
+            <span>Show Screener tab</span>
+          </label>
+          <p class="hint">When enabled, a Screener tab appears in the header. It ranks lake session movers and pulls headlines for the top names; results stay in this browser and are not written to Alert History.</p>
+        </form>
+      </section>
     </section>
   </main>
   <div id="detailModal" class="modal" hidden>
@@ -967,7 +1135,7 @@
         <h3 class="section">A candidate reason</h3>
         <p class="summary">The card calls the headline a candidate reason when that part of the day clears the same price move threshold. A story published at noon does not explain a gap from before the open. A premarket story does not explain the move from the open to the close.</p>
         <h3 class="section">News and price on their own</h3>
-        <p class="summary">When the headline is strong and that part of the day is under the threshold (and forest did not fire), the card is news only. When price clears a gate and no headline lined up with that slice, the card is price only.</p>
+        <p class="summary">When the headline is strong and that part of the day is under the threshold (and forest did not fire), the card is news only. When price clears a gate and the same-day headline check finds that the news does not explain that slice, the card is price only — with that grade on the card.</p>
       </div>
     </div>
   </div>
@@ -1000,6 +1168,10 @@
     const emptyEl = document.querySelector("#empty");
     const watchlistAlertsEl = document.querySelector("#watchlistAlerts");
     const watchlistEmptyEl = document.querySelector("#watchlistEmpty");
+    const screenerAlertsEl = document.querySelector("#screenerAlerts");
+    const screenerEmptyEl = document.querySelector("#screenerEmpty");
+    const screenerStatusEl = document.querySelector("#screenerStatus");
+    const screenerForm = document.querySelector("#screener-form");
     const historyHead = document.querySelector("#historyHead");
     const historyBody = document.querySelector("#historyBody");
     const historyEmpty = document.querySelector("#historyEmpty");
@@ -1012,21 +1184,34 @@
     const HOME_SCOPE_KEY = "tickerAlertHomeScope";
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
     const HISTORY_COLS_KEY = "tickerAlertHistoryColumns";
-    const DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type"];
+    const WATCHLIST_RESULTS_KEY = "tickerAlertWatchlistResults";
+    const SCREENER_RESULTS_KEY = "tickerAlertScreenerResults";
+    const SCREENER_ENABLED_KEY = "tickerAlertScreenerEnabled";
+    const DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"];
     const HISTORY_COL_META = {
       symbol: { label: "Symbol" },
       company: { label: "Company" },
       origin: { label: "Origin" },
       when: { label: "When", numeric: true },
-      type: { label: "Type", className: "details" },
+      type: { label: "Type" },
+      price: { label: "Price change", numeric: true, className: "num" },
+      sentiment: { label: "Sentiment score", numeric: true, className: "num" },
     };
     const openHomeAlertKeys = new Set();
     const openHomeSectionKeys = new Set();
     let lastHomeAlertFingerprint = "";
     const openWatchAlertKeys = new Set();
+    const openScreenerAlertKeys = new Set();
+    const openScreenerSectionKeys = new Set();
     const openWatchSectionKeys = new Set();
     let lastWatchAlertFingerprint = "";
     let lastWatchlistCheckAlerts = [];
+    let lastWatchlistRanAt = "";
+    let lastScreenerAlerts = [];
+    let lastScreenerRanAt = "";
+    let lastScreenerFingerprint = "";
+    const watchlistRunStampEl = document.querySelector("#watchlistRunStamp");
+    const screenerRunStampEl = document.querySelector("#screenerRunStamp");
     let latestAlerts = [];
     let watchlistSymbols = [];
     let homeScope = loadHomeScope();
@@ -1080,12 +1265,14 @@
       const value = String(origin || "watchlist").toLowerCase();
       if (value === "live") return "Live";
       if (value === "both") return "Both";
+      if (value === "screener") return "Screener";
       return "Watchlist";
     }
 
     function originTone(origin) {
       const value = String(origin || "watchlist").toLowerCase();
       if (value === "live" || value === "both") return value;
+      if (value === "screener") return "watchlist";
       return "watchlist";
     }
     const BASE_TITLE = "S&P 500 Alert System";
@@ -1367,7 +1554,32 @@
       return alertListFingerprint(alerts);
     }
 
+    function isScreenerEnabled() {
+      return localStorage.getItem(SCREENER_ENABLED_KEY) === "1";
+    }
+
+    function setScreenerEnabled(enabled) {
+      localStorage.setItem(SCREENER_ENABLED_KEY, enabled ? "1" : "0");
+      applyScreenerVisibility();
+    }
+
+    function applyScreenerVisibility() {
+      const enabled = isScreenerEnabled();
+      const btn = document.querySelector("#screenerTabBtn");
+      const panel = document.querySelector("#screenerTab");
+      const checkbox = document.querySelector("#enableScreener");
+      if (checkbox) checkbox.checked = enabled;
+      if (btn) btn.hidden = !enabled;
+      if (!enabled) {
+        if (panel && !panel.hidden) selectTab("homeTab");
+        else if (btn && btn.classList.contains("active")) selectTab("homeTab");
+      }
+    }
+
     function selectTab(tabId) {
+      if (tabId === "screenerTab" && !isScreenerEnabled()) {
+        tabId = "homeTab";
+      }
       document.querySelectorAll(".tab-btn").forEach((other) => {
         const on = other.dataset.tab === tabId;
         other.classList.toggle("active", on);
@@ -1393,6 +1605,12 @@
     function setHomeStatus(text, isError) {
       homeStatusEl.textContent = text || "";
       homeStatusEl.className = isError ? "status error" : "status";
+    }
+
+    function setScreenerStatus(text, isError) {
+      if (!screenerStatusEl) return;
+      screenerStatusEl.textContent = text || "";
+      screenerStatusEl.className = isError ? "status error" : "status";
     }
 
     async function readJson(res) {
@@ -1551,8 +1769,8 @@
       }
       if (alert.sentiment_score != null) {
         row.append(metricBlock(
-          "Sentiment",
-          formatScore(alert.sentiment_score) + "/100",
+          "Sentiment score",
+          formatScore(alert.sentiment_score),
           scoreClass(alert.sentiment_score),
         ));
       }
@@ -1594,20 +1812,61 @@
       parent.append(block);
     }
 
-    function renderEvidenceStory(target, evidence) {
-      if (!evidence || !Array.isArray(evidence.steps) || !evidence.steps.length) return false;
-      if (evidence.headline) {
+    function evidenceAlignmentTone(evidence, supportStep) {
+      if (supportStep && supportStep.tone) return supportStep.tone;
+      const level = String(evidence && evidence.alignment || "");
+      if (level === "supports") return "ok";
+      if (level === "leans" || level === "leans_against") return "partial";
+      if (level === "contradicts") return "no";
+      return "neutral";
+    }
+
+    function renderEvidenceOutcome(target, evidence) {
+      const steps = evidence.steps || [];
+      const supportStep = steps.find((step) => step && step.id === "support") || steps[steps.length - 1];
+      const pathSteps = steps.filter((step) => step && step.id !== "support");
+      const pathLabels = pathSteps
+        .map((step) => step.label || "")
+        .filter(Boolean);
+      const outcomeLabel = (supportStep && supportStep.label)
+        || (evidence.headline ? String(evidence.headline).split("→").pop().trim() : "");
+      if (!outcomeLabel && !pathLabels.length) {
+        if (!evidence.headline) return;
         const line = document.createElement("p");
         line.className = "evidence-headline";
         line.textContent = evidence.headline;
         target.append(line);
+        return;
       }
+      const row = document.createElement("div");
+      row.className = "evidence-outcome";
+      if (pathLabels.length) {
+        const path = document.createElement("span");
+        path.className = "evidence-path";
+        path.textContent = pathLabels.join(" → ");
+        row.append(path);
+      }
+      if (outcomeLabel) {
+        const chip = document.createElement("span");
+        chip.className = "evidence-outcome-chip " + evidenceAlignmentTone(evidence, supportStep);
+        chip.textContent = outcomeLabel;
+        row.append(chip);
+      }
+      target.append(row);
+    }
+
+    function renderEvidenceStory(target, evidence) {
+      if (!evidence || !Array.isArray(evidence.steps) || !evidence.steps.length) return false;
+      renderEvidenceOutcome(target, evidence);
       const list = document.createElement("ol");
       list.className = "evidence-story";
+      const alignment = String(evidence.alignment || "");
+      const mismatch = alignment === "contradicts" || alignment === "leans_against";
       for (const step of evidence.steps) {
         const item = document.createElement("li");
-        const mark = document.createElement("span");
         const tone = step.tone || (step.ok ? "ok" : "no");
+        if (mismatch && step.id === "support") item.classList.add("alignment-emphasis");
+        const mark = document.createElement("span");
         mark.className = "mark " + tone;
         mark.setAttribute("aria-hidden", "true");
         const copy = document.createElement("div");
@@ -1780,6 +2039,92 @@
       return span;
     }
 
+    function alertDisplayPriceChange(alert) {
+      if (alert.price_change_pct != null && alert.price_change_pct === alert.price_change_pct) {
+        return Number(alert.price_change_pct);
+      }
+      const sections = alert.sections || {};
+      const observed = sections.observed_price_change_pct;
+      if (observed != null && observed === observed) return Number(observed);
+      return null;
+    }
+
+    function historyTypePriceStat(alert) {
+      const wrap = document.createElement("span");
+      wrap.className = "type-stat";
+      wrap.title = "Session price change (shown even when price did not open the alert)";
+      const change = alertDisplayPriceChange(alert);
+      if (change == null) {
+        const empty = document.createElement("span");
+        empty.className = "type-stat-empty";
+        empty.textContent = "—";
+        wrap.append(empty);
+        return wrap;
+      }
+      const value = document.createElement("span");
+      value.className = "score " + priceClass(change);
+      value.textContent = formatMove(change);
+      wrap.append(value);
+      return wrap;
+    }
+
+    function historyTypeSentimentStat(alert) {
+      const wrap = document.createElement("span");
+      wrap.className = "type-stat";
+      wrap.title = "FinBERT sentiment score (0–100)";
+      const label = document.createElement("span");
+      label.className = "type-stat-label";
+      label.textContent = "Sentiment";
+      wrap.append(label);
+      if (alert.sentiment_score == null || alert.sentiment_score !== alert.sentiment_score) {
+        const empty = document.createElement("span");
+        empty.className = "type-stat-empty";
+        empty.textContent = "—";
+        wrap.append(empty);
+        return wrap;
+      }
+      const value = document.createElement("span");
+      value.className = "score " + scoreClass(alert.sentiment_score);
+      value.textContent = formatScore(alert.sentiment_score);
+      wrap.append(value);
+      return wrap;
+    }
+
+    function alertHeadMetrics(alert) {
+      /** Same boxy price / sentiment chips as History Type (not used on the details title). */
+      return [historyTypePriceStat(alert), historyTypeSentimentStat(alert)];
+    }
+
+    function loadStoredResults(key) {
+      try {
+        const raw = JSON.parse(localStorage.getItem(key) || "null");
+        if (!raw || !Array.isArray(raw.alerts)) return null;
+        return {
+          alerts: raw.alerts,
+          ran_at: String(raw.ran_at || ""),
+        };
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function saveStoredResults(key, alerts, ranAt) {
+      localStorage.setItem(key, JSON.stringify({
+        ran_at: ranAt || new Date().toISOString(),
+        alerts: Array.isArray(alerts) ? alerts : [],
+      }));
+    }
+
+    function setRunStamp(el, ranAt, label) {
+      if (!el) return;
+      if (!ranAt) {
+        el.textContent = "";
+        return;
+      }
+      el.textContent = (label || "Last run") + " " + formatWhen(ranAt);
+      el.title = ranAt;
+    }
+
     function renderAlertCards(target, emptyTarget, alerts, options) {
       const opts = options || {};
       const rows = Array.isArray(alerts) ? alerts : [];
@@ -1821,6 +2166,7 @@
         when.title = "When the condition was met";
         head.append(kindPill(alert.kind), symbol);
         if (company) head.append(company);
+        for (const bit of alertHeadMetrics(alert)) head.append(bit);
         head.append(when);
         const chev = document.createElement("span");
         chev.className = "chev";
@@ -1867,6 +2213,12 @@
       const opts = options || {};
       const rows = Array.isArray(alerts) ? alerts : [];
       lastWatchlistCheckAlerts = rows;
+      if (opts.ranAt) lastWatchlistRanAt = opts.ranAt;
+      if (opts.persist) {
+        saveStoredResults(WATCHLIST_RESULTS_KEY, rows, lastWatchlistRanAt || new Date().toISOString());
+        if (!lastWatchlistRanAt) lastWatchlistRanAt = new Date().toISOString();
+      }
+      setRunStamp(watchlistRunStampEl, lastWatchlistRanAt, "Last scan");
       renderAlertCards(watchlistAlertsEl, watchlistEmptyEl, rows, {
         force: opts.force,
         openKeys: openWatchAlertKeys,
@@ -1875,6 +2227,39 @@
         setFingerprint: (value) => { lastWatchAlertFingerprint = value; },
         emptyText: "No results yet. Add tickers and click Scan today.",
       });
+    }
+
+    function renderScreenerAlerts(alerts, options) {
+      const opts = options || {};
+      const rows = Array.isArray(alerts) ? alerts : [];
+      lastScreenerAlerts = rows;
+      if (opts.ranAt) lastScreenerRanAt = opts.ranAt;
+      if (opts.persist) {
+        saveStoredResults(SCREENER_RESULTS_KEY, rows, lastScreenerRanAt || new Date().toISOString());
+        if (!lastScreenerRanAt) lastScreenerRanAt = new Date().toISOString();
+      }
+      setRunStamp(screenerRunStampEl, lastScreenerRanAt, "Last screen");
+      renderAlertCards(screenerAlertsEl, screenerEmptyEl, rows, {
+        force: opts.force,
+        openKeys: openScreenerAlertKeys,
+        sectionKeys: openScreenerSectionKeys,
+        getFingerprint: () => lastScreenerFingerprint,
+        setFingerprint: (value) => { lastScreenerFingerprint = value; },
+        emptyText: "No screener results yet. Set a signed percent and click Scan today.",
+      });
+    }
+
+    function restoreToolResults() {
+      const watch = loadStoredResults(WATCHLIST_RESULTS_KEY);
+      if (watch) {
+        lastWatchlistRanAt = watch.ran_at;
+        renderWatchlistCheckAlerts(watch.alerts, { force: true, ranAt: watch.ran_at });
+      }
+      const screen = loadStoredResults(SCREENER_RESULTS_KEY);
+      if (screen) {
+        lastScreenerRanAt = screen.ran_at;
+        renderScreenerAlerts(screen.alerts, { force: true, ranAt: screen.ran_at });
+      }
     }
 
     function kindPill(kind) {
@@ -1893,6 +2278,14 @@
       if (key === "when") {
         const time = new Date(alert.triggered_at || alert.updated_at || 0).getTime();
         return Number.isNaN(time) ? null : time;
+      }
+      if (key === "price") {
+        const change = alertDisplayPriceChange(alert);
+        return change == null ? null : change;
+      }
+      if (key === "sentiment") {
+        if (alert.sentiment_score == null || alert.sentiment_score !== alert.sentiment_score) return null;
+        return Number(alert.sentiment_score);
       }
       return "";
     }
@@ -2029,25 +2422,45 @@
         cell.title = "When the condition was met";
         return cell;
       }
-      const summary = document.createElement("td");
-      summary.className = "alert-summary";
-      const line = document.createElement("div");
-      line.className = "alert-summary-row";
-      line.append(kindPill(alert.kind));
-      if (alert.kind !== "price" && alert.sentiment_score != null) {
-        const metric = document.createElement("span");
-        metric.className = "alert-bit score " + scoreClass(alert.sentiment_score);
-        metric.textContent = formatScore(alert.sentiment_score) + "/100";
-        line.append(metric);
+      if (key === "type") {
+        const cell = document.createElement("td");
+        cell.append(kindPill(alert.kind));
+        return cell;
       }
-      if (alert.kind !== "news" && alert.price_change_pct != null) {
-        const metric = document.createElement("span");
-        metric.className = "alert-bit score " + priceClass(alert.price_change_pct);
-        metric.textContent = formatMove(alert.price_change_pct);
-        line.append(metric);
+      if (key === "price") {
+        const cell = document.createElement("td");
+        cell.className = "num";
+        cell.title = "Session price change (shown even when price did not open the alert)";
+        const change = alertDisplayPriceChange(alert);
+        if (change == null) {
+          cell.textContent = "—";
+          cell.classList.add("type-stat-empty");
+          return cell;
+        }
+        const value = document.createElement("span");
+        value.className = "score " + priceClass(change);
+        value.textContent = formatMove(change);
+        cell.append(value);
+        return cell;
       }
-      summary.append(line);
-      return summary;
+      if (key === "sentiment") {
+        const cell = document.createElement("td");
+        cell.className = "num";
+        cell.title = "FinBERT sentiment score (0–100)";
+        if (alert.sentiment_score == null || alert.sentiment_score !== alert.sentiment_score) {
+          cell.textContent = "—";
+          cell.classList.add("type-stat-empty");
+          return cell;
+        }
+        const value = document.createElement("span");
+        value.className = "score " + scoreClass(alert.sentiment_score);
+        value.textContent = formatScore(alert.sentiment_score);
+        cell.append(value);
+        return cell;
+      }
+      const cell = document.createElement("td");
+      cell.textContent = "";
+      return cell;
     }
 
     function renderHistory(alerts) {
@@ -2239,6 +2652,7 @@
       if (!latestAlerts.length && !lastWatchlistCheckAlerts.length) return;
       renderAlerts(alertsForHome(latestAlerts), { force: true });
       renderWatchlistCheckAlerts(lastWatchlistCheckAlerts, { force: true });
+      renderScreenerAlerts(lastScreenerAlerts, { force: true });
       renderHistory(latestAlerts);
     }
 
@@ -2404,6 +2818,46 @@
       }
     });
 
+    if (screenerForm) {
+      screenerForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const field = document.querySelector("#screenerChange");
+        const raw = field ? Number(field.value) : NaN;
+        if (!Number.isFinite(raw) || raw === 0) {
+          setScreenerStatus("Enter a non-zero percent (for example 3 or -3).", true);
+          return;
+        }
+        setScreenerStatus("Screening S&P 500 lake movers, then headlines for the top 10…");
+        try {
+          const result = await readJson(await fetch("/v1/screener/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ change_percent: raw, limit: 10 }),
+          }));
+          const rows = Array.isArray(result.alerts) ? result.alerts : [];
+          openScreenerAlertKeys.clear();
+          openScreenerSectionKeys.clear();
+          lastScreenerFingerprint = "";
+          const ranAt = new Date().toISOString();
+          renderScreenerAlerts(rows, { force: true, persist: true, ranAt });
+          selectTab("screenerTab");
+          const matched = Number(result.matched || 0);
+          const day = result.focus_day || "the focus session";
+          const note = result.errors && result.errors.length
+            ? " " + result.errors.length + " symbol error(s)."
+            : "";
+          setScreenerStatus(
+            matched
+              ? ("Top " + rows.length + " of " + matched + " movers on " + day
+                + " (≥ " + (raw > 0 ? "+" : "") + raw + "%). Kept on this tab — not saved to History." + note)
+              : ("No lake movers cleared " + (raw > 0 ? "+" : "") + raw + "% on " + day + "." + note),
+          );
+        } catch (err) {
+          setScreenerStatus(err.message, true);
+        }
+      });
+    }
+
     document.querySelector("#run").addEventListener("click", async () => {
       setStatus("Scanning prices and headlines for today…");
       const permission = await ensureNotificationPermission();
@@ -2417,7 +2871,8 @@
         openWatchAlertKeys.clear();
         openWatchSectionKeys.clear();
         lastWatchAlertFingerprint = "";
-        renderWatchlistCheckAlerts(checkAlerts, { force: true });
+        const ranAt = new Date().toISOString();
+        renderWatchlistCheckAlerts(checkAlerts, { force: true, persist: true, ranAt });
         selectTab("watchlistTab");
         skipOsNotifyOnce = true;
         await refresh();
@@ -2437,7 +2892,7 @@
         }
         setStatus(
           "Scan finished. " + checkAlerts.length + " alert row(s) written."
-            + " Today's results stay on this tab; Home Recent alerts stay on the live feed."
+            + " Watchlist results stay on this tab; Home Recent alerts stay on the live feed."
             + note + reasoningNote(result) + notifyNote,
           Boolean(notifyNote) && permission !== "granted",
         );
@@ -2523,6 +2978,14 @@
         selectTab(button.dataset.tab);
       });
     });
+
+    const enableScreenerEl = document.querySelector("#enableScreener");
+    if (enableScreenerEl) {
+      enableScreenerEl.addEventListener("change", () => {
+        setScreenerEnabled(enableScreenerEl.checked);
+      });
+    }
+    applyScreenerVisibility();
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") return;
@@ -2894,6 +3357,7 @@
     updateNotifyHint(("Notification" in window) ? Notification.permission : "denied");
     registerNotificationWorker().catch(() => {});
 
+    restoreToolResults();
     ensureSymbolUniverseLoaded()
       .then(() => refreshViewsWithCompanyNames())
       .catch(() => {});
