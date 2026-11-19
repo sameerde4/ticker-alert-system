@@ -103,6 +103,25 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "live_consumer_heartbeat_at" in architecture
     assert "Perplexity richer reasoning" in architecture
     assert "price-only stays deterministic" in architecture
+    assert "forest-aware price-only wording" in architecture
+    assert "percent **or** forest" in architecture or "percent or forest" in architecture.lower()
+    assert "Watchlist Scan today / rebuild uses the same Isolation Forest" in architecture
+    assert "Incremental lake refresh" in architecture
+    assert "Refresh lake + retrain" in architecture or "refresh" in architecture.lower()
+    assert "As-built batch lake land and refresh" in architecture
+    assert "Settings Refresh merge" in architecture or "Refresh merge" in architecture
+    assert "union by dt keep newest" in architecture
+    assert "REG --> SCAN[Watchlist Scan today]" in architecture or "REG --> SCAN" in architecture
+    assert "Watchlist Scan today percent or forest" in architecture
+    assert "Local final target (deferred)" in architecture or "deferred" in architecture.lower()
+    assert "Richer forest-aware price-only wording" in architecture
+    forest_row = next(
+        line for line in architecture.splitlines() if "Richer forest-aware price-only wording" in line
+    )
+    assert "**As-built**" in forest_row
+    assert "Kafka" in next(
+        line for line in architecture.splitlines() if "Near-term news topic on Kafka" in line
+    )
     assert "batches of eight" in architecture
     assert "model name under Together" in architecture
     assert "Fit Isolation Forest and pick the cutoff" in architecture
@@ -157,6 +176,10 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "renderEvidenceStory" in ui
     assert "What happened" in ui
     assert '"Summary"' in ui
+    assert 'appendPlain("Forest"' in ui
+    assert "Refresh lake + retrain" in ui
+    assert 'id="refreshLake"' in ui
+    assert "/v1/admin/lake/refresh" in ui
     assert "evidence-story" in ui
     assert "alert-card" in ui
     assert "addCollapsibleSection" in ui
@@ -212,7 +235,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "[architecture.md](architecture.md)" in sources
     assert "Isolation Forest" in sources
     assert "Perplexity writes three to four short sentences" in sources
-    assert "Price-only alerts keep the rule sentence" in sources
+    assert "Price-only alerts stay deterministic" in sources
+    assert "forest-aware" in sources
+    assert "Incremental lake refresh" in sources
+    assert "Refresh lake + retrain" in sources
     assert "deterministic sentence" in sources
     assert "Rule stays under Rule" in sources
     assert "python -m app.live" in sources
@@ -253,6 +279,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Origin" in readme
     assert "Today's results" in readme
     assert "Scan today" in readme
+    assert "Refresh lake + retrain" in readme
+    assert "--days 14 --merge" in readme
     assert "Two product paths sit side by side" in readme
     assert "about 5,400 symbols" not in readme
     assert "only for now" not in readme
@@ -263,9 +291,12 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "volume_zscore" in batch_train
     assert "registry/isolation_forest/current" in batch_train
     assert "Not a Dataproc" in batch_train or "scikit-learn" in batch_train
+    assert "Refresh lake + retrain" in batch_train
+    assert "Watchlist Scan today" in batch_train
     lake = _text(ROOT / "data" / "lake" / "README.md")
     assert "registry/isolation_forest/current" in lake
     assert "batch_train" in lake
+    assert "Refresh lake + retrain" in lake or "Refresh" in lake
     service = _text(ROOT / "alert_service" / "README.md")
     assert "docs/proposal-pipeline-audit.md" in service
     assert "docs/architecture.md" in service
@@ -280,6 +311,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Mac/Chrome desktop notification" in service
     assert "Slack and email are not used" in service
     assert "Slack or email" not in service
+    assert "forest_wording.py" in service
+    assert "watchlist_forest.py" in service
     assert "the field shows dots" in readme
     assert "at most eight alerts in one reply" in readme
     architecture = _text(DOCS / "architecture.md")
@@ -291,8 +324,14 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Historical headlines are not part of the design" in audit
     assert "batch_train" in audit
     assert "local model registry" in audit
+    assert "percent or forest" in audit.lower()
+    assert "Refresh lake + retrain" in audit
+    assert "optional Kafka news topic" in audit
+    assert "Watchlist forest parity" in audit or "forest parity" in audit
     batch = _text(ROOT / "batch_ingest" / "README.md")
     assert "Headlines stay on the near-term check path" in batch
     assert "batch_train" in batch
+    assert "--days 14 --merge" in batch
+    assert "Refresh lake + retrain" in batch
     lake_readme = _text(ROOT / "data" / "lake" / "README.md")
     assert "No historical headlines are stored here" in lake_readme

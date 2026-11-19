@@ -751,10 +751,11 @@
       </section>
       <section class="card">
         <h2>Historical prices (lake)</h2>
-        <p class="hint">Land about one year of Yahoo daily OHLCV for every S&amp;P 500 constituent into the data lake as Parquet (<code>data/lake/raw/prices/daily/</code>). This is the batch raw zone for training features. It does not change saved alerts. The run usually takes a few minutes.</p>
+        <p class="hint">The lake under <code>data/lake/raw/prices/daily/</code> trains Isolation Forest. <strong>Land</strong> pulls about one year (cold start / replace). <strong>Refresh</strong> merges the last ~2 weeks of Yahoo dailies into existing Parquet and retrains the model so live scoring is not stuck on a stale registry. Neither job changes saved alerts.</p>
         <form id="lake-form" class="settings-form">
           <div class="settings-actions">
             <button type="submit" id="landLake">Land S&amp;P 500 prices</button>
+            <button type="button" id="refreshLake">Refresh lake + retrain</button>
             <p class="status" id="lakeStatus"></p>
           </div>
           <p class="hint" id="lakeDetail"></p>
@@ -1482,6 +1483,7 @@
         "What happened": true,
         "Summary": true,
         "Price": false,
+        "Forest": false,
         "News": false,
         "Rule": false,
       };
@@ -1528,6 +1530,36 @@
         const p = document.createElement("p");
         p.className = "summary";
         p.textContent = sections.price;
+        body.append(p);
+        return true;
+      });
+
+      appendPlain("Forest", (body) => {
+        const forest = sections.forest;
+        if (!forest || typeof forest !== "object" || !forest.anomalous) return false;
+        const lines = [];
+        const model = forest.model_id || "isolation_forest";
+        const score = Number(forest.forest_score);
+        const cutoff = Number(forest.score_cutoff);
+        let forestLine = "Isolation Forest " + model + " marked this session anomalous";
+        const scoreBits = [];
+        if (Number.isFinite(score)) scoreBits.push("score " + score.toFixed(4));
+        if (Number.isFinite(cutoff)) scoreBits.push("cutoff " + cutoff.toFixed(4));
+        if (scoreBits.length) forestLine += " (" + scoreBits.join(", ") + ")";
+        lines.push(forestLine + ".");
+        const features = forest.features || {};
+        const bits = [];
+        if (features.gap_return != null) bits.push("gap " + formatMove(features.gap_return));
+        if (features.session_return != null) bits.push("open→last " + formatMove(features.session_return));
+        if (features.close_return != null) bits.push("close vs prior " + formatMove(features.close_return));
+        if (features.volume_zscore != null) {
+          const z = Number(features.volume_zscore);
+          bits.push("volume z " + (Number.isFinite(z) ? (z >= 0 ? "+" : "") + z.toFixed(2) : String(features.volume_zscore)));
+        }
+        if (bits.length) lines.push("Session features: " + bits.join(", ") + ".");
+        const p = document.createElement("p");
+        p.className = "summary";
+        p.textContent = lines.join(" ");
         body.append(p);
         return true;
       });
@@ -2333,28 +2365,38 @@
       el.className = isError ? "status error" : "status";
     }
 
+    function setLakeButtonsDisabled(disabled) {
+      const land = document.querySelector("#landLake");
+      const refresh = document.querySelector("#refreshLake");
+      if (land) land.disabled = disabled;
+      if (refresh) refresh.disabled = disabled;
+    }
+
     function renderLakeStatus(status) {
       if (!status) return;
       const detail = document.querySelector("#lakeDetail");
-      const button = document.querySelector("#landLake");
       if (status.running) {
-        setLakeStatus(status.message || "Landing S&P 500 prices…");
-        button.disabled = true;
-        detail.textContent = "The land usually takes a few minutes. Leave this page open; status refreshes automatically.";
+        setLakeStatus(status.message || (status.job === "refresh" ? "Refreshing lake…" : "Landing S&P 500 prices…"));
+        setLakeButtonsDisabled(true);
+        detail.textContent = status.job === "refresh"
+          ? "Refresh merges recent dailies then retrains Isolation Forest. Leave this page open; status refreshes automatically."
+          : "The land usually takes a few minutes. Leave this page open; status refreshes automatically.";
         return;
       }
-      button.disabled = false;
+      setLakeButtonsDisabled(false);
       if (status.ok) {
-        setLakeStatus(status.message || "Land finished.");
+        setLakeStatus(status.message || "Lake job finished.");
         const bits = [];
+        if (status.job) bits.push(status.job === "refresh" ? "refresh + retrain" : "full land");
         if (status.symbols_landed != null) bits.push(status.symbols_landed + " symbols");
         if (status.rows_landed != null) bits.push(status.rows_landed + " rows");
+        if (status.train && status.train.model_id) bits.push("model " + status.train.model_id);
         if (status.finished_at) bits.push("finished " + status.finished_at);
         detail.textContent = bits.join(" · ");
         return;
       }
       if (status.ok === false) {
-        setLakeStatus(status.message || "Land failed.", true);
+        setLakeStatus(status.message || "Lake job failed.", true);
         detail.textContent = status.finished_at ? ("Finished " + status.finished_at) : "";
         return;
       }
@@ -2386,14 +2428,27 @@
     document.querySelector("#lake-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       setLakeStatus("Starting S&P 500 land…");
-      document.querySelector("#landLake").disabled = true;
+      setLakeButtonsDisabled(true);
       try {
         const status = await readJson(await fetch("/v1/admin/lake/land", { method: "POST" }));
         renderLakeStatus(status);
         pollLakeWhileRunning();
       } catch (err) {
         setLakeStatus(err.message, true);
-        document.querySelector("#landLake").disabled = false;
+        setLakeButtonsDisabled(false);
+      }
+    });
+
+    document.querySelector("#refreshLake").addEventListener("click", async () => {
+      setLakeStatus("Starting lake refresh + retrain…");
+      setLakeButtonsDisabled(true);
+      try {
+        const status = await readJson(await fetch("/v1/admin/lake/refresh", { method: "POST" }));
+        renderLakeStatus(status);
+        pollLakeWhileRunning();
+      } catch (err) {
+        setLakeStatus(err.message, true);
+        setLakeButtonsDisabled(false);
       }
     });
 

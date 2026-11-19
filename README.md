@@ -89,9 +89,18 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 
 On the **Watchlist** tab, add an S&P 500 ticker, then **Scan today**. The watchlist is the **focus set** for Scan today and rebuild. Live covers the streamed index on Home Recent. The product universe is the full index (lake land, symbol search, stream); Scan today does not automatically run all 500 names.
 
-On **Settings → Historical prices (lake)**, **Land S&P 500 prices** writes about one year of Yahoo daily bars for the index into `data/lake/raw/` (same job as `batch_ingest` on the CLI) for Isolation Forest training.
+On **Settings → Historical prices (lake)**:
+- **Land S&P 500 prices** — about one year of Yahoo dailies into `data/lake/raw/` (cold start / full replace; same as `batch_ingest`).
+- **Refresh lake + retrain** — merge the last ~14 calendar days into existing Parquet, then run `batch_train` so Isolation Forest is not stuck on a stale land. Live picks up the new registry on its next rules refresh.
 
-To build curated features and fit Isolation Forest into the local registry:
+CLI equivalent for the incremental loop:
+
+```bash
+cd batch_ingest && python -m app.main --days 14 --merge
+cd ../batch_train && python -m app.main
+```
+
+To build curated features and fit Isolation Forest into the local registry after a full land:
 
 ```bash
 cd batch_train

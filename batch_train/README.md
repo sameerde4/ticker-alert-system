@@ -38,7 +38,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Land raw prices first (`batch_ingest` or Settings → Historical prices).
+Land raw prices first (`batch_ingest` or Settings → Historical prices). Keep the lake current with Settings **Refresh lake + retrain** (or `batch_ingest --days 14 --merge` then this job) so Live and Watchlist are not stuck on a stale registry.
 
 ## Run
 
@@ -54,12 +54,15 @@ python -m app.main --curate-only
 python -m app.main --train-only
 ```
 
+After training, both `python -m app.live` and Watchlist **Scan today** score sessions with `registry/isolation_forest/current/`.
+
 ## Tests
 
 ```bash
 python -m pytest -q
 ```
 
-## Next
+## Consumers of this registry
 
-Score the same four features on live Kafka session state with the registered model (Flink role on the diagram).
+- Live Kafka scorer (`python -m app.live`) — Flink role on the diagrams
+- Watchlist Scan today / rebuild — same percent **or** forest price gate

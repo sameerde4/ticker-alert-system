@@ -20,6 +20,9 @@ def test_health_and_ui_without_a_database():
     assert "Historical prices (lake)" in page.text
     assert "Land S&amp;P 500 prices" in page.text
     assert "/v1/admin/lake/land" in page.text
+    assert "/v1/admin/lake/refresh" in page.text
+    assert "Refresh lake + retrain" in page.text
+    assert 'id="refreshLake"' in page.text
     assert "function rankSymbolUniverseMatches" in page.text
     assert "tickerAlertLastClosedAt" in page.text
     assert "tickerAlertHomeClearedAt" in page.text

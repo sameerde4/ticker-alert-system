@@ -16,15 +16,16 @@ The class design (CISC 525) is a **local** lambda architecture: Docker Kafka on 
 This repository runs today:
 
 - Alpaca delayed SIP minute bars onto local Kafka (`stream_ingest/`)
-- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts from the stream (percent rule **and** registered Isolation Forest when the lake registry is present), then upgrades with near-term news when the slice matches
+- A FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts from the stream (percent rule **or** registered Isolation Forest when the lake registry is present), then upgrades with near-term news when the slice matches
 - Live feature vectors + forest scores into Postgres `live_feature_rows` (Timescale stand-in)
-- **Watchlist** tab: focus-set search, **Scan today** over Yahoo daily bars + FinBERT headlines for those symbols, Today's results panel separate from Home Recent
-- Perplexity richer reasoning for news / news+price when a key is saved (price-only stays deterministic); granular evidence story on Home, Watchlist, and Details
-- Batch land of about one year of S&P daily prices into `data/lake/raw/` (`batch_ingest/` or Settings) for **model training**
-- Curated session features + Isolation Forest registry (`batch_train/`)
+- **Watchlist** tab: focus-set search, **Scan today** over Yahoo daily bars + FinBERT headlines — same **percent or forest** price gate as live, then the news join; Today's results separate from Home Recent
+- Perplexity richer reasoning for news / news+price when a key is saved (price-only stays deterministic); forest-aware deterministic wording when Isolation Forest fires; granular evidence story on Home, Watchlist, and Details
+- Batch land of about one year of S&P daily prices into `data/lake/raw/` (`batch_ingest/` or Settings **Land**) for **model training**
+- Incremental **Refresh lake + retrain** (merge ~14 calendar days + `batch_train`) so the registry is not stuck on a stale land
+- Curated session features + Isolation Forest registry (`batch_train/`) — used by **both** Live and Watchlist Scan today
 - Alert History with Origin + draggable columns; Mac/Chrome desktop notifications and a tab badge when new alerts arrive
 
-Still open for the **local final** stack: an optional near-term news **topic on Kafka** (today live and Scan today fetch Yahoo headlines directly), and forest-aware price-only wording. Live price → news upgrade and the evidence-story popup are as-built. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
+Still open for the **local final** stack: an optional near-term news **topic on Kafka** (deferred — today live and Scan today fetch Yahoo headlines directly). Forest-aware price-only wording, Watchlist forest parity, incremental lake refresh + retrain, live price → news upgrade, and the evidence-story popup are as-built. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
 
 ## Status
 
@@ -42,13 +43,15 @@ Still open for the **local final** stack: an optional near-term news **topic on 
 | Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500) | **As-built** |
 | Live Kafka consumer: open→last price alerts (`python -m app.live`); Home “Live alerts on” heartbeat | **As-built** |
 | Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone (**training lake**, not the Watchlist UI) | **As-built** |
+| Incremental lake refresh: merge last ~14 calendar days of Yahoo dailies into Parquet, then `batch_train` (Settings **Refresh lake + retrain** / CLI) so the registry is not stuck on a stale land | **As-built** |
 | Spark-role curated feature table (gap, session, close, volume z-score) and Isolation Forest registry via `batch_train` (local pandas/scikit-learn) | **As-built** |
 | Live scorer loads the registry and scores session features from Kafka bars (Flink role); Postgres `live_feature_rows` sink | **As-built** |
+| Watchlist Scan today / rebuild uses the same Isolation Forest registry (percent **or** forest) before the news join | **As-built** |
 | Mac/Chrome desktop notification (Notification Center) plus tab title/favicon badge when new alerts arrive from Scan today or live | **As-built** |
 | Live price → near-term news: after a percent or forest price alert, fetch/score headlines and upgrade to news / news+price when the same-day slice matches; Perplexity on news kinds | **As-built** |
 | Evidence story with granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts) on Home, Watchlist, and Details | **As-built** |
-| Near-term news topic on Kafka with FinBERT scores (optional bus; live and Scan today fetch Yahoo near-term headlines today) | **Local final target** |
-| Richer forest-aware price-only wording | **Local final target** |
+| Richer forest-aware price-only wording (deterministic Summary / Price / Forest / What happened when Isolation Forest fires; percent status + feature drivers; still no Perplexity on bare price-only) | **As-built** |
+| Near-term news topic on Kafka with FinBERT scores (optional bus; deferred — live and Scan today fetch Yahoo near-term headlines today) | **Local final target (deferred)** |
 
 Dropped from both the running design and the local final target: Cassandra, FinBERT fine-tuning, VWAP as a stream stage, a generic LLM box, a historical news lake, sentiment features inside Isolation Forest training, and a mandatory AWS production deploy.
 
@@ -67,7 +70,7 @@ A normal check writes the current Eastern trading day. The admin rebuild deletes
 | Slice join, news-only and price-only | Same Eastern day; gap, session, or close slice. Live and Scan today: price first, then news when the slice matches; news-only still allowed on Scan today |
 | Watchlist focus set beside the live feed | Watchlist tab for Scan today / Today's results; Home Recent for live; History Origin distinguishes the writer |
 | Perplexity after the decision | When a key is saved for news / news+price; model name under Together; price-only keeps the rule sentence |
-| Lake, Spark-role training, registry | Raw under `data/lake/raw/` via `batch_ingest`. `batch_train` writes curated features and `data/lake/registry/isolation_forest/current/` (training only) |
+| Lake, Spark-role training, registry | Raw under `data/lake/raw/` via `batch_ingest` **Land** (full) or **Refresh** (merge ~14d + retrain). `batch_train` writes curated features and `data/lake/registry/isolation_forest/current/`. Live and Scan today both score with that registry |
 | One alert per symbol per day | One row per symbol per day (`alerts.origin` tracks live / watchlist / both) |
 | Notify the trader after the row exists | OS desktop notification + tab badge (`ui/sw-notifications.js`). Slack and email are not used |
 
@@ -85,14 +88,17 @@ A normal check writes the current Eastern trading day. The admin rebuild deletes
 
 ## As-built: system overview
 
-Everything that runs on one machine today. Three paths stay distinct: the **training lake**, **Live** (continuous), and **Watchlist Scan today** (on-demand session pass). Live uses the **percent rule** and, when the registry is present, the registered Isolation Forest.
+Everything that runs on one machine today. Three paths stay distinct: the **training lake**, **Live** (continuous), and **Watchlist Scan today** (on-demand session pass). Live and Scan today both use the **percent rule or** the registered Isolation Forest (same lake registry) as the price gate, then the news join.
 
 ```mermaid
 flowchart TB
     subgraph batch [Batch lake — train Isolation Forest]
-        YF[Yahoo daily OHLCV ~1y] --> LAND[batch_ingest / Settings land]
+        YF[Yahoo daily OHLCV] --> LAND[Settings Land full ~1y]
+        YF --> REF[Settings Refresh merge ~14d]
         LAND --> RAW[(data/lake/raw/prices/daily)]
-        RAW --> BT[batch_train pandas ELT]
+        REF -->|merge by date| RAW
+        REF --> BT[batch_train pandas ELT]
+        RAW --> BT
         BT --> CUR[(curated/features/session)]
         CUR --> IF[Isolation Forest scikit-learn]
         IF --> REG[(registry/isolation_forest/current)]
@@ -112,7 +118,8 @@ flowchart TB
         WL[Focus set chips] --> RUN[Scan today]
         RUN --> YB[Yahoo daily bars + near-term headlines]
         YB --> FB[Local FinBERT]
-        RUN -->|price + news rules for today| PG
+        REG --> RUN
+        RUN -->|percent or forest then news join| PG
         RUN --> CHECK[Today's results]
     end
 
@@ -133,6 +140,7 @@ flowchart TB
 | Job | Continuous awareness while RTH is open | Deliberate review of the focus set under **current** rules |
 | UI | Home → **Recent alerts** (scope: full S&P 500 or Watchlist only) | Watchlist → chips + **Scan today** → **Today's results** |
 | Inputs | Kafka minute bars (+ near-term Yahoo headlines after a price/forest hit) | Yahoo `daily_bars` + near-term headlines for watchlist symbols |
+| Price gate | open→last **percent or** Isolation Forest (lake registry) | Same **percent or** Isolation Forest on the day’s session vector |
 | When it shines | Deployed day; laptop left open on the stream | After the close; after changing Settings; catch-up if live was down; class demo without Kafka |
 | Origin on the row | `live` (or `both` if Scan today also wrote the day) | `watchlist` (or `both` if live also wrote the day) |
 
@@ -154,10 +162,12 @@ flowchart TB
     end
 
     subgraph rules [Alert rules]
-        BARS --> PRICE{Open to last while open, else close versus prior close}
-        PRICE -->|at or beyond threshold| PA[Price alert]
-        PRICE --> VOL[Volume versus recent average]
-        VOL --> PA
+        BARS --> PCT{Open to last while open, else close versus prior}
+        BARS --> IF[Isolation Forest gap session close volume z]
+        PCT -->|at or beyond percent| PA[Price alert]
+        IF -->|score at or below cutoff| PA
+        PCT --> VOL[Volume spike note on completed close]
+        VOL -.->|annotation only| PA
         NEWS --> NA{Score at least 25 points from 50}
         NA -->|at or beyond threshold| NEWSALERT[News alert]
         PA --> ONE{Headline slice clears the same percent}
@@ -256,21 +266,27 @@ sequenceDiagram
     PG->>UI: enabled when heartbeat is fresh
 ```
 
-## As-built batch lake land
+## As-built batch lake land and refresh
 
-S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in).
+S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in). **Land** replaces each symbol partition (~1 year). **Refresh** merges the last ~14 calendar days into existing Parquet, then runs `batch_train` so the registry is not stuck on a stale cold start. Kafka minute bars do **not** write the lake; Yahoo incremental land is the closed loop.
 
 ```mermaid
 flowchart LR
-    SP[S&P 500 symbol list] --> YF[Yahoo daily OHLCV ~1 year]
-    YF --> LAND[batch_ingest or Settings land]
+    SP[S&P 500 symbol list] --> YF[Yahoo daily OHLCV]
+    YF --> LAND[Land full replace ~1 year]
+    YF --> MER[Refresh merge ~14 calendar days]
     LAND --> RAW[data/lake/raw/prices/daily]
+    MER -->|union by dt keep newest| RAW
     LAND --> MAN[raw/_runs manifest]
+    MER --> MAN
+    MER --> TRAIN[batch_train curate + fit]
+    RAW --> TRAIN
+    TRAIN --> REG[registry/isolation_forest/current]
 ```
 
 ## As-built curated features and Isolation Forest
 
-Local Spark-**role** job [`batch_train`](../batch_train/): pandas ELT + scikit-learn Isolation Forest. Four price/volume features only. Registry under `data/lake/registry/isolation_forest/current/`. Not a Dataproc/EMR cluster; same *job* the diagrams call Spark training.
+Local Spark-**role** job [`batch_train`](../batch_train/): pandas ELT + scikit-learn Isolation Forest. Four price/volume features only. Registry under `data/lake/registry/isolation_forest/current/`. Not a Dataproc/EMR cluster; same *job* the diagrams call Spark training. Live and Watchlist Scan today both load this registry for the **percent or forest** price gate.
 
 ```mermaid
 flowchart LR
@@ -278,11 +294,13 @@ flowchart LR
     CURATE --> FEAT[curated/features/session]
     FEAT --> TRAIN[Fit Isolation Forest]
     TRAIN --> REG[registry/isolation_forest/current]
+    REG --> LIVE[python -m app.live]
+    REG --> SCAN[Watchlist Scan today]
 ```
 
 ## Local final target: high-level lambda architecture
 
-Batch trains on **price history** (as-built). Stream scores minute bars with that model and looks up near-term news after a live price alert (as-built). Watchlist Scan today is the on-demand session product path beside the stream (as-built). Optional Kafka news topic remains a local final nicety. Everything stays on the local machine. No historical news lake. No AWS requirement.
+Batch trains on **price history** (as-built), with incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and looks up near-term news after a live price alert (as-built). Watchlist Scan today uses the **same percent or forest** gate on daily bars (as-built). Optional Kafka news topic remains a deferred local final nicety. Everything stays on the local machine. No historical news lake. No AWS requirement.
 
 ```mermaid
 flowchart LR
@@ -295,14 +313,14 @@ flowchart LR
 
     subgraph ingest [Ingestion]
         KAFKA[Docker Kafka]
-        BATCH[batch_ingest into data/lake]
+        BATCH[batch_ingest Land or Refresh merge]
         DAY[Yahoo daily bars for Scan today]
     end
 
     subgraph process [Processing]
         LIVE_SCORE[Live scorer Flink role]
         TRAIN_JOB[batch_train Spark role]
-        RUNCHK[Watchlist Scan today]
+        RUNCHK[Watchlist Scan today percent or forest]
     end
 
     subgraph storage [Storage on disk and local DB]
@@ -332,6 +350,8 @@ flowchart LR
     HIST_PX --> BATCH --> RAW
     RAW --> TRAIN_JOB --> CURATED
     CURATED --> REG
+    REG --> LIVE_SCORE
+    REG --> RUNCHK
     REG --> ANOM
     LIVE_SCORE --> ANOM
     ANOM --> CORR

@@ -1,6 +1,6 @@
 # Alert service
 
-FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake for training, live stream, Watchlist Scan today, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for Live vs Watchlist, the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process serves the UI tabs (Home Recent, Watchlist Today's results, History with Origin) and runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes richer news / news + price reasoning (price-only stays on the rule sentence). The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply. When Scan today or live adds alerts, the open UI can raise a Mac/Chrome desktop notification and a tab badge (`ui/sw-notifications.js`). Slack and email are not used.
+FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run command are in the [repository README](../README.md). The class architecture (batch lake for training, live stream, Watchlist Scan today, Isolation Forest, Perplexity) is [docs/proposal-pipeline-audit.md](../docs/proposal-pipeline-audit.md). Diagrams for Live vs Watchlist, the running check path, the live price stream, and the full class stack are in [docs/architecture.md](../docs/architecture.md). This process serves the UI tabs (Home Recent, Watchlist Today's results, History with Origin) and runs a Kafka consumer for session-move price alerts (`python -m app.live`). Flink and Spark are the stream and batch engines on the class diagrams. A saved Perplexity key writes richer news / news + price reasoning (price-only stays deterministic; Isolation Forest alerts get richer forest-aware wording without Perplexity). The selected model is one of five ChatGPT, five OpenAI, or five Gemini choices. Its name is stored on the alert and shown under Together. A check sends at most eight alerts in one reply. When Scan today or live adds alerts, the open UI can raise a Mac/Chrome desktop notification and a tab badge (`ui/sw-notifications.js`). Slack and email are not used.
 
 | Path | Purpose |
 |---|---|
@@ -18,11 +18,13 @@ FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run 
 | `app/live_alerts.py` | Session-move price drafts; does not overwrite news / news_price rows |
 | `app/live_consumer.py` | Kafka consumer for `prices.raw.bars` → percent + Isolation Forest price alerts and `live_feature_rows` |
 | `app/forest_live.py` | Load lake registry and score live session feature vectors (Flink role) |
+| `app/forest_wording.py` | Deterministic forest-aware Summary / Price copy for price-only Isolation Forest alerts |
+| `app/watchlist_forest.py` | Same Isolation Forest OR-gate on Scan today / rebuild as live |
 | `app/live.py` | `python -m app.live` entry point; heartbeats so Home can show Live alerts on |
 | `ui/index.html` | Home Recent, Watchlist (focus set + Scan today + Today's results), History with Origin + draggable columns, settings, lake land, rebuild, Yahoo quote links, symbol search, desktop notifications and tab badge |
 | `ui/sw-notifications.js` | Service worker for OS/Chrome Notification Center popups |
 | `ui/sp500_universe.json` | S&P 500 ticker and company-name list for the Watchlist box |
-| `app/lake_land.py` | Settings action: land one year of S&P daily bars into `data/lake` |
+| `app/lake_land.py` | Settings: full lake land, or incremental refresh (merge + `batch_train`) |
 | `tests/` | Rules, parsing, and API smoke tests |
 
 ```bash

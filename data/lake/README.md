@@ -4,9 +4,11 @@ Raw, curated, and registry zones for the S&P 500 batch path. Layout matches the 
 
 | Path | Role |
 |---|---|
-| `raw/prices/daily/symbol=TICKER/*.parquet` | Yahoo daily OHLCV from `batch_ingest` or Settings → Historical prices |
+| `raw/prices/daily/symbol=TICKER/*.parquet` | Yahoo daily OHLCV from `batch_ingest` / Settings **Land** (full) or **Refresh** (merge recent days) |
 | `curated/features/session/*.parquet` | Session price/volume feature rows from `batch_train` |
 | `registry/isolation_forest/current/` | Fitted Isolation Forest (`model.joblib`) + `meta.json` (feature list, score cutoff) |
+
+Live Kafka bars do **not** write here. Keep the lake current with Settings **Refresh lake + retrain** (or `batch_ingest --days 14 --merge` then `batch_train`).
 
 No historical headlines are stored here.
 
