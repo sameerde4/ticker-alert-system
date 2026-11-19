@@ -41,6 +41,11 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "| Cassandra | Drop |" in audit
     assert "VWAP is not a feature the forest uses" in audit
     assert "stored headlines" not in audit
+    assert "Desktop (OS) notification and tab badge" in audit
+    assert "Desktop notification and tab badge" in audit
+    assert "desktop notifications and a tab badge" in audit
+    assert "Slack or email" not in audit
+    assert "Slack and email are not used" in audit
 
 
 def test_architecture_points_at_the_audit_and_names_the_target():
@@ -60,6 +65,12 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "As-built batch lake land" in architecture
     assert "python -m app.live" in architecture
     assert "Live alerts on" in architecture
+    assert "Mac/Chrome desktop notification" in architecture
+    assert "Desktop notification and tab badge" in architecture
+    assert "ui/sw-notifications.js" in architecture
+    assert "Enable desktop notifications" in architecture
+    assert "Slack or email" not in architecture
+    assert "Slack and email are not used" in architecture
     assert "prices.raw.bars" in architecture
     assert "live_consumer_heartbeat_at" in architecture
     assert "Perplexity two sentences" in architecture
@@ -86,6 +97,28 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "BTC-USD" not in architecture
 
 
+def test_ui_uses_desktop_notifications_and_tab_badge():
+    ui = _text(ROOT / "alert_service" / "ui" / "index.html")
+    assert "ensureNotificationPermission" in ui
+    assert "showOsNotifications" in ui
+    assert "updateTabBadge" in ui
+    assert "noticeNewAlerts" in ui
+    assert "Notification.requestPermission" in ui
+    assert "clearUnreadBadge" in ui
+    assert "requireInteraction: true" in ui
+    assert "enableNotify" in ui
+    assert "registerNotificationWorker" in ui
+    assert "sw-notifications.js" in ui
+    assert "Enable desktop notifications" in ui
+    assert "Mac notification" in ui
+    sw = _text(ROOT / "alert_service" / "ui" / "sw-notifications.js")
+    assert "notificationclick" in sw
+    assert "clients.openWindow" in sw
+    main = _text(ROOT / "alert_service" / "app" / "main.py")
+    assert "sw-notifications.js" in main
+    assert "Service-Worker-Allowed" in main
+
+
 def test_data_sources_and_readmes_name_the_same_target():
     sources = _text(DOCS / "data-sources.md")
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in sources
@@ -98,6 +131,9 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "stream_ingest" in sources
     assert "S&P 500" in sources
     assert "Historical headlines are not pulled into the lake" in sources
+    assert "Mac/Chrome desktop notification" in sources
+    assert "Slack and email are not used" in sources
+    assert "Slack or email" not in sources
     assert "BTC-USD" not in sources
     readme = _text(ROOT / "README.md")
     assert "[docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md)" in readme
@@ -105,6 +141,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Perplexity" in readme
     assert "docker compose up -d" in readme
     assert "Live alerts on" in readme
+    assert "Mac desktop notification" in readme
+    assert "Enable desktop notifications" in readme
     assert "013_live_consumer_heartbeat.sql" in readme
     assert "S&P 500" in readme
     assert "S&P 500 Alert System" in readme
@@ -121,6 +159,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "live price stream" in service
     assert "five ChatGPT, five OpenAI, or five Gemini" in service
     assert "at most eight alerts" in service
+    assert "ui/sw-notifications.js" in service
+    assert "Mac/Chrome desktop notification" in service
+    assert "Slack and email are not used" in service
+    assert "Slack or email" not in service
     assert "the field shows dots" in readme
     assert "at most eight alerts in one reply" in readme
     architecture = _text(DOCS / "architecture.md")

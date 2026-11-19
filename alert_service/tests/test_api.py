@@ -29,6 +29,13 @@ def test_health_and_ui_without_a_database():
     assert "scrollbar-gutter: stable" in page.text
     assert "overflow-x: clip" in page.text
     assert ".tab-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }" in page.text
+    assert "enableNotify" in page.text
+    assert "showOsNotifications" in page.text
+    assert "sw-notifications.js" in page.text
+    worker = client.get("/ui/sw-notifications.js")
+    assert worker.status_code == 200
+    assert "notificationclick" in worker.text
+    assert "javascript" in worker.headers.get("content-type", "")
     universe = client.get("/ui/symbol_universe.json")
     assert universe.status_code == 200
     payload = universe.json()
