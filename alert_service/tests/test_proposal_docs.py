@@ -98,11 +98,15 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "price_span" in architecture
     assert "Live alerts on" in architecture
     assert "Mac/Chrome desktop notification" in architecture
-    assert "Desktop notification and tab badge" in architecture
+    assert "Desktop notification" in architecture and "tab badge" in architecture
     assert "ui/sw-notifications.js" in architecture
     assert "Enable desktop notifications" in architecture
     assert "Slack or email" not in architecture
     assert "Slack and email are not used" in architecture
+    assert "not AWS Lambda" in architecture or "*not* AWS Lambda" in architecture
+    assert "data lake" in architecture.lower()
+    assert "Flink-role" in architecture
+    assert "technical role" in architecture.lower()
     assert "prices.raw.bars" in architecture
     assert "live_consumer_heartbeat_at" in architecture
     assert "Perplexity richer reasoning" in architecture
@@ -130,12 +134,12 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "last completed session" in architecture
     assert "Kafka minute bars do **not** write the lake" in architecture or "do **not** write the lake" in architecture
     assert "US Eastern" in architecture
-    assert "Focus session today or last completed" in architecture
+    assert "Focus session" in architecture and "last completed" in architecture
     assert "Watchlist Scan today focus session" in architecture
     assert "Price change" in architecture and "Sentiment score" in architecture
     assert "Origin" in architecture and "Company" in architecture and "Type" in architecture
-    assert "REG --> SCAN[Watchlist Scan today]" in architecture or "REG --> SCAN" in architecture
-    assert "Watchlist Scan today percent or forest" in architecture
+    assert "REG --> SCAN" in architecture
+    assert "Watchlist Scan today" in architecture and "percent or forest" in architecture
     assert "finished local system" in architecture.lower() or "finished-system" in architecture.lower() or "finished** local" in architecture
     assert "no separate Kafka news topic" in architecture or "Kafka news topic" in architecture
     assert "Richer forest-aware price-only wording" in architecture

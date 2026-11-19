@@ -9,15 +9,15 @@ Two product paths sit side by side:
 
 Both write the same Postgres `alerts` table. History shows **Origin**, **Company**, **Type**, **Price change**, and **Sentiment score** (sortable columns); click a row for the full write-up. The **batch lake** (`batch_ingest` + `batch_train`) trains Isolation Forest on historical prices; it is not the Watchlist UI. Watchlist Scan today is the useful product pass over the **focus session** (today during/after RTH; the last completed session before the open or on weekends) plus near-term headlines.
 
-The class design (CISC 525) is a **local** lambda architecture: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. How the original proposal slides map onto this stack — including what we kept, changed, or dropped and why — is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
+The class design (CISC 525) is a **local lambda architecture** in the classic sense — a **batch layer** (historical lake + train) plus a **speed/stream layer** (Kafka + live scorer) that serve the same alerts table. That is *not* AWS Lambda. On this machine: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. How the original proposal slides map onto this stack — including what we kept, changed, or dropped and why — is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
 
 **Deploy target:** one developer machine (Docker Desktop + Postgres + local lake). Cloud names from the original deck (S3, Aurora, managed Flink) map to local stand-ins below. This project does **not** require an AWS production deploy for the class demo.
 
-**How to read the diagrams below.** They are one finished system at increasing grain — not two generations of the design. Keep all of them for the presentation. Flowcharts are laid out **left → right** in numbered stage columns (slide-friendly landscape); sequence diagrams stay top → bottom in time order.
+**How to read the diagrams below.** They are one finished system at increasing grain — not two generations of the design. Keep all of them for the presentation. Flowcharts are laid out **left → right** in numbered stage columns (slide-friendly landscape); sequence diagrams stay top → bottom in time order. Each box names the **job in plain language**, then the **technical role** in parentheses (data lake, Kafka topic, Flink-role processor, Postgres table, and so on).
 
 1. **System overview** — lake train, Live, Watchlist, serving  
 2. **Watchlist Scan today** / **Live price stream** / **Batch lake** / **Curated features + Isolation Forest** — path-level detail  
-3. **High-level lambda** — course-shaped boxes with local stand-ins  
+3. **High-level lambda architecture** — batch + speed layers (the *pattern*, not AWS Lambda) with local stand-ins  
 4. **Batch historical ELT** — land → curate → train → registry  
 5. **Streaming ETL** — Kafka → live scorer → headline grade → alerts  
 6. **End-to-end alert sequence** — bar → gate → headlines → Perplexity → UI
@@ -105,34 +105,34 @@ Everything that runs on one machine. Three paths stay distinct: the **training l
 flowchart LR
     subgraph batch [1 Batch lake]
         direction TB
-        YF[Yahoo daily OHLCV] --> LAND[Land / Refresh]
-        LAND --> RAW[(lake raw prices)]
-        RAW --> BT[batch_train]
-        BT --> REG[(Isolation Forest registry)]
+        YF["Yahoo daily OHLCV<br/>(market data API)"] --> LAND["Land / Refresh<br/>(batch ingest job)"]
+        LAND --> RAW[("Raw daily prices<br/>(local data lake)")]
+        RAW --> BT["batch_train<br/>(Spark-role trainer)"]
+        BT --> REG[("Isolation Forest registry<br/>(model store on disk)")]
     end
 
     subgraph stream [2 Live]
         direction TB
-        ALP[Alpaca delayed_sip] --> KAFKA[(Kafka prices.raw.bars)]
-        KAFKA --> LIVE[python -m app.live]
-        LIVE --> FEAT[(live_feature_rows)]
-        LIVE --> HOME[Home Recent]
+        ALP["Alpaca delayed_sip<br/>(broker market feed)"] --> KAFKA[("Minute bars topic<br/>(Docker Kafka)")]
+        KAFKA --> LIVE["Live consumer app.live<br/>(Flink-role stream processor)"]
+        LIVE --> FEAT[("Session feature rows<br/>(Postgres table)")]
+        LIVE --> HOME["Home Recent<br/>(live alert feed UI)"]
     end
 
     subgraph watch [3 Watchlist]
         direction TB
-        WL[Focus set] --> RUN[Scan today]
-        RUN --> FOCUS[Focus session today or last completed]
-        FOCUS --> YB[Yahoo bars + headlines]
-        YB --> FB[FinBERT]
-        RUN --> CHECK[Watchlist results]
+        WL["Focus set<br/>(Postgres watchlist)"] --> RUN["Scan today<br/>(on-demand check)"]
+        RUN --> FOCUS["Focus session<br/>(today or last completed)"]
+        FOCUS --> YB["Yahoo bars + headlines<br/>(vendor pull)"]
+        YB --> FB["FinBERT<br/>(local NLP scorer)"]
+        RUN --> CHECK["Watchlist results<br/>(session review UI)"]
     end
 
     subgraph serve [4 Serving]
         direction TB
-        PG[(Postgres alerts)] --> API[FastAPI + UI]
-        API --> HIST[History]
-        API --> NOTE[Desktop notification and tab badge]
+        PG[("Alerts table<br/>(Postgres database)")] --> API["FastAPI + UI<br/>(HTTP API / dashboard)"]
+        API --> HIST["History<br/>(full alert list UI)"]
+        API --> NOTE["Desktop notification<br/>(browser / OS popup)"]
     end
 
     REG --> LIVE
@@ -192,45 +192,45 @@ The price step also adds a compact trigger note, e.g. `[triggers: #1 percent]`, 
 flowchart LR
     subgraph ingest [1 Ingest]
         direction TB
-        WL[S&P 500 watchlist] --> RUN[Scan today or rebuild]
-        RUN --> FOCUS[Focus session today or last completed]
-        FOCUS --> PX[Yahoo daily bars]
-        FOCUS --> NW[Near-term headlines]
-        PX --> BARS[(daily_bars)]
-        NW --> SCORE[FinBERT 0 to 100]
-        SCORE --> NEWS[(headlines)]
+        WL["S&P 500 watchlist<br/>(focus-set table)"] --> RUN["Scan today or rebuild<br/>(on-demand job)"]
+        RUN --> FOCUS["Focus session<br/>(today or last completed)"]
+        FOCUS --> PX["Yahoo daily bars<br/>(market data API)"]
+        FOCUS --> NW["Near-term headlines<br/>(news API pull)"]
+        PX --> BARS[("daily_bars<br/>(Postgres table)")]
+        NW --> SCORE["FinBERT 0 to 100<br/>(local NLP scorer)"]
+        SCORE --> NEWS[("headlines<br/>(Postgres table)")]
     end
 
     subgraph gates [2 Price and news gates]
         direction TB
-        BARS --> PCT[Percent rule]
-        BARS --> IF[Isolation Forest]
-        PCT --> PA[Price alert]
+        BARS --> PCT["Percent rule<br/>(price threshold gate)"]
+        BARS --> IF["Isolation Forest<br/>(anomaly model gate)"]
+        PCT --> PA["Price alert<br/>(draft row)"]
         IF --> PA
-        NEWS --> NA[FinBERT threshold]
-        NA --> NEWSALERT[News alert]
+        NEWS --> NA["FinBERT threshold<br/>(sentiment gate)"]
+        NA --> NEWSALERT["News alert<br/>(draft row)"]
     end
 
     subgraph join [3 Slice join]
         direction TB
         PA --> ONE{Headline explains slice?}
         NEWSALERT --> ONE
-        ONE -->|both| FA[News plus price]
-        ONE -->|price only| PA2[Price-led]
-        ONE -->|news only| NA2[News-led]
+        ONE -->|both| FA["News plus price<br/>(aligned alert)"]
+        ONE -->|price only| PA2["Price-led<br/>(news did not explain)"]
+        ONE -->|news only| NA2["News-led<br/>(price under gates)"]
     end
 
     subgraph out [4 Output]
         direction TB
-        FA --> RULE[Summary]
+        FA --> RULE["Summary<br/>(deterministic wording)"]
         PA2 --> RULE
         NA2 --> RULE
         RULE --> KEY{Perplexity key?}
-        KEY -->|yes news kinds| PPLX[Perplexity]
-        KEY -->|no or fail| ALERTS[(alerts)]
+        KEY -->|yes news kinds| PPLX["Perplexity<br/>(LLM wording API)"]
+        KEY -->|no or fail| ALERTS[("alerts<br/>(Postgres table)")]
         PPLX --> ALERTS
-        ALERTS --> UI[Watchlist results History Details]
-        UI --> NOTE[Desktop notification and tab badge]
+        ALERTS --> UI["Watchlist / History / Details<br/>(dashboard UI)"]
+        UI --> NOTE["Desktop notification<br/>(browser / OS popup)"]
     end
 ```
 
@@ -244,52 +244,52 @@ Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Ka
 flowchart LR
     subgraph feed [1 Feed]
         direction TB
-        ALP[Alpaca delayed_sip] --> PROD[stream_ingest]
-        PROD --> TOPIC[(Kafka prices.raw.bars)]
+        ALP["Alpaca delayed_sip<br/>(broker market feed)"] --> PROD["stream_ingest<br/>(Kafka producer)"]
+        PROD --> TOPIC[("Minute bars topic<br/>(Docker Kafka)")]
     end
 
     subgraph score [2 Live scorer]
         direction TB
-        TOPIC --> LIVE[python -m app.live]
+        TOPIC --> LIVE["Live consumer app.live<br/>(Flink-role stream processor)"]
         LIVE --> UNI{S&P 500 universe?}
-        REG[Lake Isolation Forest registry] --> LIVE
-        UNI -->|yes| BOOK[Session open latest volume]
+        REG["Isolation Forest registry<br/>(trained model on disk)"] --> LIVE
+        UNI -->|yes| BOOK["Session book<br/>(open / last / volume state)"]
         BOOK --> RULE2{Percent gate}
-        BOOK --> FOREST[Forest cutoff]
+        BOOK --> FOREST{Forest cutoff}
     end
 
     subgraph join [3 Headline grade]
         direction TB
-        RULE2 -->|clears| NEWSU[Same-day headline grade]
+        RULE2 -->|clears| NEWSU["Same-day headline grade<br/>(Yahoo pull + FinBERT)"]
         FOREST -->|anomalous| NEWSU
-        NEWSU --> PG[(Postgres alerts origin live)]
-        FOREST --> FEAT[(live_feature_rows)]
+        NEWSU --> PG[("Alerts origin=live<br/>(Postgres database)")]
+        FOREST --> FEAT[("Session feature rows<br/>(Postgres table)")]
     end
 
     subgraph ui [4 Home]
         direction TB
-        LIVE --> BEAT[Heartbeat]
-        BEAT --> API[GET /v1/live/status]
-        PG --> UI2[Home Recent]
+        LIVE --> BEAT["Heartbeat<br/>(liveness stamp)"]
+        BEAT --> API["GET /v1/live/status<br/>(HTTP status API)"]
+        PG --> UI2["Home Recent<br/>(live alert feed UI)"]
         API --> UI2
-        UI2 --> NOTE2[Desktop notification and tab badge]
+        UI2 --> NOTE2["Desktop notification<br/>(browser / OS popup)"]
     end
 ```
 
 ```mermaid
 sequenceDiagram
-    participant Alpaca
-    participant Producer as stream_ingest
-    participant Kafka
-    participant Live as app.live
-    participant PG as Postgres
-    participant UI as Home
+    participant Alpaca as Alpaca (broker feed)
+    participant Producer as stream_ingest (Kafka producer)
+    participant Kafka as Kafka (minute-bar topic)
+    participant Live as app.live (Flink-role scorer)
+    participant PG as Postgres (alerts DB)
+    participant UI as Home (dashboard UI)
 
     Alpaca->>Producer: Minute bar delayed_sip
-    Producer->>Kafka: prices.raw.bars
+    Producer->>Kafka: Publish prices.raw.bars
     Live->>Kafka: Consume bar
-    Live->>Live: Session vector + forest score
-    Live->>PG: live_feature_rows + heartbeat
+    Live->>Live: Build session vector + forest score
+    Live->>PG: Write live_feature_rows + heartbeat
     alt Percent or forest trips
         Live->>PG: Upsert price alert then headline grade
         UI->>PG: Poll alerts / live status
@@ -307,29 +307,29 @@ S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in
 flowchart LR
     subgraph trigger [1 Trigger]
         direction TB
-        BOOT[API boot empty lake] --> LAND[Land full ~1 year]
-        SCHED[Daily auto schedule] --> CHECK[Latest dt vs last completed session]
-        CHECK -->|behind| MER[Refresh missing days]
-        CHECK -->|already current| SKIP[Skip Yahoo and retrain]
+        BOOT["API boot empty lake<br/>(first-run check)"] --> LAND["Land full ~1 year<br/>(full replace ingest)"]
+        SCHED["Daily auto schedule<br/>(background timer)"] --> CHECK["Latest dt vs last completed session<br/>(freshness check)"]
+        CHECK -->|behind| MER["Refresh missing days<br/>(incremental merge)"]
+        CHECK -->|already current| SKIP["Skip Yahoo and retrain<br/>(no-op)"]
     end
 
     subgraph land [2 Lake]
         direction TB
-        SP[S&P 500 list] --> YF[Yahoo daily OHLCV]
+        SP["S&P 500 list<br/>(universe file)"] --> YF["Yahoo daily OHLCV<br/>(market data API)"]
         YF --> LAND
         YF --> MER
-        LAND --> RAW[(data/lake/raw/prices/daily)]
+        LAND --> RAW[("Raw daily prices<br/>(data lake: data/lake/raw/prices/daily)")]
         MER -->|union by dt keep newest| RAW
-        LAND --> MAN[raw/_runs manifest]
+        LAND --> MAN["Run manifest<br/>(ingest audit log)"]
         MER --> MAN
     end
 
     subgraph train [3 Train]
         direction TB
-        RAW --> TRAIN[batch_train curate + fit]
+        RAW --> TRAIN["batch_train curate + fit<br/>(Spark-role trainer)"]
         LAND --> TRAIN
         MER -->|new rows only| TRAIN
-        TRAIN --> REG[(registry/isolation_forest/current)]
+        TRAIN --> REG[("Model registry<br/>(data/lake/registry/isolation_forest/current)")]
     end
 ```
 
@@ -339,58 +339,58 @@ Local Spark-**role** job [`batch_train`](../batch_train/): pandas ELT + scikit-l
 
 ```mermaid
 flowchart LR
-    RAW[(data/lake/raw/prices/daily)] --> CURATE[batch_train curate]
-    CURATE --> FEAT[(curated/features/session)]
-    FEAT --> TRAIN[Fit Isolation Forest + cutoff]
-    TRAIN --> REG[(registry/isolation_forest/current)]
-    REG --> LIVE[python -m app.live]
-    REG --> SCAN[Watchlist Scan today]
+    RAW[("Raw daily prices<br/>(data lake: data/lake/raw/prices/daily)")] --> CURATE["Curate session features<br/>(batch_train / Spark-role ELT)"]
+    CURATE --> FEAT[("Session feature table<br/>(curated Parquet)")]
+    FEAT --> TRAIN["Fit Isolation Forest + cutoff<br/>(scikit-learn trainer)"]
+    TRAIN --> REG[("Model registry<br/>(data/lake/registry/isolation_forest/current)")]
+    REG --> LIVE["Live consumer app.live<br/>(Flink-role stream processor)"]
+    REG --> SCAN["Watchlist Scan today<br/>(on-demand session check)"]
 ```
 
 ## High-level lambda architecture
 
-Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. Everything stays on the local machine. No historical news lake. No AWS requirement.
+This is the classic **lambda architecture pattern** (batch layer + speed/stream layer → serving), **not** AWS Lambda. Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. Everything stays on the local machine. No historical news lake. No AWS requirement.
 
 ```mermaid
 flowchart LR
     subgraph batch [Batch path]
         direction TB
-        HIST_PX[Historical daily OHLCV] --> BATCH[batch_ingest]
-        BATCH --> RAW[(lake raw)]
-        RAW --> TRAIN_JOB[batch_train Spark role]
-        TRAIN_JOB --> CURATED[(curated features)]
-        CURATED --> REG[(registry)]
+        HIST_PX["Historical daily OHLCV<br/>(Yahoo market data)"] --> BATCH["batch_ingest<br/>(lake land / refresh job)"]
+        BATCH --> RAW[("Raw price lake<br/>(local data lake)")]
+        RAW --> TRAIN_JOB["batch_train<br/>(Spark-role trainer)"]
+        TRAIN_JOB --> CURATED[("Curated features<br/>(Parquet feature store)")]
+        CURATED --> REG[("Model registry<br/>(Isolation Forest on disk)")]
     end
 
-    subgraph live [Live path]
+    subgraph live [Live / speed path]
         direction TB
-        BARS_LIVE[S&P minute bars] --> KAFKA[(Docker Kafka)]
-        KAFKA --> LIVE_SCORE[Live scorer Flink role]
+        BARS_LIVE["S&P minute bars<br/>(Alpaca feed)"] --> KAFKA[("Minute-bar bus<br/>(Docker Kafka)")]
+        KAFKA --> LIVE_SCORE["Live scorer<br/>(Flink-role processor)"]
         REG --> LIVE_SCORE
-        LIVE_SCORE --> TS[(live_feature_rows)]
-        LIVE_SCORE --> ANOM[Isolation Forest]
-        LIVE_NEWS[Near-term headlines] --> SENT[FinBERT]
-        ANOM --> CORR[Slice correlation]
+        LIVE_SCORE --> TS[("Session feature rows<br/>(Postgres table)")]
+        LIVE_SCORE --> ANOM["Isolation Forest<br/>(anomaly gate)"]
+        LIVE_NEWS["Near-term headlines<br/>(Yahoo pull)"] --> SENT["FinBERT<br/>(local NLP scorer)"]
+        ANOM --> CORR["Slice correlation<br/>(price↔news join)"]
         SENT --> CORR
-        CORR --> ALERTS[(Postgres alerts)]
+        CORR --> ALERTS[("Alerts table<br/>(Postgres database)")]
     end
 
     subgraph watch [Watchlist path]
         direction TB
-        FOCUS[Focus set] --> RUNCHK[Watchlist Scan today percent or forest]
-        DAY[Yahoo daily bars] --> RUNCHK
+        FOCUS["Focus set<br/>(watchlist table)"] --> RUNCHK["Scan today<br/>(percent or forest check)"]
+        DAY["Yahoo daily bars<br/>(market data API)"] --> RUNCHK
         REG --> RUNCHK
-        RUNCHK --> SENT2[FinBERT + slice grade]
+        RUNCHK --> SENT2["FinBERT + slice grade<br/>(headline check)"]
         SENT2 --> ALERTS
     end
 
     subgraph serve [Serving]
         direction TB
-        ALERTS --> PPLX[Perplexity news kinds]
-        ALERTS --> HOME[Home Recent]
-        ALERTS --> WATCHUI[Watchlist results]
-        ALERTS --> HIST[History Origin]
-        HOME --> NOTE[Desktop notification and tab badge]
+        ALERTS --> PPLX["Perplexity<br/>(LLM wording API)"]
+        ALERTS --> HOME["Home Recent<br/>(live feed UI)"]
+        ALERTS --> WATCHUI["Watchlist results<br/>(session review UI)"]
+        ALERTS --> HIST["History Origin<br/>(full list UI)"]
+        HOME --> NOTE["Desktop notification<br/>(browser / OS popup)"]
         WATCHUI --> NOTE
     end
 ```
@@ -403,26 +403,26 @@ Land raw **prices**, build price/volume features, fit the forest. FinBERT is not
 flowchart LR
     subgraph land [1 Land]
         direction TB
-        HP[Historical S&P daily bars] --> ELP[batch_ingest land raw]
-        ELP --> RAW[(data/lake raw zone)]
-        RAW --> VAL[Schema check and dedup]
+        HP["Historical S&P daily bars<br/>(Yahoo market data)"] --> ELP["batch_ingest land raw<br/>(lake land job)"]
+        ELP --> RAW[("Raw price zone<br/>(data lake on disk)")]
+        RAW --> VAL["Schema check and dedup<br/>(quality step)"]
     end
 
     subgraph el [2 ELT + train]
         direction TB
-        VAL --> SPARK_ROLE[batch_train Spark role]
-        SPARK_ROLE --> FEAT[Features: gap session close volume z]
-        FEAT --> CUR[(Curated Parquet)]
-        CUR --> TRAIN[Fit Isolation Forest and pick the cutoff]
-        TRAIN --> REG[(data/lake registry)]
+        VAL --> SPARK_ROLE["batch_train<br/>(Spark-role ELT + train)"]
+        SPARK_ROLE --> FEAT["Features: gap / session / close / volume z<br/>(feature engineering)"]
+        FEAT --> CUR[("Curated Parquet<br/>(feature store)")]
+        CUR --> TRAIN["Fit Isolation Forest and pick the cutoff<br/>(scikit-learn trainer)"]
+        TRAIN --> REG[("Model registry<br/>(data lake model store)")]
     end
 
     subgraph use [3 Use]
         direction TB
-        REG --> LIVE[Live scorer loads the same model]
-        REG --> SCAN[Watchlist Scan today]
-        CUR --> PG[(Postgres alert tables)]
-        PG --> UI[Alert History dashboard]
+        REG --> LIVE["Live scorer loads the same model<br/>(Flink-role processor)"]
+        REG --> SCAN["Watchlist Scan today<br/>(on-demand session check)"]
+        CUR --> PG[("Alert tables<br/>(Postgres database)")]
+        PG --> UI["Alert History dashboard<br/>(web UI)"]
     end
 ```
 
@@ -434,33 +434,33 @@ Minute bars are scored by the registered forest. **Product join is price-first o
 flowchart LR
     subgraph ingest [1 Ingest]
         direction TB
-        MKT[S&P minute bars] --> KT[(Docker Kafka raw bars)]
-        KT --> SCORE[Live scorer session + volume z]
-        SCORE --> FEATSTORE[(live_feature_rows)]
+        MKT["S&P minute bars<br/>(Alpaca feed)"] --> KT[("Raw bars topic<br/>(Docker Kafka)")]
+        KT --> SCORE["Live scorer<br/>(Flink-role: session + volume z)"]
+        SCORE --> FEATSTORE[("Session feature rows<br/>(Postgres table)")]
     end
 
     subgraph gate [2 Price gate]
         direction TB
         SCORE --> GATE{Percent or forest}
-        GATE -->|trips| PRICE[Upsert price row]
+        GATE -->|trips| PRICE["Upsert price row<br/>(Postgres write)"]
     end
 
     subgraph news [3 Headline grade]
         direction TB
-        PRICE --> NEWSLOOK[Fetch near-term headlines for symbol]
-        NEWSLOOK --> FINBERT[FinBERT 0 to 100]
+        PRICE --> NEWSLOOK["Fetch near-term headlines<br/>(Yahoo news pull)"]
+        NEWSLOOK --> FINBERT["FinBERT 0 to 100<br/>(local NLP scorer)"]
         FINBERT --> SLICE{Explains session?}
-        SLICE -->|supports| UPGRADE[Upgrade to news or news_price]
-        SLICE -->|no| KEEP[Keep price-only with grade]
+        SLICE -->|supports| UPGRADE["Upgrade to news or news_price<br/>(alert kind change)"]
+        SLICE -->|no| KEEP["Keep price-only with grade<br/>(evidence outcome)"]
     end
 
     subgraph out [4 Serve]
         direction TB
-        UPGRADE --> PG[(Postgres alerts)]
+        UPGRADE --> PG[("Alerts table<br/>(Postgres database)")]
         KEEP --> PG
-        PG --> PPLX[Perplexity news kinds]
-        PG --> DASH[Trader alert dashboard]
-        PG --> NOTIFY[Desktop notification and tab badge]
+        PG --> PPLX["Perplexity news kinds<br/>(LLM wording API)"]
+        PG --> DASH["Trader alert dashboard<br/>(web UI)"]
+        PG --> NOTIFY["Desktop notification<br/>(browser / OS popup)"]
     end
 ```
 
@@ -470,15 +470,15 @@ Price-only and news-only are allowed. The happy path below is **price noticed �
 
 ```mermaid
 sequenceDiagram
-    participant Market as Minute bars
-    participant Kafka
-    participant Scorer as Live scorer
-    participant Registry as Model registry
-    participant News as Near-term headlines
-    participant FinBERT
-    participant PG as Postgres
-    participant Pplx as Perplexity
-    participant Trader
+    participant Market as Minute bars (Alpaca feed)
+    participant Kafka as Kafka (bar topic)
+    participant Scorer as Live scorer (app.live / Flink role)
+    participant Registry as Model registry (disk)
+    participant News as Near-term headlines (Yahoo)
+    participant FinBERT as FinBERT (local NLP)
+    participant PG as Postgres (alerts DB)
+    participant Pplx as Perplexity (LLM API)
+    participant Trader as Trader (dashboard UI)
 
     Market->>Kafka: Stream minute bar
     Kafka->>Scorer: Consume bar batch
