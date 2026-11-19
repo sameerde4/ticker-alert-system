@@ -361,8 +361,8 @@
     .alert-metric {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 4px;
+      align-items: stretch;
+      gap: 6px;
       min-width: 8.5rem;
       padding: 10px 14px;
       border: 1px solid var(--line);
@@ -377,6 +377,19 @@
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--muted);
+      text-align: center;
+    }
+    /* Shared metric typography (Price + Sentiment, 4 lines each):
+       1 label 11px muted · 2 value 1.55rem tone · 3 detail 12px · 4 caption 9px */
+    .alert-metric-body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 0 4px 2px;
+    }
+    .alert-metric-body .alert-metric-detail {
+      margin-left: 0;
     }
     .alert-metric-value {
       font-family: ui-sans-serif, system-ui, sans-serif;
@@ -390,8 +403,64 @@
     .alert-metric-value.up { color: var(--up); }
     .alert-metric-value.down { color: var(--down); }
     .alert-metric-value.mixed { color: var(--gold); }
+    .alert-metric-detail {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 1px;
+      margin-left: auto;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.3;
+      color: var(--muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .alert-metric-detail.is-stacked {
+      align-items: center;
+      margin-left: 0;
+      text-align: center;
+      gap: 2px;
+      font-size: 12px;
+    }
+    .alert-metric-detail .up { color: var(--up); }
+    .alert-metric-detail .down { color: var(--down); }
+    .alert-metric-detail .mixed { color: var(--gold); }
+    .alert-metric-levels,
+    .alert-metric-lead {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.3;
+      font-variant-numeric: tabular-nums;
+    }
+    .alert-metric-levels {
+      color: var(--text);
+    }
+    .alert-metric-span {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.9;
+      line-height: 1.3;
+    }
+    .alert-metric-span .up,
+    .alert-metric-span .down,
+    .alert-metric-span .mixed {
+      font-size: inherit;
+    }
     .rule-note { color: var(--muted); font-size: 13px; margin: 4px 0 10px; line-height: 1.4; }
     .summary { margin: 8px 0; line-height: 1.45; }
+    .summary a {
+      color: var(--gold);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      word-break: break-word;
+    }
+    .summary a:hover { color: #f0d78c; }
     .evidence-outcome {
       display: flex;
       flex-wrap: wrap;
@@ -1068,7 +1137,7 @@
       </section>
       <section class="card">
         <h2>Historical prices (lake)</h2>
-        <p class="hint">The lake under <code>data/lake/raw/prices/daily/</code> trains Isolation Forest. On first launch the app lands about one year of S&amp;P prices and trains automatically; it also refreshes and retrains on a daily schedule. The buttons below are manual overrides. <strong>Land</strong> replaces the lake. <strong>Refresh</strong> checks each symbol’s latest lake date first — if everything is already current it skips Yahoo and retrain; otherwise it only pulls what’s missing (lookback capped at ~2 weeks) and then retrains. Neither job changes saved alerts.</p>
+        <p class="hint">The lake under <code>data/lake/raw/prices/daily/</code> trains Isolation Forest. On first launch the app lands about one year of S&amp;P prices and trains automatically; it also refreshes and retrains on a daily schedule. The buttons below are manual overrides. <strong>Land</strong> replaces the lake. <strong>Refresh</strong> checks each symbol’s latest lake date against the <em>last completed</em> session (before 4:00&nbsp;PM Eastern that is still yesterday; after the close it is today). If everything is already through that session it skips Yahoo and retrain — live Kafka minute bars do <em>not</em> write the lake. Otherwise it only pulls what’s missing (lookback capped at ~2 weeks) and then retrains. Neither job changes saved alerts.</p>
         <form id="lake-form" class="settings-form">
           <div class="settings-actions">
             <button type="submit" id="landLake">Land S&amp;P 500 prices</button>
@@ -1683,6 +1752,79 @@
       }).format(date);
     }
 
+    function normalizeCitationUrl(url) {
+      let text = String(url || "").trim();
+      while (/[.,;:!?)\]}>'"”]$/.test(text)) text = text.slice(0, -1);
+      try {
+        const parsed = new URL(text);
+        parsed.hash = "";
+        let path = parsed.pathname.replace(/\/+$/, "");
+        return (parsed.protocol + "//" + parsed.host + path + parsed.search).toLowerCase();
+      } catch (_err) {
+        return text.toLowerCase();
+      }
+    }
+
+    function articleByCitationUrl(articles) {
+      const map = new Map();
+      for (const article of articles || []) {
+        const url = String(article && article.url || "").trim();
+        const title = String(article && article.title || "").trim();
+        if (!url || !title) continue;
+        map.set(normalizeCitationUrl(url), { title, url });
+      }
+      return map;
+    }
+
+    function makeSummaryLink(title, url) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = title;
+      return link;
+    }
+
+    function appendLinkedSummary(parent, text, articles) {
+      // Render [title](url) and bare article URLs as clickable headline links.
+      // Also collapses “Title” from Source: URL into one linked title (retroactive).
+      const byUrl = articleByCitationUrl(articles);
+      const source = String(text || "");
+      const tokenRe = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<>"')\]]+)/g;
+      let cursor = 0;
+      let match;
+      while ((match = tokenRe.exec(source)) !== null) {
+        let before = source.slice(cursor, match.index);
+        let title = "";
+        let href = "";
+        if (match[1] && match[2]) {
+          title = match[1];
+          href = match[2];
+        } else {
+          href = match[3];
+          while (/[.,;:!?)\]}>'"”]$/.test(href)) href = href.slice(0, -1);
+          const hit = byUrl.get(normalizeCitationUrl(href));
+          title = hit ? hit.title : href;
+          if (hit) href = hit.url;
+        }
+        const hit = byUrl.get(normalizeCitationUrl(href));
+        if (hit) {
+          title = hit.title;
+          href = hit.url;
+          const quote = "[“\"']" + title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "[”\"']";
+          const redundant = new RegExp(
+            quote + "\\s*(?:from\\s+[^:\\[]{1,40}:\\s*)?$",
+            "i",
+          );
+          before = before.replace(redundant, "");
+        }
+        if (before) parent.append(document.createTextNode(before));
+        parent.append(makeSummaryLink(title, href));
+        cursor = match.index + match[0].length;
+      }
+      if (cursor < source.length) parent.append(document.createTextNode(source.slice(cursor)));
+    }
+
     function addSection(card, title, body, note) {
       if (!body) return;
       const heading = document.createElement("h3");
@@ -1753,7 +1895,77 @@
       return sign + number.toFixed(2) + "%";
     }
 
-    function metricBlock(label, value, tone) {
+    function formatMoney(value) {
+      const number = Number(value);
+      if (value == null || Number.isNaN(number)) return null;
+      return "$" + number.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    }
+
+    function priceSpanCaption(alert) {
+      const sections = alert.sections || {};
+      if (typeof sections.price_span === "string" && sections.price_span.trim()) {
+        return sections.price_span.trim();
+      }
+      const text = [sections.price, sections.synthesis, alert.summary]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!text) return "";
+      if (text.includes("overnight gap") || text.includes("prior close to the open")) {
+        return "prior close → open";
+      }
+      if (text.includes("four hours after") || text.includes("after the headline")) {
+        return "headline → +4h";
+      }
+      if (text.includes("24 hours")) return "24h ago → now";
+      if (
+        text.includes("regular session so far")
+        || text.includes("open to the latest")
+        || text.includes("open→last")
+        || text.includes("from the open of")
+        || text.includes("from the open while")
+      ) {
+        return "open → last";
+      }
+      if (
+        text.includes("from the open to the 4:00")
+        || text.includes("regular session, from the open")
+      ) {
+        return "open → close";
+      }
+      if (text.includes("prior close") || text.includes("close versus")) {
+        return "prior close → close";
+      }
+      return "";
+    }
+
+    function priceBreakdownDetail(alert) {
+      const from = formatMoney(alert.prior_close);
+      const to = formatMoney(alert.latest_close);
+      const caption = priceSpanCaption(alert);
+      if (!from && !to && !caption) return null;
+      const detail = document.createElement("div");
+      detail.className = "alert-metric-detail is-stacked";
+      detail.title = "Prices used for the percent change, and which part of the day they cover";
+      if (from && to) {
+        const levels = document.createElement("span");
+        levels.className = "alert-metric-levels";
+        levels.textContent = from + " → " + to;
+        detail.append(levels);
+      }
+      if (caption) {
+        const span = document.createElement("span");
+        span.className = "alert-metric-span";
+        span.textContent = caption;
+        detail.append(span);
+      }
+      return detail;
+    }
+
+    function metricBlock(label, value, tone, detail, layout) {
       const block = document.createElement("div");
       block.className = "alert-metric";
       const caption = document.createElement("span");
@@ -1762,8 +1974,78 @@
       const figure = document.createElement("span");
       figure.className = "alert-metric-value " + (tone || "mixed");
       figure.textContent = value;
-      block.append(caption, figure);
+      block.append(caption);
+      if (detail && layout !== "below") {
+        const body = document.createElement("div");
+        body.className = "alert-metric-body";
+        body.append(figure, detail);
+        block.append(body);
+      } else {
+        block.append(figure);
+        if (detail) block.append(detail);
+      }
       return block;
+    }
+
+    function articleSentimentBucket(article) {
+      const pos = Number(article && article.positive_pct);
+      const neg = Number(article && article.negative_pct);
+      const neu = Number(article && article.neutral_pct);
+      if ([pos, neg, neu].every((value) => !Number.isNaN(value))) {
+        if (pos >= neg && pos >= neu) return "positive";
+        if (neg >= pos && neg >= neu) return "negative";
+        return "neutral";
+      }
+      const score = Number(article && article.sentiment_score);
+      if (Number.isNaN(score)) return "neutral";
+      if (score > 50) return "positive";
+      if (score < 50) return "negative";
+      return "neutral";
+    }
+
+    function countArticleSentiments(articles) {
+      const counts = { positive: 0, negative: 0, neutral: 0 };
+      for (const article of articles || []) {
+        counts[articleSentimentBucket(article)] += 1;
+      }
+      return counts;
+    }
+
+    function sentimentBreakdownDetail(alert) {
+      const articles = alert.articles || [];
+      if (!articles.length) return null;
+      const counts = countArticleSentiments(articles);
+      const parts = [
+        { label: "positive", count: counts.positive, tone: "up" },
+        { label: "negative", count: counts.negative, tone: "down" },
+        { label: "neutral", count: counts.neutral, tone: "mixed" },
+      ];
+      // Lead with the largest bucket; put the other two on one line so the tile
+      // stays about as tall as Price change (levels + caption).
+      let leadIndex = 0;
+      for (let i = 1; i < parts.length; i += 1) {
+        if (parts[i].count > parts[leadIndex].count) leadIndex = i;
+      }
+      const lead = parts[leadIndex];
+      const rest = parts.filter((_, index) => index !== leadIndex);
+      const detail = document.createElement("div");
+      detail.className = "alert-metric-detail is-stacked";
+      detail.title = "Headlines counted by FinBERT winning class (positive / negative / neutral)";
+      const top = document.createElement("span");
+      top.className = "alert-metric-lead " + lead.tone;
+      top.textContent = lead.count + " " + lead.label;
+      detail.append(top);
+      const bottom = document.createElement("span");
+      bottom.className = "alert-metric-span";
+      rest.forEach((part, index) => {
+        if (index) bottom.append(document.createTextNode(" · "));
+        const bit = document.createElement("span");
+        bit.className = part.tone;
+        bit.textContent = part.count + " " + part.label;
+        bottom.append(bit);
+      });
+      detail.append(bottom);
+      return detail;
     }
 
     function alertMetrics(alert) {
@@ -1771,13 +2053,21 @@
       row.className = "alert-metrics";
       // News-led: sentiment only at the top. Price-led / aligned: price + sentiment when present.
       if (alert.kind !== "news" && alert.price_change_pct != null) {
-        row.append(metricBlock("Price change", formatMove(alert.price_change_pct), priceClass(alert.price_change_pct)));
+        row.append(metricBlock(
+          "Price change",
+          formatMove(alert.price_change_pct),
+          priceClass(alert.price_change_pct),
+          priceBreakdownDetail(alert),
+          "below",
+        ));
       }
       if (alert.sentiment_score != null) {
         row.append(metricBlock(
           "Sentiment score",
           formatScore(alert.sentiment_score),
           scoreClass(alert.sentiment_score),
+          sentimentBreakdownDetail(alert),
+          "below",
         ));
       }
       return row.childElementCount ? row : null;
@@ -1935,7 +2225,7 @@
         if (!text) return false;
         const p = document.createElement("p");
         p.className = "summary";
-        p.textContent = text;
+        appendLinkedSummary(p, text, alert.articles || []);
         const note = togetherModel(sections);
         if (note) {
           const line = document.createElement("span");
@@ -3158,16 +3448,17 @@
         if (status.job === "bootstrap") bits.push("first land + train");
         else if (status.job === "refresh") bits.push("refresh + retrain");
         else if (status.job) bits.push("full land");
+        if (status.session_target) bits.push("through " + status.session_target);
         if (status.symbols_landed != null) bits.push(status.symbols_landed + " symbols");
         if (status.rows_landed != null) bits.push(status.rows_landed + " rows");
         if (status.train && status.train.model_id) bits.push("model " + status.train.model_id);
-        if (status.finished_at) bits.push("finished " + status.finished_at);
+        if (status.finished_at) bits.push("finished " + formatWhen(status.finished_at));
         detail.textContent = bits.join(" · ");
         return;
       }
       if (status.ok === false) {
         setLakeStatus(status.message || "Lake job failed.", true);
-        detail.textContent = status.finished_at ? ("Finished " + status.finished_at) : "";
+        detail.textContent = status.finished_at ? ("Finished " + formatWhen(status.finished_at)) : "";
         return;
       }
       setLakeStatus("");

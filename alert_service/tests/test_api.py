@@ -31,6 +31,8 @@ def test_health_and_ui_without_a_database():
     assert "/v1/admin/lake/land" in page.text
     assert "/v1/admin/lake/refresh" in page.text
     assert "Refresh lake + retrain" in page.text
+    assert "formatWhen(status.finished_at)" in page.text
+    assert "last completed" in page.text
     assert 'id="refreshLake"' in page.text
     assert "function rankSymbolUniverseMatches" in page.text
     assert "tickerAlertLastClosedAt" in page.text
@@ -109,6 +111,12 @@ def test_health_and_ui_without_a_database():
     assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"]' in page.text
     assert 'label: "Price change"' in page.text
     assert 'label: "Sentiment score"' in page.text
+    assert "function countArticleSentiments" in page.text
+    assert "function sentimentBreakdownDetail" in page.text
+    assert "function priceBreakdownDetail" in page.text
+    assert "function priceSpanCaption" in page.text
+    assert "alert-metric-detail" in page.text
+    assert "alert-metric-span" in page.text
     assert 'label: "Company"' in page.text
     assert 'label: "Sector"' not in page.text
     assert 'label: "Type"' in page.text
@@ -191,6 +199,12 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "function showSavedKey" in page.text
     assert "function togetherModel" in page.text
     assert "sections.model_label" in page.text
+    assert "function appendLinkedSummary" in page.text
+    assert "function normalizeCitationUrl" in page.text
+    assert "function priceBreakdownDetail" in page.text
+    assert "alert-metric-levels" in page.text
+    assert "alert-metric-lead" in page.text
+    assert 'layout !== "below"' in page.text or 'layout !== \'below\'' in page.text
     assert "width: 22ch" in page.text
     assert "width: 36ch" in page.text
     assert "wrote Together." not in page.text
