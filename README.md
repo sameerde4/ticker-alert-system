@@ -26,6 +26,7 @@ The class architecture is a **local** batch lake and live stream: Docker Kafka, 
 
 | Path | Purpose |
 |---|---|
+| [`dev.sh`](dev.sh) | One-command start / restart / stop for the local stack |
 | [`alert_service/`](alert_service/) | FastAPI app, single-page UI, tests, Kafka live price consumer (`python -m app.live`) |
 | [`stream_ingest/`](stream_ingest/) | Alpaca delayed SIP → Kafka minute-bar producer (S&P 500) |
 | [`batch_ingest/`](batch_ingest/) | Yahoo daily history → lake Parquet under `data/lake/raw/` |
@@ -64,13 +65,29 @@ The files are `001_init.sql` through `014_live_feature_rows.sql`. They create th
 
 ## Run
 
+One command from the repo root starts Docker Kafka, the Alpaca producer, the live consumer, and the API/UI:
+
+```bash
+./dev.sh start
+```
+
+Open **http://127.0.0.1:8010/ui**. After backend edits, restart only the API (Kafka, producer, and live stay up):
+
+```bash
+./dev.sh restart
+```
+
+Useful extras: `./dev.sh status`, `./dev.sh logs`, `./dev.sh restart-live`, `./dev.sh stop`, `./dev.sh down`. Override producer tickers with `DEV_SYMBOLS=AAPL,MSFT,NVDA ./dev.sh start`.
+
+Manual equivalent (three terminals) if you prefer not to use the script:
+
 ```bash
 cd alert_service
 source .venv/bin/activate
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-Open **http://127.0.0.1:8010/ui**. Add an S&P 500 ticker, then **Run check**. The watchlist is the **focus set** for Run check, rebuild, and live price alerts. The product universe is the full index (lake land, symbol search); checks do not automatically run all 500 names.
+Add an S&P 500 ticker, then **Run check**. The watchlist is the **focus set** for Run check, rebuild, and live price alerts. The product universe is the full index (lake land, symbol search); checks do not automatically run all 500 names.
 
 On **Settings → Historical prices (lake)**, **Land S&P 500 prices** writes about one year of Yahoo daily bars for the index into `data/lake/raw/` (same job as `batch_ingest` on the CLI).
 

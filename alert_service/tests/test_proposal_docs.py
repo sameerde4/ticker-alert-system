@@ -174,6 +174,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Mac desktop notification" in readme
     assert "Enable desktop notifications" in readme
     assert "014_live_feature_rows.sql" in readme
+    assert "./dev.sh start" in readme
+    assert "./dev.sh restart" in readme
     assert "S&P 500" in readme
     assert "S&P 500 Alert System" in readme
     assert "focus set" in readme
