@@ -22,57 +22,53 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
         "FinBERT",
         "Perplexity",
         "three to four short sentences",
-        "deterministic sentence",
-        "news-only and price-only",
         "volume z-score",
         "S&P 500",
-        "| Cassandra | Drop |",
-        "| Historical news archive | Drop |",
-        "| FinBERT aggregates in training rows | Drop |",
-        "| News archive | Drop |",
+        "S&P 500 Radar",
+        "planned → landed",
+        "Major decisions (planned vs landed)",
     ):
         assert phrase in audit
-    assert "Fit Isolation Forest" in audit
-    assert "Fine-tuning needs labels this project does not have" in audit
-    assert "The model never decides whether the alert exists" in audit
+    assert "architecture.md" in audit
+    assert "AWS" in audit and "Local" in audit
+    assert "Pull-after-price" in audit or "pull-after-price" in audit.lower()
+    assert "Cassandra" in audit and "Drop" in audit
+    assert "Historical news archive" in audit or "news lake" in audit.lower()
+    assert "FinBERT fine-tune" in audit or "Fine-tuning needs labels" in audit
+    assert "VWAP" in audit and "Drop" in audit
+    assert "Model never decides" in audit or "never decides whether the alert exists" in audit.lower()
     assert "Near-term news only" in audit
     assert "price/volume" in audit or "price and volume" in audit.lower()
-    assert "Historical headlines are not part of the design" in audit
-    assert "| Cassandra | Drop |" in audit
-    assert "VWAP is not a feature the forest uses" in audit
-    assert "stored headlines" not in audit
-    assert "Desktop (OS) notification and tab badge" in audit
-    assert "Desktop notification and tab badge" in audit
-    assert "desktop notifications and a tab badge" in audit
-    assert "Slack or email" not in audit
-    assert "Slack and email are not used" in audit
     assert "batch_train" in audit
-    assert "Local stand-in" in audit
-    assert "AWS production deploy is out of scope" in audit or "AWS production is not part of the final target" in audit
-    assert "as-built and local final target diagrams" in audit
-    assert "price first, then headline grade" in audit.lower() or "headline grade" in audit.lower()
-    assert "same-day headline" in audit.lower() or "grade how well the news explains" in audit.lower()
     assert "live_feature_rows" in audit
-    assert "Three to four sentences for news" in audit or "three to four short sentences" in audit
     assert "Live plus Watchlist" in audit
-    assert "Watchlist **as-built**" in audit or "Watchlist **as-built**:" in audit
     assert "training only" in audit.lower()
+    assert "no Kafka news topic" in audit.lower() or "Kafka news topic" in audit
     assert "Home Recent" in audit
     assert "Watchlist results" in audit
     assert "Screener" not in audit
     assert "/v1/screener/run" not in audit
     assert "Scan today" in audit
     assert "alerts.origin" in audit
+    assert "Slide 6" in audit and "Slide 7" in audit and "Slide 8" in audit and "Slide 9" in audit
+    assert "What we landed" in audit
+    assert "as-built" not in audit.lower() or "Watchlist **as-built**" not in audit
 
 
 def test_architecture_points_at_the_audit_and_names_the_target():
     architecture = _text(DOCS / "architecture.md")
-    assert "# S&P 500 Alert System architecture" in architecture
+    assert "# S&P 500 Radar architecture" in architecture
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in architecture
+    assert "How to read the diagrams below" in architecture
+    assert "Batch historical ELT" in architecture
+    assert "Streaming ETL" in architecture
+    assert "End-to-end alert sequence" in architecture
+    assert "High-level lambda architecture" in architecture
+    assert architecture.count("```mermaid") >= 10
     assert "Perplexity richer news / news+price reasoning" in architecture
     assert "focus set" in architecture
-    assert "As-built: Live and Watchlist side by side" in architecture
-    assert "As-built Watchlist Scan today" in architecture
+    assert "## Live and Watchlist side by side" in architecture
+    assert "## Watchlist Scan today" in architecture
     assert "Watchlist results" in architecture
     assert "Screener" not in architecture
     assert "Recent alerts" in architecture
@@ -82,17 +78,17 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "training lake" in architecture.lower() or "training only" in architecture.lower()
     assert "Spark-role curated feature table" in architecture
     assert "Live scorer Flink role" in architecture or "Flink role" in architecture
-    assert "Cassandra" in architecture and "Dropped" in architecture
-    assert "As-built: system overview" in architecture
-    assert "Local final target: high-level lambda architecture" in architecture
-    assert "Local final target: batch historical ELT" in architecture
-    assert "Local final target: streaming ETL" in architecture
-    assert "Local final target: end-to-end alert sequence" in architecture
+    assert "Cassandra" in architecture and "Out of scope" in architecture
+    assert "## System overview" in architecture
+    assert "## High-level lambda architecture" in architecture
+    assert "## Batch historical ELT" in architecture
+    assert "## Streaming ETL" in architecture
+    assert "## End-to-end alert sequence" in architecture
     assert "Local stand-ins (no AWS required)" in architecture
     assert "does **not** require an AWS production deploy" in architecture or "AWS production deploy" in architecture
-    assert "As-built live price stream" in architecture
-    assert "As-built batch lake land" in architecture
-    assert "As-built curated features and Isolation Forest" in architecture
+    assert "## Live price stream" in architecture
+    assert "## Batch lake land and refresh" in architecture
+    assert "## Curated features and Isolation Forest" in architecture
     assert "batch_train" in architecture
     assert "python -m app.live" in architecture
     assert "Live alerts on" in architecture
@@ -123,7 +119,6 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Auto first-boot lake land" in architecture
     assert "Loading historical prices" in architecture
     assert "Daily auto schedule" in architecture or "daily auto" in architecture.lower()
-    assert "As-built batch lake land and refresh" in architecture
     assert "Settings Refresh merge" in architecture or "Refresh merge" in architecture
     assert "union by dt keep newest" in architecture
     assert "Skip Yahoo and retrain" in architecture or "skips Yahoo + retrain" in architecture
@@ -134,15 +129,11 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Origin" in architecture and "Company" in architecture and "Type" in architecture
     assert "REG --> SCAN[Watchlist Scan today]" in architecture or "REG --> SCAN" in architecture
     assert "Watchlist Scan today percent or forest" in architecture
-    assert "Local final target (deferred)" in architecture or "deferred" in architecture.lower()
+    assert "finished local system" in architecture.lower() or "finished-system" in architecture.lower() or "finished** local" in architecture
+    assert "no separate Kafka news topic" in architecture or "Kafka news topic" in architecture
     assert "Richer forest-aware price-only wording" in architecture
-    forest_row = next(
-        line for line in architecture.splitlines() if "Richer forest-aware price-only wording" in line
-    )
-    assert "**As-built**" in forest_row
-    assert "Kafka" in next(
-        line for line in architecture.splitlines() if "Near-term news topic on Kafka" in line
-    )
+    assert "as-built" not in architecture.lower()
+    assert "local final" not in architecture.lower()
     assert "batches of eight" in architecture
     assert "model name under Together" in architecture
     assert "Fit Isolation Forest and pick the cutoff" in architecture
@@ -156,13 +147,12 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "not scored live yet" not in architecture
     assert "price noticed → headlines checked → grade how well the news explains the session" in architecture
     assert "Live price → same-day headline grade" in architecture
-    assert "Upgrade to news or news_price" in architecture or "upgrade to news or news_price" in architecture.lower()
-    assert "Fetch near-term headlines for symbol" in architecture or "fetches near-term Yahoo headlines" in architecture
+    assert "Upgrade to news or news_price" in architecture or "upgrade to news or news_price" in architecture.lower() or "news or news+price" in architecture
+    assert "Fetch near-term headlines for symbol" in architecture or "fetches near-term Yahoo headlines" in architecture or "fetches near-term headlines" in architecture
     assert "Evidence story with granular second-side alignment" in architecture
     assert "decision-support" not in architecture.lower()
     assert "grade how well the news explains the session" in architecture
     assert "somewhat supports" in architecture
-    assert "**As-built**" in architecture
     assert "evidence story" in architecture.lower()
     assert "HIST_NEWS" not in architecture
     assert "Persisted scored headlines" not in architecture
@@ -217,8 +207,10 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Two price gates" in ui
     assert "Isolation Forest (trained on the lake)" in ui or "Isolation Forest" in ui
     assert 'id="homeLede"' in ui
-    assert "S&amp;P 500 alerts for price movements and anomalies" in ui
+    assert "S&amp;P 500 Radar monitors the index for price movements and anomalies" in ui
     assert "grade how well the news explains the session" in ui
+    assert "S&amp;P 500 Radar" in ui
+    assert "Alert System" not in ui
     assert "Decision-support" not in ui
     modal_h3 = ui.split(".modal-header h3 {", 1)[1].split("}", 1)[0]
     assert "font-family: ui-sans-serif, system-ui, sans-serif" in modal_h3
@@ -257,6 +249,8 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "scope-toggle" in ui
     assert 'data-scope="sp500"' in ui
     assert 'data-scope="watchlist"' in ui
+    assert "border-radius: 8px" in ui.split(".scope-toggle {", 1)[1].split("}", 1)[0]
+    assert "font-family: ui-sans-serif, system-ui, sans-serif" in ui.split(".scope-toggle .scope-opt {", 1)[1].split("}", 1)[0]
     assert 'id="recentTip"' in ui
     assert 'id="notifyHint"' not in ui
     assert "Choose S&amp;P 500 constituents, then Scan today" in ui
@@ -264,7 +258,9 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Scan today" in ui
     assert "Watchlist results" in ui
     assert 'id="enableScreener"' in ui
-    assert "Show Screener tab" in ui
+    assert "Enable Screener" in ui
+    assert "<h2>Screener</h2>" in ui
+    assert ".tab-btn[hidden] { display: none; }" in ui
     assert "function applyScreenerVisibility" in ui
     assert "buildHistoryHeaders" in ui
     assert "originLabel" in ui
@@ -333,11 +329,13 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "./dev.sh start" in readme
     assert "./dev.sh restart" in readme
     assert "S&P 500" in readme
-    assert "S&P 500 Alert System" in readme
+    assert "S&P 500 Radar" in readme
     assert "focus set" in readme
     assert "batch_train" in readme
     assert "AWS production deploy is not required" in readme
-    assert "As-built vs local final target" in readme
+    assert "Finished-system diagrams" in readme
+    assert "planned → landed" in readme.lower() or "keep / change / drop" in readme.lower()
+    assert "As-built vs local final" not in readme
     assert "Home" in readme and "Watchlist" in readme and "History" in readme
     assert "Origin" in readme
     assert "Watchlist results" in readme
@@ -351,6 +349,11 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "about 5,400 symbols" not in readme
     assert "only for now" not in readme
     assert "Ticker Alert System" not in readme
+    assert "Alert System" not in readme
+    assert "S&P 500 Radar" in _text(DOCS / "architecture.md")
+    assert "Alert System" not in _text(DOCS / "architecture.md")
+    assert "S&P 500 Radar" in _text(DOCS / "proposal-pipeline-audit.md")
+    assert "S&P 500 Radar" in _text(DOCS / "data-sources.md")
     batch_train = _text(ROOT / "batch_train" / "README.md")
     assert "Isolation Forest" in batch_train
     assert "gap_return" in batch_train
@@ -386,16 +389,17 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "batches of eight" in sources
     audit = _text(DOCS / "proposal-pipeline-audit.md")
     assert "Together shows the name of the model that wrote it" in audit
-    assert "batches of eight" in audit
+    assert "batches of eight" in audit.lower()
     assert "Historical headlines are not part of the design" in audit
     assert "batch_train" in audit
     assert "local model registry" in audit
     assert "percent or forest" in audit.lower()
     assert "Refresh lake + retrain" in audit
-    assert "skips Yahoo + retrain" in audit or "already current" in audit
-    assert "Scan today** focus session" in audit or "focus session" in audit.lower()
-    assert "optional Kafka news topic" in audit
+    assert "skips Yahoo" in audit.lower() or "already current" in audit.lower() or "skip when current" in audit.lower()
+    assert "focus session" in audit.lower()
+    assert "Kafka news topic" in audit
     assert "Watchlist forest parity" in audit or "forest parity" in audit
+    assert "Major decisions (planned vs landed)" in audit
     batch = _text(ROOT / "batch_ingest" / "README.md")
     assert "Headlines stay on the near-term check path" in batch
     assert "batch_train" in batch
