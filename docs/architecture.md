@@ -2,7 +2,7 @@
 
 Local decision-support service that turns a watchlist into one alert per symbol per day: a price move, a news-sentiment alert, or a news + price alert when both rules fire.
 
-The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, an Isolation Forest trained on that lake, and Perplexity for the alert wording. The revised plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md). This repository runs a smaller path: FastAPI, PostgreSQL, Yahoo daily bars, local FinBERT, and a Perplexity summary when a key is saved. The deterministic sentence is the fallback.
+The class design (CISC 525) is a lambda architecture: Kafka and Flink on the live path, Spark and a data lake on the historical path, FinBERT for sentiment, an Isolation Forest trained on that lake, and Perplexity for the alert wording. The revised plan is [proposal-pipeline-audit.md](proposal-pipeline-audit.md). This repository already runs part of the stream: Alpaca delayed SIP minute bars onto Kafka (`stream_ingest/`), and a FastAPI consumer (`python -m app.live`) that writes open→last **price** alerts for the watchlist. A normal **Run check** still uses Yahoo daily bars, local FinBERT on headlines, and a Perplexity summary when a key is saved. Flink, Spark, the lake, and Isolation Forest remain the class target.
 
 There is no shared package with Vajra Astra Capital. Common logic lives in this repo as its own copy.
 
@@ -21,7 +21,9 @@ There is no shared package with Vajra Astra Capital. Common logic lives in this 
 | Saved price and sentiment thresholds | **As-built** |
 | Admin rebuild: wipe alerts and rerun the current rules over the last 1–40 calendar days | **As-built** |
 | Symbol links to the Yahoo Finance quote, from Home, History, and the details title | **As-built** |
-| Minute bars for the watchlist on Kafka (Alpaca / Databento) | **Target** |
+| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on free Basic; REST fills the rest of the S&P 500). See `stream_ingest/` and `docker-compose.yml` | **As-built** (producer) |
+| Live Kafka consumer: open → last price alerts into Postgres for the watchlist (`python -m app.live`). News stays on Run check | **As-built** (session-move only; Isolation Forest still target) |
+| Home “Live alerts on” cue from the consumer heartbeat (`/v1/live/status`) | **As-built** |
 | Flink session features scored with the registered Isolation Forest | **Target** |
 | FinBERT inference on each headline, locally, during a check | **As-built**. Not a live score stream |
 | Spark feature table on S3, Isolation Forest fit on that table, model registry | **Target** |
@@ -41,7 +43,7 @@ The revised target keeps both engines and one feature list. Spark lands historic
 
 | Revised target | This app |
 |---|---|
-| Minute bars on Kafka, scored by the registered forest | While the market is open, the latest price versus the open. After the close, the close versus the prior close. A market that trades all day, such as BTC-USD, uses the price change over the 24 hours before the check. A volume spike is a note on a completed stock close, not a separate detector |
+| Minute bars on Kafka, scored by the registered forest | Minute bars land on Kafka from Alpaca. `python -m app.live` applies the open→last percent rule during the cash session and writes a **price** row. Run check still measures open→last (or close versus prior close after the close, or 24 hours for `-USD`). Isolation Forest scoring on those bars is not built yet |
 | FinBERT score stream | FinBERT on each headline during a check. The weights run on this machine. There is no score stream and no second scorer |
 | Slice join, with news-only and price-only | Same Eastern trading day, then one slice: the overnight gap before 9:30 AM, the regular session until 4:00 PM, or the close after that. A 24-hour market uses the four hours after the headline. Fusion says "candidate reason" only when that slice clears the price rule. Otherwise the card is news with no price, or price with no headline lined up. Weekend stories stay with Friday |
 | Perplexity, two sentences, after the decision | Perplexity when a key is saved, using the model chosen in Settings. The model name is shown under Together. Otherwise deterministic sentences, plus the thresholds saved on the alert |
@@ -52,7 +54,7 @@ The rebuild is the closest thing we have to the historical path. It replays rule
 
 ## As-built check
 
-What this repository runs today. Isolation Forest, Kafka, Flink, and Spark are not on this path.
+What a **Run check** or rebuild runs today. Isolation Forest, Flink, and Spark are not on this path. The live Kafka price path is the next diagram.
 
 ```mermaid
 flowchart TB
@@ -93,9 +95,71 @@ flowchart TB
     end
 ```
 
+## As-built live price stream
+
+What runs when Docker Kafka, the Alpaca producer, and `python -m app.live` are up. This writes **price** alerts only. News and news_price still come from Run check. The Home pill reads `/v1/live/status`.
+
+```mermaid
+flowchart LR
+    subgraph sources [Sources]
+        ALP[Alpaca delayed_sip]
+        WL2[Watchlist in Postgres]
+    end
+
+    subgraph bus [Local Kafka]
+        PROD[stream_ingest producer]
+        TOPIC[prices.raw.bars]
+        LIVE[python -m app.live]
+    end
+
+    subgraph decide [Session move]
+        BOOK[Open and latest from RTH bars]
+        RULE2{Move at or beyond saved percent}
+    end
+
+    subgraph out2 [Output]
+        PG[(Postgres alerts)]
+        BEAT[live_consumer_heartbeat_at]
+        API[GET /v1/live/status]
+        UI2[Home Live alerts on]
+    end
+
+    ALP --> PROD --> TOPIC --> LIVE
+    WL2 --> LIVE
+    LIVE --> BOOK --> RULE2
+    RULE2 -->|yes, and day is still price-only| PG
+    LIVE --> BEAT --> API --> UI2
+    PG --> UI2
+```
+
+```mermaid
+sequenceDiagram
+    participant Alpaca
+    participant Producer as stream_ingest
+    participant Kafka
+    participant Live as app.live
+    participant PG as Postgres
+    participant UI as Home
+
+    Alpaca->>Producer: Minute bar delayed_sip
+    Producer->>Kafka: prices.raw.bars
+    Live->>Kafka: Consume bar
+    Live->>Live: Update open and latest for RTH
+    Live->>PG: Heartbeat for Live alerts on
+    alt Open to last clears threshold
+        Live->>PG: Upsert price alert for today
+        UI->>PG: Poll alerts
+        PG->>UI: Price card
+    else Below threshold or news row exists
+        Live-->>PG: No price overwrite
+    end
+    UI->>PG: GET /v1/live/status
+    PG->>UI: enabled when heartbeat is fresh
+```
+
 ## Revised target: high-level lambda architecture
 
-Streaming path for live detection. Batch path for training. None of this is what the local process runs today, except FinBERT and the Perplexity summary when a key is saved.
+Streaming path for live detection. Batch path for training. This repository already runs Kafka minute bars and the open→last consumer. FinBERT on a check and Perplexity when a key is saved also run today. Flink, Spark, the lake, and Isolation Forest do not.
 
 ```mermaid
 flowchart LR
@@ -238,7 +302,7 @@ sequenceDiagram
 
 ## Local schema
 
-`watchlist` holds the symbols a check will refresh. `symbols` caches the history label: a Yahoo sector for a stock, the fund category for an ETF or mutual fund, and Crypto for a coin or a digital-asset fund. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, and the selected Perplexity model. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`.
+`watchlist` holds the symbols a check will refresh. `symbols` caches the history label: a Yahoo sector for a stock, the fund category for an ETF or mutual fund, and Crypto for a coin or a digital-asset fund. `daily_bars` and `headlines` are the inputs. `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, the selected Perplexity model, and `live_consumer_heartbeat_at` for the Home live cue. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`.
 
 One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. When Perplexity rewrites Together, the alert `sections` keep the rule sentence, the model id, and the model label shown under Together. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
 

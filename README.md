@@ -26,7 +26,8 @@ The class target is a batch lake and a live stream: Kafka, Flink, Spark, an Isol
 
 | Path | Purpose |
 |---|---|
-| [`alert_service/`](alert_service/) | FastAPI app, single-page UI, tests |
+| [`alert_service/`](alert_service/) | FastAPI app, single-page UI, tests, Kafka live price consumer (`python -m app.live`) |
+| [`stream_ingest/`](stream_ingest/) | Alpaca delayed SIP → Kafka minute-bar producer (S&P 500) |
 | [`db/migrations/`](db/migrations/) | PostgreSQL schema |
 | [`docs/`](docs/) | Architecture diagrams, the revised class proposal, and data sources |
 
@@ -34,6 +35,8 @@ The class target is a batch lake and a live stream: Kafka, Flink, Spark, an Isol
 
 - Python 3.11+
 - PostgreSQL (local database `ticker_alert_db`)
+- Docker Desktop (for local Kafka when using the live price path)
+- Alpaca API keys in `stream_ingest/.env` (paper keys are fine)
 
 ## Setup
 
@@ -54,7 +57,7 @@ for f in db/migrations/*.sql; do
 done
 ```
 
-The files are `001_init.sql` through `012_perplexity_model.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, the FinBERT score on a 0–100 scale with a 25-point gate around 50, and the Perplexity key and selected model used for alert reasoning.
+The files are `001_init.sql` through `013_live_consumer_heartbeat.sql`. They create the watchlist, bars, headlines, one alert per symbol per day, saved thresholds, cached sectors, the first-seen time, the thresholds stored on each alert, the FinBERT score on a 0–100 scale with a 25-point gate around 50, the Perplexity key and selected model used for alert reasoning, and the live-consumer heartbeat used by the Home “Live alerts on” cue.
 
 ## Run
 
@@ -65,6 +68,23 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
 Open **http://127.0.0.1:8010/ui**. Add a ticker, then **Run check**.
+
+For live open→last price alerts during the cash session:
+
+```bash
+# repo root — local Kafka
+docker compose up -d
+
+# terminal: Alpaca → Kafka (watchlist-sized set; Basic WebSocket cap is 30)
+cd stream_ingest && source .venv/bin/activate
+python -m app.main --ws-only --symbols AAPL,MSFT,NVDA
+
+# terminal: Kafka → Postgres price alerts
+cd alert_service && source .venv/bin/activate
+python -m app.live
+```
+
+Home shows a pulsing **Live alerts on** pill while the consumer heartbeats. That process writes **price** rows only for symbols on the watchlist. It does not replace a news or news_price card for the day. **Run check** still refreshes headlines and FinBERT. Diagrams: [docs/architecture.md](docs/architecture.md).
 
 The service listens on port **8010** so it can run beside another app on port 8000.
 

@@ -47,6 +47,11 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Revised target: batch historical ELT" in architecture
     assert "Revised target: streaming ETL" in architecture
     assert "Revised target: end-to-end alert sequence" in architecture
+    assert "As-built live price stream" in architecture
+    assert "python -m app.live" in architecture
+    assert "Live alerts on" in architecture
+    assert "prices.raw.bars" in architecture
+    assert "live_consumer_heartbeat_at" in architecture
     assert "Perplexity two sentences" in architecture
     assert "batches of eight" in architecture
     assert "model name under Together" in architecture
@@ -71,16 +76,24 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Perplexity writes two sentences" in sources
     assert "deterministic sentence" in sources
     assert "Rule stays under Rule" in sources
+    assert "Kafka minute bars and the live price consumer are connected" in sources
+    assert "python -m app.live" in sources
+    assert "stream_ingest" in sources
     readme = _text(ROOT / "README.md")
     assert "[docs/proposal-pipeline-audit.md](docs/proposal-pipeline-audit.md)" in readme
     assert "revised target diagrams" in readme
     assert "Isolation Forest" in readme
     assert "Perplexity" in readme
+    assert "docker compose up -d" in readme
+    assert "Live alerts on" in readme
+    assert "013_live_consumer_heartbeat.sql" in readme
     service = _text(ROOT / "alert_service" / "README.md")
     assert "docs/proposal-pipeline-audit.md" in service
     assert "docs/architecture.md" in service
-    assert "This process does not run the Kafka, Flink, or Spark stack" in service
+    assert "This process runs a Kafka consumer for session-move price alerts" in service
+    assert "Flink and Spark are still the class target, not this process" in service
     assert "A saved Perplexity key writes the two-sentence alert reasoning" in service
+    assert "as-built live price stream diagram" in service
     assert "five ChatGPT, five OpenAI, or five Gemini" in service
     assert "at most eight alerts" in service
     assert "the field shows dots" in readme
