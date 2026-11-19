@@ -21,7 +21,7 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
         "Model registry",
         "FinBERT",
         "Perplexity",
-        "two sentences",
+        "three to four short sentences",
         "deterministic sentence",
         "news-only and price-only",
         "volume z-score",
@@ -50,13 +50,17 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "Local stand-in" in audit
     assert "AWS production deploy is out of scope" in audit or "AWS production is not part of the final target" in audit
     assert "as-built and local final target diagrams" in audit
+    assert "price first, then news" in audit.lower() or "Price first, then news" in audit
+    assert "live price → near-term news" in audit.lower() or "price → near-term news" in audit.lower()
+    assert "live_feature_rows" in audit
+    assert "Three to four sentences for news" in audit or "three to four short sentences" in audit
 
 
 def test_architecture_points_at_the_audit_and_names_the_target():
     architecture = _text(DOCS / "architecture.md")
     assert "# S&P 500 Alert System architecture" in architecture
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in architecture
-    assert "Perplexity two-sentence summary, with the deterministic sentence as fallback" in architecture or "Perplexity two sentences when a key is saved" in architecture
+    assert "Perplexity richer news / news+price reasoning" in architecture
     assert "focus set for Run check" in architecture
     assert "Spark-role curated feature table" in architecture
     assert "Live scorer Flink role" in architecture or "Flink role" in architecture
@@ -82,7 +86,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Slack and email are not used" in architecture
     assert "prices.raw.bars" in architecture
     assert "live_consumer_heartbeat_at" in architecture
-    assert "Perplexity two sentences" in architecture
+    assert "Perplexity richer reasoning" in architecture
+    assert "price-only stays deterministic" in architecture
     assert "batches of eight" in architecture
     assert "model name under Together" in architecture
     assert "Fit Isolation Forest and pick the cutoff" in architecture
@@ -92,7 +97,13 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Historical headlines are not landed" in architecture
     assert "No historical headlines" in architecture
     assert "percent rule" in architecture.lower() or "percent-rule" in architecture
-    assert "not scored live yet" in architecture
+    assert "live_feature_rows" in architecture
+    assert "not scored live yet" not in architecture
+    assert "price noticed → news looked up → evidence or none" in architecture
+    assert "Live price → near-term news" in architecture
+    assert "Upgrade to news or news_price" in architecture or "upgrade to news or news_price" in architecture.lower()
+    assert "Fetch near-term headlines for symbol" in architecture
+    assert "Popup evidence story" in architecture
     assert "HIST_NEWS" not in architecture
     assert "Persisted scored headlines" not in architecture
     assert "HN[Persisted scored headlines]" not in architecture
@@ -139,12 +150,15 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "[proposal-pipeline-audit.md](proposal-pipeline-audit.md)" in sources
     assert "[architecture.md](architecture.md)" in sources
     assert "Isolation Forest" in sources
-    assert "Perplexity writes two sentences" in sources
+    assert "Perplexity writes three to four short sentences" in sources
+    assert "Price-only alerts keep the rule sentence" in sources
     assert "deterministic sentence" in sources
     assert "Rule stays under Rule" in sources
     assert "python -m app.live" in sources
     assert "stream_ingest" in sources
     assert "S&P 500" in sources
+    assert "price first, then news" in sources.lower()
+    assert "live_feature_rows" in sources
     assert "Historical headlines are not pulled into the lake" in sources
     assert "Mac/Chrome desktop notification" in sources
     assert "Slack and email are not used" in sources
@@ -159,7 +173,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Live alerts on" in readme
     assert "Mac desktop notification" in readme
     assert "Enable desktop notifications" in readme
-    assert "013_live_consumer_heartbeat.sql" in readme
+    assert "014_live_feature_rows.sql" in readme
     assert "S&P 500" in readme
     assert "S&P 500 Alert System" in readme
     assert "focus set" in readme
@@ -183,7 +197,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "docs/architecture.md" in service
     assert "This process runs a Kafka consumer for session-move price alerts" in service
     assert "Flink and Spark are the stream and batch engines on the class diagrams" in service
-    assert "A saved Perplexity key writes the two-sentence alert reasoning" in service
+    assert "A saved Perplexity key writes richer news / news + price reasoning" in service
     assert "live price stream" in service
     assert "five ChatGPT, five OpenAI, or five Gemini" in service
     assert "at most eight alerts" in service

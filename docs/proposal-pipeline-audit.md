@@ -11,14 +11,14 @@ The architecture has to read as big data on the diagram, not only as a Python jo
 | Piece | Path | Job | Local stand-in |
 |---|---|---|---|
 | Kafka | Streaming | The bus. Raw bars, near-term headlines, sentiment scores, and anomaly scores are separate topics. | Docker Compose Kafka |
-| Flink | Streaming | Stateful windows. Holds the session open, the latest price, and volume, and scores the live price/volume feature vector. | Live scorer (Flink **role**) — remaining target |
-| TimescaleDB | Streaming | Sink for the live feature rows. This is the time-series store on the diagram. | Local Timescale or Postgres feature rows |
+| Flink | Streaming | Stateful windows. Holds the session open, the latest price, and volume, and scores the live price/volume feature vector. | Live scorer in `python -m app.live` (Flink **role**) — as-built |
+| TimescaleDB | Streaming | Sink for the live feature rows. This is the time-series store on the diagram. | Postgres `live_feature_rows` (Timescale stand-in) — as-built |
 | S3 / lake raw zone | Batch | Immutable landing of historical **daily prices** for the S&P 500. | `data/lake/raw/` on disk |
 | Spark | Batch | ELT and the training job. Builds the price/volume feature table and fits the model. | `batch_train` Spark-**role** job (pandas + scikit-learn) — as-built |
 | Curated Parquet | Batch | The training set the Spark-role job writes, one feature row per symbol per session. | `data/lake/curated/features/session/` |
 | Model registry | Both | The fitted model, the feature list, and the score cutoff. The live scorer loads this. It does not refit during the session. | `data/lake/registry/isolation_forest/current/` |
 | FinBERT | Streaming / check | Machine learning on the **near-term** headline. Score 0 to 100. Not a batch lake input. | Local Transformers + PyTorch |
-| Isolation Forest | Batch, then stream | Machine learning on **price and volume** features. Trained on the curated table. Applied live once the scorer loads the registry. | scikit-learn in `batch_train`; live apply remaining |
+| Isolation Forest | Batch, then stream | Machine learning on **price and volume** features. Trained on the curated table. Applied live once the scorer loads the registry. | scikit-learn in `batch_train`; live apply in `python -m app.live` |
 | Perplexity | After the decision | AI usage. Two sentences from the structured alert. The model does not decide the alert. | Settings API key |
 | Postgres | Serving | One alert row per symbol per day, including the model score, the thresholds, and the Perplexity text. | Local `ticker_alert_db` (Aurora on a slide = same engine) |
 
@@ -30,7 +30,7 @@ The product universe is the S&P 500. A watchlist of constituents drives Run chec
 
 Keep batch and streaming as two engines. Give them one **price/volume** feature definition so they cannot drift.
 
-The historical path exists to train the anomaly model on S&P daily history. The streaming path exists to apply that model as the session unfolds and to score near-term headlines as they arrive. Perplexity writes the two-sentence summary after the row is decided. A deterministic sentence stays as the fallback when the API is unavailable, which is what the app writes today.
+The historical path exists to train the anomaly model on S&P daily history. The streaming path exists to apply that model as the session unfolds and to score near-term headlines as they arrive. Perplexity writes richer news / news+price reasoning after the row is decided. Price-only keeps the deterministic sentence for now. A deterministic sentence stays as the fallback when the API is unavailable.
 
 | Choice | What it means |
 |---|---|
@@ -56,13 +56,13 @@ Isolation Forest is the price model, and the batch lake is why it exists. Spark 
 
 The forest is fit on those rows. Unsupervised fits this data, because there is no labeled set of true anomalies. The score cutoff is chosen by replaying the same table and seeing which cutoff marks the sessions worth an alert. Spark writes the model, the feature list, and that cutoff into the registry.
 
-Flink computes that same vector on the live window and scores it with the registered model. The alert fires when the model score crosses the cutoff, or when FinBERT crosses the sentiment gate on a near-term headline, or both. The card shows the percent and the model score. A rebuild of recent alert history replays product rules; it does not replace lake training.
+Flink computes that same vector on the live window and scores it with the registered model. The preferred live product path is **price first, then news**: when the percent rule or the forest marks a session anomalous, the scorer writes a price alert, then pulls near-term headlines for that symbol, scores them with FinBERT, and upgrades the day to news or news+price when the same Eastern-day slice matches. A strong headline with no price move can still open a news-only row (Run check today). The card shows the percent and the model score when present. A rebuild of recent alert history replays product rules; it does not replace lake training.
 
 ## AI usage
 
 Today the service writes a deterministic sentence from the alert fields. That stays as the fallback. The AI step is Perplexity, used the way Vajra already uses it: send the facts, ask for a short answer, store the reply.
 
-After the alert row is decided, send Perplexity the structured payload: symbol, time, kind, the percent, the FinBERT score when present, the Isolation Forest score when present, the thresholds, and the headlines that fell in the slice. Ask for two sentences. The first says what moved. The second gives the candidate reason when a headline lined up with that slice, and says that no headline lined up when none did. Store the reply on the alert. If Perplexity is down or slow, show the deterministic sentence. The dashboard reads the row either way. The model never decides whether the alert exists. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight.
+After a news or news+price alert row is decided, send Perplexity the structured payload: symbol, time, kind, the percent when present, the FinBERT scores, the thresholds, and the headlines (titles, urls, scores) that fell in the slice. Ask for three to four short sentences: what happened, why the headlines matter (cite titles/urls), how FinBERT reads them, and a cautious forward look. Do not ask it to merely restate that price moved and headlines lined up. Price-only alerts skip this call and keep the rule sentence. If Perplexity is down or slow, show the deterministic sentence. The dashboard reads the row either way. The model never decides whether the alert exists. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight.
 
 ## Slide 6 — High-level lambda
 
@@ -70,7 +70,7 @@ Streaming for live detection, batch for training. That split of purpose is what 
 
 The live feed should be minute bars for the S&P 500, written to Kafka. Near-term headlines are scored with FinBERT for the product join; they are not archived into the training lake. Historical **prices** land in the raw zone for forest training.
 
-Kafka stays the bus. The batch ingest lands prices in the lake, and the feature definition it uses is the one Flink uses. Spark is the batch engine on the diagram. The raw zone and the curated zone are the lake. Timescale is the stream feature sink. The registry is how the fitted forest reaches Flink. Correlation stays the product join: symbol plus the slice that was in progress, with news-only and price-only allowed. Perplexity runs after that join. The dashboard watches for new alert rows and raises a Mac/Chrome desktop notification plus a tab badge; a failed notification must not lose the alert.
+Kafka stays the bus for minute bars. The batch ingest lands prices in the lake, and the feature definition it uses is the one Flink uses. Spark is the batch engine on the diagram. The raw zone and the curated zone are the lake. Timescale (or Postgres `live_feature_rows`) is the stream feature sink. The registry is how the fitted forest reaches Flink. Correlation is the product join: **price noticed → look up near-term news → evidence or none**, on symbol plus the slice that was in progress, with news-only and price-only still allowed. A dedicated Kafka news topic is optional; a near-term Yahoo pull after the price alert is enough for the local demo. Perplexity runs after that join for news / news+price. The dashboard watches for new alert rows and raises a Mac/Chrome desktop notification plus a tab badge; a failed notification must not lose the alert.
 
 | Step | Verdict | Why |
 |---|---|---|
@@ -91,7 +91,7 @@ Kafka stays the bus. The batch ingest lands prices in the lake, and the feature 
 | Sentiment scoring | Keep | FinBERT on near-term headlines, 0 to 100. |
 | Anomaly detection | Keep | Registered forest on the live price/volume vector. |
 | Correlation | Keep | Join on symbol and slice. Allow price-only and news-only. |
-| Perplexity summary | Keep | Two sentences after the decision. Deterministic fallback. |
+| Perplexity summary | Keep | Richer news / news+price reasoning after the decision. Price-only stays deterministic. Deterministic fallback. |
 | API and dashboard | Keep | One screen reads the alert table. |
 | Notification | Keep | Desktop (OS) notification and tab badge after the row exists. Slack and email are not used. |
 
@@ -141,34 +141,36 @@ Cassandra is the box to remove. One alert per symbol per day is a Postgres write
 | Flink | Keep | Session state, live vector, score from the registry. |
 | Threshold gate | Keep | Cutoff stored with the model. |
 | Load into TimescaleDB | Keep | Stream feature sink. |
-| Near-term news, then Kafka | Change | One raw-news topic for headlines that matter now. |
-| FinBERT, then the score topic | Keep | One scoring step for near-term news. |
-| Correlation engine | Keep | Join symbol and slice. Emit news, price, or both. |
+| Near-term news after price | Change | After a live price / forest alert, fetch near-term headlines for that symbol. Optional Kafka news topic. |
+| FinBERT on those headlines | Keep | One scoring step for near-term news (0–100). |
+| Correlation engine | Keep | Price first, then news for the same slice. Emit news, price, or both. |
 | Cassandra | Drop | Postgres holds the alert. |
-| Perplexity | Keep | Two sentences after the row is stored. The deterministic sentence remains the fallback. |
+| Perplexity | Keep | Three to four sentences for news / news+price after the row is stored. Price-only stays deterministic. |
 | Dashboard | Keep | Read the alert table. |
 | Desktop notification and tab badge | Keep | Consumer of the alert row in the open dashboard tab (Mac/Chrome Notification Center). |
 
 ## Slide 9 — End-to-end sequence
 
-The happy path on the slide always has both a tick and a headline. The product also has days with only one of them, and the model score has to appear in the sequence.
+The happy path is **price noticed → news looked up → evidence or none**. Days can stay price-only when no same-day headline matches, or news-only when FinBERT clears the gate with no price move (Run check). The model score appears on the sequence when the forest trips.
 
-Stream a minute bar. Flink micro-batches the Kafka topic. Compute the trained returns and the volume z-score.
+Stream a minute bar. Flink micro-batches the Kafka topic. Compute the trained returns and the volume z-score. Write a price alert when the percent rule or the registered cutoff trips. Then fetch near-term headlines for that symbol, score them with FinBERT, and upgrade the day only when the publish time falls in the slice that moved.
 
-The window is the slice in progress: the overnight gap before 9:30 AM Eastern, the regular session until 4:00 PM, or the close after that. The sequence has to allow the price alert and the news alert to stay unjoined when the slice does not match.
+The window is the slice in progress: the overnight gap before 9:30 AM Eastern, the regular session until 4:00 PM, or the close after that. Skip stale prior-day stories.
 
-The structured payload is symbol, time, kind, percent, FinBERT score when present, Isolation Forest score when present, and the thresholds. Perplexity turns that payload into two sentences.
+The structured payload is symbol, time, kind, percent, FinBERT score when present, Isolation Forest score when present, and the thresholds. Perplexity turns news / news+price payloads into richer short reasoning.
 
 | Step | Verdict | Why |
 |---|---|---|
 | Stream a live bar | Change | Stream the minute bar onto Kafka. |
 | Flink consumes the topic | Keep | Micro-batch consumption of Kafka is the stream path. |
 | Build the trained feature vector | Change | Session returns and the volume z-score only. |
-| Anomaly score | Keep | Score with the registered model. |
-| Score the near-term headline | Keep | FinBERT, independent of the price flag. |
-| Correlate inside the slice | Change | Name the window: gap, session, or close. Allow one side alone. |
+| Anomaly / percent gate | Keep | Score with the registered model; percent rule remains. |
+| Upsert price when the gate trips | Keep | Price-first product path. |
+| Fetch near-term headlines for that symbol | Change | Look up news after the price alert; optional Kafka news bus. |
+| Score those headlines | Keep | FinBERT 0–100 on the near-term set. |
+| Correlate inside the slice | Change | Name the window: gap, session, or close. Keep price-only when nothing matches. |
 | Structured payload | Keep | Symbol, time, kind, percent, scores, thresholds. |
-| Perplexity summary | Keep | Two sentences from that payload. Template fallback if the call fails. |
+| Perplexity summary | Keep | Richer news / news+price write-up from that payload. Template fallback if the call fails. |
 
 ## Slide 12 — No-code replacement
 
@@ -179,13 +181,13 @@ A workflow tool can fire a webhook and can call Perplexity. It cannot hold Flink
 A reviewer should be able to point at the diagram and name the batch path, the stream path, the lake, the model that crosses from one to the other, and the AI call that does not — all runnable locally.
 
 - Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry.
-- Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule price alerts, FinBERT on Run check, desktop notifications.
-- Streaming **local final gap**: live scorer loads the registry (Flink role); optional feature-row sink; near-term news topic on Kafka.
+- Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule + Isolation Forest price alerts, `live_feature_rows` sink, FinBERT on Run check, desktop notifications.
+- Streaming **local final gap**: live **price → near-term news** upgrade (fetch/score headlines after a price or forest alert; same-day slice only). Optional Kafka news topic. Popup evidence-story UX and forest-aware price-only wording.
 - The handoff: live scorer scores Kafka bars with the model `batch_train` fitted on price history.
-- AI: Perplexity writes two sentences from the finished payload, with the template sentence as fallback.
-- Product rules that stay: S&P 500 universe, one alert per symbol per day, three outcomes, and the headline joined to the slice that was in progress.
+- AI: Perplexity writes richer news / news+price reasoning from the finished payload, with the template sentence as fallback; price-only stays deterministic for now.
+- Product rules that stay: S&P 500 universe, one alert per symbol per day, three outcomes, and the headline joined to the slice that was in progress (price first on the live path).
 - Deploy: local machine. AWS production is not part of the final target.
 
 ## Source
 
-Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The as-built and local final target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last price alerts (`python -m app.live`) with a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. `batch_train` curates session price/volume features and fits Isolation Forest into a local model registry (the Spark training box on the diagram, run with pandas/scikit-learn — not a Dataproc cluster). Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. A local live scorer loading that registry completes the stream path. Historical headlines are not part of the design. AWS production deploy is out of scope for the demo.
+Deck and PDF, CISC 525, 30 August 2026: `CISC 525 - Equity Anomaly and Sentiment Platform`. The as-built and local final target diagrams are in [architecture.md](architecture.md). This note is the revised architecture for that proposal. The local FastAPI service covers the S&P 500: Yahoo bars and FinBERT on a check, Perplexity when a key is saved, a Kafka consumer for open→last percent and Isolation Forest price alerts (`python -m app.live`) with a `live_feature_rows` sink and a Home “Live alerts on” cue, desktop notifications and a tab badge when new alerts arrive, and a batch land of index daily prices into the lake. `batch_train` curates session price/volume features and fits Isolation Forest into a local model registry (the Spark training box on the diagram, run with pandas/scikit-learn — not a Dataproc cluster). Settings stores the key as dots and offers five ChatGPT, five OpenAI, and five Gemini models. Together shows the name of the model that wrote it. A check or rebuild asks Perplexity in batches of eight. The deterministic sentence is the fallback. The remaining stream product gap is live price → near-term news (upgrade the day when headlines match the slice). Historical headlines are not part of the design. AWS production deploy is out of scope for the demo.
