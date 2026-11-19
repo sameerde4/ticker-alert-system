@@ -152,7 +152,7 @@ Cassandra is the box to remove. One alert per symbol per day is a Postgres write
 
 ## Slide 9 — End-to-end sequence
 
-The happy path is **price noticed → news looked up → evidence or none**. Days can stay price-only when no same-day headline matches, or news-only when FinBERT clears the gate with no price move (Scan today). The model score appears on the sequence when the forest trips.
+The happy path is **price noticed → news looked up → evidence or none**. Days can stay price-only when no same-day headline matches, or news-only when FinBERT clears the gate with no price move (Scan today). The model score appears on the sequence when the forest trips. What happened tags the percent/forest gate case (`percent only` / `percent + forest` / `forest only` / `neither gate`) and names the price-trigger cases (#1 percent, #2 forest, #3–#6 features, #7 volume-spike note) — tables in [architecture.md](architecture.md) and [data-sources.md](data-sources.md).
 
 Stream a minute bar. Flink micro-batches the Kafka topic. Compute the trained returns and the volume z-score. Write a price alert when the percent rule or the registered cutoff trips. Then fetch near-term headlines for that symbol, score them with FinBERT, and upgrade the day only when the publish time falls in the slice that moved.
 
@@ -181,9 +181,10 @@ A workflow tool can fire a webhook and can call Perplexity. It cannot hold Flink
 
 A reviewer should be able to point at the diagram and name the batch path, the stream path, the lake, the model that crosses from one to the other, and the AI call that does not — all runnable locally.
 
-- Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry — **training only**. Incremental **Refresh lake + retrain** (merge ~14 calendar days of Yahoo dailies, then retrain) keeps the registry from going stale after the cold-start land.
+- Batch **as-built**: `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry — **training only**. Automatic first-boot land+train when the lake is empty, plus a daily incremental **Refresh lake + retrain** that resumes from each symbol’s latest local date (and skips Yahoo + retrain when already current through the last completed session), keeps the registry from going stale after the cold-start land. Settings buttons remain manual overrides.
+- Watchlist **Scan today** focus session: last completed weekday before the cash open / on weekends; today during RTH or after the close — so pre-market demos are not empty.
 - Streaming **as-built**: Docker Kafka, `python -m app.live` percent-rule + Isolation Forest, live **price → near-term news** upgrade, `live_feature_rows` sink, Home Recent, desktop notifications.
-- Watchlist **as-built**: focus set, Scan today over today’s bars/headlines with the same **percent or forest** gate as live, Today's results panel, `alerts.origin`, rebuild of recent sessions.
+- Watchlist **as-built**: focus set, Scan today over the focus-session bars/headlines with the same **percent or forest** gate as live, Today's results panel, `alerts.origin`, rebuild of recent sessions.
 - Streaming **local final gap** (deferred): optional Kafka news topic. Forest-aware price-only wording and evidence-story alignment grades are as-built.
 - The handoff: live scorer scores Kafka bars with the model `batch_train` fitted on price history.
 - AI: Perplexity writes richer news / news+price reasoning from the finished payload, with the template sentence as fallback; price-only stays deterministic, with richer forest-aware wording when Isolation Forest fires.

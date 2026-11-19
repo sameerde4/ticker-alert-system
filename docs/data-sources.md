@@ -4,10 +4,10 @@
 
 | Input | Source | Stored as |
 |---|---|---|
-| Daily OHLCV (Watchlist Scan today / rebuild) | Yahoo Finance through `yfinance` | `daily_bars` — session-day product pass for the focus set (not the training lake) |
+| Daily OHLCV (Watchlist Scan today / rebuild) | Yahoo Finance through `yfinance` | `daily_bars` — focus-session product pass (today during/after RTH; last completed session pre-open / weekend) for the focus set (not the training lake) |
 | Live / delayed minute bars | Alpaca `delayed_sip` via [`stream_ingest/`](../stream_ingest/) onto local Kafka (`prices.raw.bars`). Free Basic: WebSocket ≤30 symbols; REST fills the rest of the S&P list | Consumed by `python -m app.live` for open→last **percent** and Isolation Forest **price** alerts (then near-term news upgrade); feature rows in `live_feature_rows`; Home Recent |
-| Historical daily OHLCV (S&P 500, ~1 year) | Yahoo Finance via [`batch_ingest/`](../batch_ingest/) or Settings → **Land** | Lake Parquet for **Isolation Forest training**: `data/lake/raw/prices/daily/symbol=TICKER/` |
-| Incremental lake refresh (~14 calendar days) | Yahoo merge into existing Parquet + `batch_train` (Settings → **Refresh lake + retrain**, or CLI `--days 14 --merge`) | Updated raw lake + new Isolation Forest registry; live reloads on next rules refresh |
+| Historical daily OHLCV (S&P 500, ~1 year) | Yahoo Finance via automatic first-boot land, [`batch_ingest/`](../batch_ingest/), or Settings → **Land** | Lake Parquet for **Isolation Forest training**: `data/lake/raw/prices/daily/symbol=TICKER/` |
+| Incremental lake refresh | Per-symbol resume from latest lake `dt` (lookback capped ~14 calendar days) + `batch_train` when new rows land; skips Yahoo + retrain when already current through the last completed session (pre-open aware). Daily auto schedule; Settings → **Refresh lake + retrain**; CLI `--days 14 --merge` | Updated raw lake + new Isolation Forest registry when needed; live reloads on next rules refresh |
 | Near-term headlines | Yahoo quote news, then Yahoo Search when quote news is empty | `headlines` |
 | Sentiment | Local FinBERT. Score is 0–100 (50 neutral). Confidence is the winning class probability | `headlines.sentiment_score`, plus confidence and class shares on the alert |
 
@@ -21,9 +21,32 @@ A headline is stored when its title names the ticker or the company's first dist
 
 | Alert | Rule | Default |
 |---|---|---|
-| Price | While the market is open, one alert when open→last clears the percent rule **or** the registered Isolation Forest marks the session anomalous (same four features: gap, session, close, volume z-score). Live (`python -m app.live`) and **Watchlist Scan today** share that OR gate, then look up near-term headlines and upgrade when the slice matches. After the close, Scan today also scores the day’s OHLCV with the forest. A volume spike is **noted** on a completed close when volume is at least 2× the recent average — that note alone does not open an alert; unusual volume is mainly the forest’s volume z-score | 3% (percent) / registry cutoff (forest) |
+| Price | While the market is open, one alert when open→last clears the percent rule **or** the registered Isolation Forest marks the session anomalous (same four features: gap, session, close, volume z-score). Live (`python -m app.live`) and **Watchlist Scan today** share that OR gate, then look up near-term headlines and upgrade when the slice matches. Before the open (and on weekends), Scan today evaluates the **last completed session**; after the close it scores that day’s OHLCV with the forest. A volume spike is **noted** on a completed close when volume is at least 2× the recent average — that note alone does not open an alert; unusual volume is mainly the forest’s volume z-score | 3% (percent) / registry cutoff (forest) |
 | News | One alert for that trading day when a headline's 0–100 FinBERT score is at least 25 points from 50. Each headline keeps its score, confidence, breakdown, and link. The alert score is the average | 25 points from 50 |
 | News + price | One alert when a headline's slice clears the same percent rule. Before 9:30 AM Eastern the slice is the overnight gap. From 9:30 AM to 4:00 PM it is the open-to-latest move, which is the open-to-close move after the market closes. After 4:00 PM it is the close versus the prior close. The words "candidate reason" are used only on this card. A headline whose slice is flat stays news, with the price left blank. A close with no headline in the slice that moved stays a price card that says no headline lined up | same rules |
+
+### Percent **or** forest (price gate cases)
+
+| Percent | Forest | Price-led alert? | Card tag |
+|---|---|---|---|
+| Clears | Normal / absent | **Yes** — percent alone | `(percent only)` |
+| Clears | Anomalous | **Yes** — both | `(percent + forest)` |
+| Under | Anomalous | **Yes** — forest alone | `(forest only)` |
+| Under | Normal / absent | **No** price-led | `(neither gate)` |
+
+### Price-trigger cases (what can fire a price-led row)
+
+| # | Trigger | Opens alert alone? | Notes |
+|---|---|---|---|
+| 1 | Price move threshold (open→last or close vs prior) | **Yes** | Settings → Price move threshold (default 3%) |
+| 2 | Isolation Forest anomalous | **Yes** | Same registry on Live and Scan today |
+| 3 | Gap return | No — forest feature | Inside #2 |
+| 4 | Session return | No — forest feature | Inside #1 / #2 |
+| 5 | Close return | No — forest feature | Inside #2 |
+| 6 | Volume z-score | No — forest feature | Unusual volume via the model |
+| 7 | Volume spike note (~2× average) | **No** — note only | Annotation on some daily percent cards |
+
+What happened shows both the gate tag and a trigger note such as `[triggers: #1 percent]` or `[triggers: #2 forest (#6 volume z, #3 gap)]`. See [architecture.md](architecture.md) for the same tables next to the Live / Watchlist diagram.
 
 A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound drops anything older than that. The admin rebuild on the Settings page deletes saved alerts and reruns these rules for each session in the last 1–40 calendar days. For that pass, Yahoo quote news is paged until a story is on or before the first day, or the list runs out. Each past session is judged as of 8:00 PM Eastern, so a headline published that day is scored for that day.
 

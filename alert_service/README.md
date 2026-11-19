@@ -8,7 +8,7 @@ FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run 
 | `app/sentiment.py` | Keyword sentiment lexicon |
 | `app/finbert.py` | Local ProsusAI/finbert score from 0 to 100, plus confidence and the three class shares |
 | `app/scoring.py` | Sends every headline to FinBERT. The lexicon remains in the repo and is not used by a check |
-| `app/prices.py` | Yahoo daily bars, the open and latest price during the cash session, and the sector or fund category |
+| `app/prices.py` | Yahoo daily bars and the open and latest price during the cash session |
 | `app/symbols.py` | Ticker normalization, the local symbol list, and which symbols trade all day |
 | `app/news.py` | Yahoo headlines |
 | `app/perplexity.py` | JSON payload of price changes, headlines, and FinBERT scores. Richer news / news+price reply replaces Together and stores the model name |
@@ -21,10 +21,11 @@ FastAPI process for the S&P 500 Alert System. Setup, the migration, and the run 
 | `app/forest_wording.py` | Deterministic forest-aware Summary / Price copy for price-only Isolation Forest alerts |
 | `app/watchlist_forest.py` | Same Isolation Forest OR-gate on Scan today / rebuild as live |
 | `app/live.py` | `python -m app.live` entry point; heartbeats so Home can show Live alerts on |
-| `ui/index.html` | Home Recent, Watchlist (focus set + Scan today + Today's results), History with Origin + draggable columns, settings, lake land, rebuild, Yahoo quote links, symbol search, desktop notifications and tab badge |
+| `ui/index.html` | Home Recent, Watchlist (focus set + Scan today + Today's results), History with Origin/Company/Type + row click + draggable columns, settings (lake progress), header lake cue, rebuild, Yahoo quote links, symbol search, desktop notifications and tab badge |
 | `ui/sw-notifications.js` | Service worker for OS/Chrome Notification Center popups |
 | `ui/sp500_universe.json` | S&P 500 ticker and company-name list for the Watchlist box |
-| `app/lake_land.py` | Settings: full lake land, or incremental refresh (merge + `batch_train`) |
+| `app/lake_land.py` | Auto first-boot land+train, daily refresh+retrain (skip when current), progress status, Settings overrides |
+| `app/engine.py` `scan_focus_moment` | Scan today focus session: today vs last completed session before the open |
 | `tests/` | Rules, parsing, and API smoke tests |
 
 ```bash

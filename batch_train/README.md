@@ -38,7 +38,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Land raw prices first (`batch_ingest` or Settings → Historical prices). Keep the lake current with Settings **Refresh lake + retrain** (or `batch_ingest --days 14 --merge` then this job) so Live and Watchlist are not stuck on a stale registry.
+Land raw prices first (automatic on first API boot when the lake is empty, or `batch_ingest` / Settings → Historical prices). Keep the lake current with the daily auto refresh or Settings **Refresh lake + retrain** (skips this job when the lake is already current), or run `batch_ingest --days 14 --merge` then this job so Live and Watchlist are not stuck on a stale registry.
 
 ## Run
 

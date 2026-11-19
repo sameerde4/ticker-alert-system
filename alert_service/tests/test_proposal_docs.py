@@ -106,11 +106,28 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "forest-aware price-only wording" in architecture
     assert "percent **or** forest" in architecture or "percent or forest" in architecture.lower()
     assert "Watchlist Scan today / rebuild uses the same Isolation Forest" in architecture
+    assert "Price gates (percent **or** forest)" in architecture
+    assert "(percent only)" in architecture
+    assert "(forest only)" in architecture
+    assert "(neither gate)" in architecture
+    assert "What can trigger a price-led alert" in architecture
+    assert "#1" in architecture and "Price move threshold" in architecture
+    assert "Volume z-score" in architecture
+    assert "Volume spike note" in architecture
+    assert "triggers: #1 percent" in architecture or "[triggers:" in architecture
     assert "Incremental lake refresh" in architecture
     assert "Refresh lake + retrain" in architecture or "refresh" in architecture.lower()
+    assert "Auto first-boot lake land" in architecture
+    assert "Loading historical prices" in architecture
+    assert "Daily auto schedule" in architecture or "daily auto" in architecture.lower()
     assert "As-built batch lake land and refresh" in architecture
     assert "Settings Refresh merge" in architecture or "Refresh merge" in architecture
     assert "union by dt keep newest" in architecture
+    assert "Skip Yahoo and retrain" in architecture or "skips Yahoo + retrain" in architecture
+    assert "last completed session" in architecture
+    assert "Focus session today or last completed" in architecture
+    assert "Watchlist Scan today focus session" in architecture
+    assert "Origin + Company + Type" in architecture or "Origin, Company" in architecture
     assert "REG --> SCAN[Watchlist Scan today]" in architecture or "REG --> SCAN" in architecture
     assert "Watchlist Scan today percent or forest" in architecture
     assert "Local final target (deferred)" in architecture or "deferred" in architecture.lower()
@@ -172,14 +189,26 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Enable desktop notifications" in ui
     assert "Mac notification" in ui
     assert "function alertMetrics" in ui
-    assert "head.append(kindPill(alert.kind), symbol, when)" in ui
+    assert "head.append(kindPill(alert.kind), symbol)" in ui
+    assert "companyNameEl(alert.symbol)" in ui
+    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type"]' in ui
     assert "renderEvidenceStory" in ui
     assert "What happened" in ui
     assert '"Summary"' in ui
     assert 'appendPlain("Forest"' in ui
     assert "Refresh lake + retrain" in ui
     assert 'id="refreshLake"' in ui
+    assert 'id="lakeHeaderStatus"' in ui
+    assert "Loading historical prices" in ui
+    assert "manual overrides" in ui
     assert "/v1/admin/lake/refresh" in ui
+    assert "Price move threshold" in ui
+    assert "Price alert percentage" not in ui
+    assert "Two price gates" in ui
+    assert "Isolation Forest (trained on the lake)" in ui or "Isolation Forest" in ui
+    assert 'id="homeLede"' in ui
+    assert "Decision-support alerts for the S&amp;P 500" in ui
+    assert "Price: ${move}% move threshold" in ui
     assert "evidence-story" in ui
     assert "alert-card" in ui
     assert "addCollapsibleSection" in ui
@@ -201,9 +230,12 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "tip-btn" in ui
     assert "<h2>Recent alerts</h2>" in ui
     assert "Incoming alerts stay here across refresh until you clear" in ui
-    assert "When new live alerts arrive, this tab gets a count badge" in ui
-    assert "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive." in ui
+    assert "Full list is always on Alert History." in ui
+    assert "When new live alerts arrive, this tab gets a count badge" not in ui
+    assert "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive." not in ui
     assert "function setRecentTip" in ui
+    assert "border-bottom: 1px solid var(--line)" in ui
+    assert "max-width: none" in ui
     assert "function setHomeScope" in ui
     assert "function alertsForHome" in ui
     assert "homeScope === \"watchlist\"" in ui or "homeScope === 'watchlist'" in ui
@@ -214,6 +246,7 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert 'id="recentTip"' in ui
     assert 'id="notifyHint"' not in ui
     assert "Choose S&amp;P 500 constituents, then Scan today" in ui
+    assert "last completed session" in ui
     assert "Scan today" in ui
     assert "Today's results" in ui
     assert "buildHistoryHeaders" in ui
@@ -239,6 +272,13 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "forest-aware" in sources
     assert "Incremental lake refresh" in sources
     assert "Refresh lake + retrain" in sources
+    assert "skips Yahoo + retrain" in sources or "skip Yahoo" in sources.lower()
+    assert "last completed session" in sources
+    assert "focus-session" in sources or "Focus session" in sources or "focus session" in sources.lower()
+    assert "Percent **or** forest (price gate cases)" in sources
+    assert "Price-trigger cases" in sources
+    assert "Isolation Forest anomalous" in sources
+    assert "Volume z-score" in sources
     assert "deterministic sentence" in sources
     assert "Rule stays under Rule" in sources
     assert "python -m app.live" in sources
@@ -281,6 +321,9 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Scan today" in readme
     assert "Refresh lake + retrain" in readme
     assert "--days 14 --merge" in readme
+    assert "skips Yahoo + retrain" in readme or "already current" in readme
+    assert "last completed session" in readme
+    assert "Company" in readme
     assert "Two product paths sit side by side" in readme
     assert "about 5,400 symbols" not in readme
     assert "only for now" not in readme
@@ -326,6 +369,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "local model registry" in audit
     assert "percent or forest" in audit.lower()
     assert "Refresh lake + retrain" in audit
+    assert "skips Yahoo + retrain" in audit or "already current" in audit
+    assert "Scan today** focus session" in audit or "focus session" in audit.lower()
     assert "optional Kafka news topic" in audit
     assert "Watchlist forest parity" in audit or "forest parity" in audit
     batch = _text(ROOT / "batch_ingest" / "README.md")

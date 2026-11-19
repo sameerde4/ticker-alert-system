@@ -33,7 +33,7 @@ python -m app.main --max-symbols 5 --days 60
 python -m app.main --days 14 --merge
 ```
 
-Or use **Settings → Historical prices (lake)** in the UI: **Land** (full) or **Refresh lake + retrain** (merge + `batch_train`).
+The alert API also lands an empty lake on first boot and refreshes on a daily schedule. Refresh resumes from each symbol’s latest lake date and skips Yahoo (and the follow-on retrain) when already current through the last completed session. **Settings → Historical prices (lake)** remains available: **Land** (full) or **Refresh lake + retrain** as manual overrides.
 
 ## Next on this path
 
