@@ -22,10 +22,13 @@ def test_health_and_ui_without_a_database():
     assert "/v1/admin/lake/land" in page.text
     assert "function rankSymbolUniverseMatches" in page.text
     assert "tickerAlertLastClosedAt" in page.text
+    assert "tickerAlertHomeClearedAt" in page.text
     assert "tickerAlertHomeWatermark" not in page.text
     assert "sessionStorage" not in page.text
-    assert "function homeWatermark" in page.text
-    assert "homeOpenedAt" in page.text
+    assert "function homeClearedAt" in page.text
+    assert "function clearRecentAlerts" in page.text
+    assert "homeOpenedAt" not in page.text
+    assert "function homeWatermark" not in page.text
     assert "scrollbar-gutter: stable" in page.text
     assert "overflow-x: clip" in page.text
     assert ".tab-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }" in page.text
@@ -52,7 +55,17 @@ def test_health_and_ui_without_a_database():
     assert lake.status_code == 200
     assert "running" in lake.json()
     assert "historyTab" in page.text
+    assert "watchlistTab" in page.text
     assert "Alert History" in page.text
+    assert "Today's results" in page.text
+    assert "Scan today" in page.text
+    assert "renderWatchlistCheckAlerts" in page.text
+    assert "function selectTab" in page.text
+    assert "DEFAULT_HISTORY_COLS" in page.text
+    assert 'id="historyHead"' in page.text
+    assert "function buildHistoryHeaders" in page.text
+    assert "function originLabel" in page.text
+    assert "tickerAlertHistoryColumns" in page.text
     assert "https://finance.yahoo.com/quote/" in page.text
     assert 'link.target = "_blank"' in page.text
     assert "function symbolLink" in page.text
@@ -62,16 +75,16 @@ def test_health_and_ui_without_a_database():
     assert "is already on the watchlist." in page.text
     assert "Enter a ticker." in page.text
     assert "requestSubmit" not in page.text
-    for column in ("symbol", "sector", "type", "when"):
-        assert f'data-sort="{column}"' in page.text
-    head = page.text.split('<table class="history">', 1)[1].split("</thead>", 1)[0]
-    assert head.index('data-sort="symbol"') < head.index('data-sort="sector"') < head.index('data-sort="when"') < head.index('data-sort="type"')
-    assert ">Alert details</button>" in head
-    assert ">Type</button>" not in head
+    for column in ("symbol", "sector", "origin", "type", "when"):
+        assert f'"{column}"' in page.text
+    assert 'DEFAULT_HISTORY_COLS = ["symbol", "sector", "origin", "when", "type"]' in page.text
+    assert 'label: "Alert details"' in page.text
+    assert 'label: "Origin"' in page.text
+    assert ">Type</button>" not in page.text
     assert "Combined news sentiment " not in page.text
     assert 'metric.textContent = formatScore(alert.sentiment_score) + "/100"' in page.text
     assert "kind-news" in page.text and "kind-price" in page.text and "kind-fusion" in page.text
-    assert 'KIND_LABELS[alert.kind] || alert.kind) + " · "' in page.text
+    assert "title.replaceChildren(kindPill(alert.kind), symbolLink(alert.symbol), when)" in page.text
     assert "Good news" not in page.text
     assert "Bad price" not in page.text
 
@@ -120,7 +133,33 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "wrote Together." not in page.text
     assert "The percent still applies" not in page.text
     assert "<h2>Watchlist</h2>" in page.text
-    assert "<h2>Recent</h2>" in page.text
+    assert "<h2>Recent alerts</h2>" in page.text
+    assert 'id="clearRecent"' in page.text
+    assert "Clear alerts" in page.text
+    assert "tip-btn" in page.text
+    assert "openHomeAlertKeys" in page.text
+    assert "openWatchAlertKeys" in page.text
+    assert "homeAlertFingerprint" in page.text
+    assert 'id="watchlistAlerts"' in page.text
+    assert 'id="homeStatus"' in page.text
+    assert 'id="recentTip"' in page.text
+    assert 'id="notifyHint"' not in page.text
+    assert "function setRecentTip" in page.text
+    assert "function setHomeScope" in page.text
+    assert "tickerAlertHomeScope" in page.text
+    assert 'data-scope="sp500"' in page.text
+    assert 'data-scope="watchlist"' in page.text
+    assert "scope-toggle" in page.text
+    assert 'id="homeScope"' not in page.text
+    home_panel = page.text.split('id="homeTab"', 1)[1].split('id="watchlistTab"', 1)[0]
+    watch_panel = page.text.split('id="watchlistTab"', 1)[1].split('id="historyTab"', 1)[0]
+    assert 'id="add-form"' not in home_panel
+    assert 'id="alerts"' in home_panel
+    assert "scope-toggle" in home_panel
+    assert "When new live alerts arrive" not in home_panel.split('id="recentTip"', 1)[0]
+    assert 'id="add-form"' in watch_panel
+    assert 'id="run"' in watch_panel
+    assert 'id="watchlistAlerts"' in watch_panel
     assert "Sentiment score " in page.text
     assert "(Positive " in page.text
     actions = page.text.split('class="settings-actions"', 1)[1].split("</div>", 1)[0]

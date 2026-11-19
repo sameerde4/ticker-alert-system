@@ -40,6 +40,76 @@
     h1 { margin: 0; font-weight: 600; letter-spacing: 0.01em; justify-self: start; }
     h1 span { color: var(--gold); }
     h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: 0.01em; }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .section-head h2 { margin: 0; }
+    .section-head .ghost { flex: 0 0 auto; }
+    .section-head-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .scope-toggle {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(36, 33, 25, 0.9);
+    }
+    .scope-toggle .scope-opt {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      padding: 6px 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .scope-toggle .scope-opt + .scope-opt {
+      border-left: 1px solid var(--line);
+    }
+    .scope-toggle .scope-opt:hover { color: var(--text); }
+    .scope-toggle .scope-opt.active {
+      background: rgba(212, 175, 55, 0.18);
+      color: var(--gold);
+    }
+    .heading-with-tip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .heading-with-tip h2 { margin: 0; }
+    .tip-btn {
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(36, 33, 25, 0.9);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: help;
+    }
+    .tip-btn:hover { color: var(--gold); border-color: rgba(212, 175, 55, 0.45); }
     .tab-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; min-width: 0; }
     .rules { margin: 0; color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.45; }
     .rules .linkish { font: inherit; letter-spacing: 0; text-transform: none; }
@@ -57,7 +127,12 @@
     }
     #add-form .status { flex: 1 1 220px; }
     form, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .symbol-suggest { position: relative; display: inline-flex; }
+    .symbol-suggest { position: relative; display: inline-flex; flex: 1 1 36ch; min-width: min(36ch, 100%); max-width: 100%; }
+    #add-form #symbol {
+      width: 100%;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
     .symbol-suggest-frame {
       position: absolute;
       left: 0;
@@ -151,6 +226,68 @@
     .badge.kind-news { background: rgba(126, 182, 255, 0.2); color: #9ec4ff; }
     .badge.kind-fusion { background: rgba(192, 132, 252, 0.2); color: #d2b0ff; }
     h3.section { margin: 12px 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); font-family: ui-sans-serif, system-ui, sans-serif; }
+    .alert-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(28, 26, 22, 0.92);
+      margin: 0 0 12px;
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .alert-card-toggle {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 14px 16px;
+      cursor: pointer;
+    }
+    .alert-card-toggle:hover { background: rgba(243, 239, 228, 0.03); }
+    .alert-card-toggle .chev {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 12px;
+      transition: transform 0.15s ease;
+    }
+    .alert-card.is-open .alert-card-toggle .chev { transform: rotate(90deg); }
+    .alert-card-body {
+      padding: 0 16px 14px;
+      border-top: 1px solid rgba(243, 239, 228, 0.08);
+    }
+    .alert-card-body[hidden] { display: none; }
+    details.alert-section {
+      border-top: 1px solid rgba(243, 239, 228, 0.06);
+      padding: 4px 0;
+    }
+    details.alert-section:first-child { border-top: 0; }
+    details.alert-section > summary {
+      list-style: none;
+      cursor: pointer;
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 10px 0 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    details.alert-section > summary::-webkit-details-marker { display: none; }
+    details.alert-section > summary::before {
+      content: "▸";
+      color: var(--muted);
+      font-size: 11px;
+    }
+    details.alert-section[open] > summary::before { content: "▾"; }
+    details.alert-section .section-body { padding: 0 0 10px; color: var(--text); }
     .hint, .empty, .status {
       margin: 0;
       color: var(--muted);
@@ -160,16 +297,7 @@
     }
     .status:empty { display: none; }
     .status.error { color: var(--down); }
-    .alert {
-      border-top: 1px solid rgba(243, 239, 228, 0.08);
-      padding: 14px 0;
-      font-family: ui-sans-serif, system-ui, sans-serif;
-      font-size: 15px;
-      line-height: 1.45;
-    }
-    .alert:first-child { border-top: 0; padding-top: 0; }
-    .alert:last-child { padding-bottom: 0; }
-    .alert-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .alert-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; flex: 1; }
     .symbol, a.symbol-link { font-weight: 700; }
     a.symbol-link { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
     a.symbol-link:hover { color: var(--text); }
@@ -211,6 +339,31 @@
     .alert-metric-value.mixed { color: var(--gold); }
     .rule-note { color: var(--muted); font-size: 13px; margin: 4px 0 10px; line-height: 1.4; }
     .summary { margin: 8px 0; line-height: 1.45; }
+    .evidence-story { margin: 8px 0 14px; padding: 0; list-style: none; }
+    .evidence-story li {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 8px;
+      align-items: start;
+      margin: 0 0 10px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .evidence-story .mark {
+      width: 10px;
+      height: 10px;
+      margin-top: 4px;
+      border-radius: 50%;
+      background: #6f6758;
+    }
+    .evidence-story .mark.ok { background: var(--up); }
+    .evidence-story .mark.partial { background: var(--gold); }
+    .evidence-story .mark.neutral { background: #6f6758; }
+    .evidence-story .mark.no { background: var(--down); }
+    .evidence-story .label { color: var(--gold); font-weight: 650; font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; }
+    .evidence-story .detail { color: var(--text); margin-top: 2px; }
+    .evidence-headline { color: var(--muted); font-size: 13px; margin: 0 0 8px; font-family: ui-sans-serif, system-ui, sans-serif; }
     .combined { margin: 0 0 8px; font-weight: 700; }
     .combined.up, .score.up, td.up { color: var(--up); }
     .combined.down, .score.down, td.down { color: var(--down); }
@@ -308,10 +461,16 @@
     .scorer-choice legend { font-size: 14px; font-weight: 650; padding: 0; }
     #scorer-form { max-width: 720px; }
     .table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table.history { min-width: 760px; border-collapse: separate; border-spacing: 0; }
+    table.history { min-width: 860px; border-collapse: separate; border-spacing: 0; }
     table.history th, table.history td { white-space: nowrap; vertical-align: middle; }
     table.history td.alert-summary { white-space: normal; }
+    table.history th[draggable="true"] { cursor: grab; }
+    table.history th.drag-over { box-shadow: inset 0 -2px 0 var(--gold); }
+    table.history th.is-dragging { opacity: 0.55; }
     .alert-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+    .badge.origin-live { background: rgba(80, 160, 220, 0.18); color: #9fd0f0; }
+    .badge.origin-watchlist { background: rgba(212, 175, 55, 0.16); color: var(--gold); }
+    .badge.origin-both { background: rgba(180, 140, 220, 0.18); color: #d2b8f0; }
     .alert-bit { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
     table.history thead th {
       background: var(--elevated);
@@ -392,7 +551,18 @@
       gap: 10px;
       padding: 16px 16px 8px;
     }
-    .modal-header h3 { margin: 0; flex: 1; min-width: 0; font-size: 20px; line-height: 1.3; }
+    .modal-header h3 {
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      font-size: 20px;
+      line-height: 1.3;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .modal-header h3 .when { margin-left: auto; font-size: 13px; font-weight: 500; }
     .modal-close {
       margin-left: auto;
       background: transparent;
@@ -419,6 +589,12 @@
           <path d="M5 9.5V21h14V9.5"></path>
         </svg>
         Home
+      </button>
+      <button class="tab-btn" type="button" data-tab="watchlistTab" role="tab" aria-selected="false" title="Watchlist" aria-label="Watchlist">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.9 7.5 16.7l.9-5L4.8 8.2l5-.7L12 3z"></path>
+        </svg>
+        Watchlist
       </button>
       <button class="tab-btn" type="button" data-tab="historyTab" role="tab" aria-selected="false" title="Alert History" aria-label="Alert History">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -450,8 +626,44 @@
     <section id="homeTab" class="tab-panel">
     <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesMiddle"></span><button type="button" class="linkish" id="priceExplain">matches the price move</button><span id="rulesAfter"></span></p>
     <section class="card">
-      <h2>Watchlist</h2>
-      <p class="hint">Choose S&amp;P 500 constituents to check for price and news alerts.</p>
+      <div class="section-head">
+        <div class="heading-with-tip">
+          <h2>Recent alerts</h2>
+          <button
+            type="button"
+            class="tip-btn"
+            id="recentTip"
+            title="Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist. Full list is always on Alert History. When new live alerts arrive, this tab gets a count badge and Chrome should show a Mac notification (Notification Center), even if you are in another app. Allow notifications when prompted. If Mac never pops up, click Enable desktop notifications, and check System Settings → Notifications → Google Chrome."
+            aria-label="About Recent alerts: Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist. Full list is always on Alert History. When new live alerts arrive, this tab gets a count badge and Chrome should show a Mac notification (Notification Center), even if you are in another app. Allow notifications when prompted. If Mac never pops up, click Enable desktop notifications, and check System Settings → Notifications → Google Chrome."
+          >?</button>
+        </div>
+        <div class="section-head-actions">
+          <button type="button" class="ghost" id="enableNotify">Enable desktop notifications</button>
+          <div class="scope-toggle" role="group" aria-label="Recent alerts scope">
+            <button type="button" class="scope-opt active" data-scope="sp500" id="homeScopeSp500" title="Show recent alerts for the full S&amp;P 500 feed">S&amp;P 500</button>
+            <button type="button" class="scope-opt" data-scope="watchlist" id="homeScopeWatchlist" title="Show only alerts for symbols on your watchlist">Watchlist</button>
+          </div>
+          <button type="button" class="ghost" id="clearRecent">Clear alerts</button>
+        </div>
+      </div>
+      <p class="status" id="homeStatus"></p>
+      <div id="alerts"></div>
+      <p class="empty" id="empty">No recent alerts yet. Live alerts show up here; use Watchlist to rerun a check for specific tickers.</p>
+    </section>
+    </section>
+    <section id="watchlistTab" class="tab-panel" hidden>
+    <section class="card">
+      <div class="section-head">
+        <div class="heading-with-tip">
+          <h2>Watchlist</h2>
+          <button
+            type="button"
+            class="tip-btn"
+            title="Choose S&amp;P 500 constituents, then Scan today to see what fired for them on this session. Home keeps the live Recent alerts feed separate."
+            aria-label="About Watchlist: Choose S&amp;P 500 constituents, then Scan today to see what fired for them on this session. Home keeps the live Recent alerts feed separate."
+          >?</button>
+        </div>
+      </div>
       <form id="add-form">
         <span class="symbol-suggest">
           <input id="symbol" name="symbol" placeholder="S&amp;P 500 ticker or company name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="symbolSuggestList" />
@@ -460,39 +672,40 @@
           </div>
         </span>
         <button type="submit">Add to watchlist</button>
-        <button type="button" id="run" class="ghost">Run check</button>
+        <button type="button" id="run" class="ghost">Scan today</button>
         <p class="status" id="status"></p>
       </form>
       <div class="chips" id="watchlist"></div>
     </section>
     <section class="card">
-      <h2>Recent</h2>
-      <p class="hint" id="homeScope" hidden>Since you last opened the app.</p>
-      <p class="hint">When new alerts arrive (Run check or live), this tab gets a count badge and Chrome should show a <strong>Mac notification</strong> (Notification Center), even if you are in another app. Allow notifications when prompted. If Mac never pops up, click Enable desktop notifications, and check System Settings → Notifications → Google Chrome.</p>
-      <p class="hint" id="notifyHint">Desktop notifications: checking…</p>
-      <p><button type="button" class="ghost" id="enableNotify">Enable desktop notifications</button></p>
-      <div id="alerts"></div>
-      <p class="empty" id="empty">No alerts yet. Add a ticker and run a check.</p>
+      <div class="section-head">
+        <div class="heading-with-tip">
+          <h2>Today's results</h2>
+          <button
+            type="button"
+            class="tip-btn"
+            title="Shows what the last Scan today wrote for your watchlist. Home Recent alerts stay on the live market feed."
+            aria-label="About Today's results: Shows what the last Scan today wrote for your watchlist. Home Recent alerts stay on the live market feed."
+          >?</button>
+        </div>
+      </div>
+      <div id="watchlistAlerts"></div>
+      <p class="empty" id="watchlistEmpty">No results yet. Add tickers and click Scan today.</p>
     </section>
     </section>
     <section id="historyTab" class="tab-panel" hidden>
       <section class="card">
         <h2>Alert History</h2>
-        <p class="hint">Click a column heading to sort. Details opens the same write-up as the card on Home.</p>
+        <p class="hint">Click a column heading to sort. Drag a heading to reorder columns (saved on this browser). Details opens the same write-up as Home or Watchlist.</p>
         <div class="table-wrap">
           <table class="history">
             <thead>
-              <tr>
-                <th data-sort="symbol" aria-sort="none"><button type="button" class="sort-btn">Symbol</button></th>
-                <th data-sort="sector" aria-sort="none"><button type="button" class="sort-btn">Sector</button></th>
-                <th data-sort="when" aria-sort="descending"><button type="button" class="sort-btn">When</button></th>
-                <th data-sort="type" aria-sort="none"><button type="button" class="sort-btn">Alert details</button></th>
-              </tr>
+              <tr id="historyHead"></tr>
             </thead>
             <tbody id="historyBody"></tbody>
           </table>
         </div>
-        <p class="empty" id="historyEmpty">No alerts yet. Add a ticker and run a check.</p>
+        <p class="empty" id="historyEmpty">No alerts yet. Live alerts and Watchlist Scan today both land here.</p>
       </section>
     </section>
     <section id="settingsTab" class="tab-panel" hidden>
@@ -518,7 +731,7 @@
       </section>
       <section class="card">
         <h2>Perplexity</h2>
-        <p class="hint">After a check decides the alerts, a saved key rewrites news and news + price cards with richer reasoning: what happened, why the headlines matter (with titles and links when present), how FinBERT reads them, and a cautious forward look. Price-only alerts keep the rule sentence for now. The selected model writes three to four short sentences. The rule sentence stays under Rule when the call succeeds, and stays as the card text when no key is saved or the call fails. Dots in the field mean a key is saved. The key itself stays hidden.</p>
+        <p class="hint">Every alert checks both price and near-term news. A saved key rewrites the Summary section when there is a news side (aligned, news-led, or price-led with headlines reviewed): what happened, why the headlines matter (with titles and links when present), how FinBERT reads them, and a cautious forward look. Bare price with no headlines keeps the rule sentence. The selected model writes three to four short sentences. The deterministic sentence stays under Rule when the call succeeds. Dots in the field mean a key is saved. The key itself stays hidden.</p>
         <form id="perplexity-form" class="settings-form">
           <label class="field">
             <span>Model</span>
@@ -613,26 +826,109 @@
     </div>
   </div>
   <script>
-    const KIND_LABELS = { price: "price", news: "news", news_price: "news + price" };
+    const KIND_LABELS = { price: "price-led", news: "news-led", news_price: "aligned" };
     let displayTimeZone = "America/New_York";
     let currentRules = null;
     const statusEl = document.querySelector("#status");
+    const homeStatusEl = document.querySelector("#homeStatus");
     const alertsEl = document.querySelector("#alerts");
     const emptyEl = document.querySelector("#empty");
+    const watchlistAlertsEl = document.querySelector("#watchlistAlerts");
+    const watchlistEmptyEl = document.querySelector("#watchlistEmpty");
+    const historyHead = document.querySelector("#historyHead");
     const historyBody = document.querySelector("#historyBody");
     const historyEmpty = document.querySelector("#historyEmpty");
     const detailModal = document.querySelector("#detailModal");
     const finbertModal = document.querySelector("#finbertModal");
     const priceModal = document.querySelector("#priceModal");
-    const homeScope = document.querySelector("#homeScope");
+    const clearRecentBtn = document.querySelector("#clearRecent");
+    // Recent alerts persist across refresh until the user clears them (History still has everything).
+    const HOME_CLEARED_KEY = "tickerAlertHomeClearedAt";
+    const HOME_SCOPE_KEY = "tickerAlertHomeScope";
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
-    let homeOpenedAt = null;
+    const HISTORY_COLS_KEY = "tickerAlertHistoryColumns";
+    const DEFAULT_HISTORY_COLS = ["symbol", "sector", "origin", "when", "type"];
+    const HISTORY_COL_META = {
+      symbol: { label: "Symbol" },
+      sector: { label: "Sector" },
+      origin: { label: "Origin" },
+      when: { label: "When", numeric: true },
+      type: { label: "Alert details", className: "details" },
+    };
+    const openHomeAlertKeys = new Set();
+    const openHomeSectionKeys = new Set();
+    let lastHomeAlertFingerprint = "";
+    const openWatchAlertKeys = new Set();
+    const openWatchSectionKeys = new Set();
+    let lastWatchAlertFingerprint = "";
+    let lastWatchlistCheckAlerts = [];
     let latestAlerts = [];
+    let watchlistSymbols = [];
+    let homeScope = loadHomeScope();
     let historySort = { key: "when", dir: "desc" };
+
+    function loadHomeScope() {
+      const raw = String(localStorage.getItem(HOME_SCOPE_KEY) || "sp500").toLowerCase();
+      return raw === "watchlist" ? "watchlist" : "sp500";
+    }
+
+    function saveHomeScope(scope) {
+      homeScope = scope === "watchlist" ? "watchlist" : "sp500";
+      localStorage.setItem(HOME_SCOPE_KEY, homeScope);
+    }
+
+    function syncHomeScopeControls() {
+      document.querySelectorAll(".scope-toggle .scope-opt").forEach((button) => {
+        const on = button.dataset.scope === homeScope;
+        button.classList.toggle("active", on);
+        button.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+    let historyColumns = loadHistoryColumns();
+    let historyDragKey = "";
+    let historyDragMoved = false;
+
+    function loadHistoryColumns() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(HISTORY_COLS_KEY) || "null");
+        if (!Array.isArray(raw)) return DEFAULT_HISTORY_COLS.slice();
+        const known = new Set(DEFAULT_HISTORY_COLS);
+        const ordered = raw.filter((key) => known.has(key));
+        for (const key of DEFAULT_HISTORY_COLS) {
+          if (!ordered.includes(key)) ordered.push(key);
+        }
+        return ordered;
+      } catch (_err) {
+        return DEFAULT_HISTORY_COLS.slice();
+      }
+    }
+
+    function saveHistoryColumns() {
+      localStorage.setItem(HISTORY_COLS_KEY, JSON.stringify(historyColumns));
+    }
+
+    function originLabel(origin) {
+      const value = String(origin || "watchlist").toLowerCase();
+      if (value === "live") return "Live";
+      if (value === "both") return "Both";
+      return "Watchlist";
+    }
+
+    function originTone(origin) {
+      const value = String(origin || "watchlist").toLowerCase();
+      if (value === "live" || value === "both") return value;
+      return "watchlist";
+    }
     const BASE_TITLE = "S&P 500 Alert System";
     const plainFavicon = document.querySelector("#appFavicon").href;
-    const notifyHint = document.querySelector("#notifyHint");
+    const recentTipBtn = document.querySelector("#recentTip");
     const enableNotifyBtn = document.querySelector("#enableNotify");
+    const RECENT_TIP_BASE =
+      "Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&P 500 feed "
+      + "or only your watchlist. Full list is always on Alert History. "
+      + "When new live alerts arrive, this tab gets a count badge and Chrome should show a Mac notification "
+      + "(Notification Center), even if you are in another app. Allow notifications when prompted. "
+      + "If Mac never pops up, click Enable desktop notifications, and check System Settings → Notifications → Google Chrome.";
     let knownAlertIds = new Set();
     let alertsBootstrapped = false;
     let unreadAlertCount = 0;
@@ -645,24 +941,31 @@
       return String(alert.id || [alert.symbol, alert.bar_date, alert.kind].join("|"));
     }
 
+    function setRecentTip(statusLine) {
+      if (!recentTipBtn) return;
+      const text = statusLine ? RECENT_TIP_BASE + " " + statusLine : RECENT_TIP_BASE;
+      recentTipBtn.title = text;
+      recentTipBtn.setAttribute("aria-label", "About Recent alerts: " + text);
+    }
+
     function updateNotifyHint(permission) {
-      if (!notifyHint || !enableNotifyBtn) return;
+      if (!enableNotifyBtn) return;
       if (!("Notification" in window)) {
-        notifyHint.textContent = "Desktop notifications: not supported in this browser.";
+        setRecentTip("Desktop notifications: not supported in this browser.");
         enableNotifyBtn.hidden = true;
         return;
       }
       if (permission === "granted") {
-        notifyHint.textContent = "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive.";
+        setRecentTip("Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive.");
         enableNotifyBtn.hidden = true;
         return;
       }
       if (permission === "denied") {
-        notifyHint.textContent = "Desktop notifications: blocked. Allow Google Chrome in System Settings → Notifications, then reload this page.";
+        setRecentTip("Desktop notifications: blocked. Allow Google Chrome in System Settings → Notifications, then reload this page.");
         enableNotifyBtn.hidden = false;
         return;
       }
-      notifyHint.textContent = "Desktop notifications: off. Click Enable desktop notifications (needed for Mac popups while you are in another app).";
+      setRecentTip("Desktop notifications: off. Click Enable desktop notifications (needed for Mac popups while you are in another app).");
       enableNotifyBtn.hidden = false;
     }
 
@@ -831,29 +1134,107 @@
       showOsNotifications(fresh);
     }
 
-    function homeWatermark() {
-      const closedAt = localStorage.getItem(LAST_CLOSED_KEY);
-      if (closedAt) return closedAt;
-      if (!homeOpenedAt) homeOpenedAt = new Date().toISOString();
-      return homeOpenedAt;
+    function homeClearedAt() {
+      return localStorage.getItem(HOME_CLEARED_KEY) || "";
+    }
+
+    function alertsForHome(alerts) {
+      let rows = Array.isArray(alerts) ? alerts.slice() : [];
+      const mark = homeClearedAt();
+      if (mark) {
+        const cut = new Date(mark).getTime();
+        if (!Number.isNaN(cut)) {
+          rows = rows.filter((alert) => new Date(alert.created_at || 0).getTime() > cut);
+        }
+      }
+      if (homeScope === "watchlist") {
+        const focus = new Set(watchlistSymbols);
+        rows = rows.filter((alert) => focus.has(String(alert.symbol || "").toUpperCase()));
+      }
+      return rows;
+    }
+
+    function homeEmptyText(visibleCount) {
+      if (visibleCount > 0) return "";
+      if (homeScope === "watchlist") {
+        if (!watchlistSymbols.length) {
+          return "Watchlist scope is on, but your watchlist is empty. Add symbols on the Watchlist tab, or switch back to S&P 500.";
+        }
+        return latestAlerts.length > 0
+          ? "No recent alerts for your watchlist symbols. Switch to S&P 500 to see the broader feed, or Scan today on Watchlist."
+          : "No recent alerts for your watchlist yet. Live alerts for those symbols show up here.";
+      }
+      return latestAlerts.length > 0
+        ? "No recent alerts on Home. Live alerts appear here; Watchlist Scan today stays on that tab. History has the full list."
+        : "No recent alerts yet. Live alerts show up here; use Watchlist to Scan today for specific tickers.";
+    }
+
+    function clearRecentAlerts() {
+      localStorage.setItem(HOME_CLEARED_KEY, new Date().toISOString());
+      openHomeAlertKeys.clear();
+      openHomeSectionKeys.clear();
+      lastHomeAlertFingerprint = "";
+      clearUnreadBadge();
+      renderAlerts(alertsForHome(latestAlerts), { force: true });
+      setHomeStatus("Recent alerts cleared. New ones will still appear here; History is unchanged.");
+    }
+
+    function setHomeScope(scope) {
+      saveHomeScope(scope);
+      syncHomeScopeControls();
+      lastHomeAlertFingerprint = "";
+      renderAlerts(alertsForHome(latestAlerts), { force: true });
+      setHomeStatus(
+        homeScope === "watchlist"
+          ? "Showing recent alerts for your watchlist only."
+          : "Showing recent alerts for the full S&P 500 feed.",
+      );
+    }
+
+    function alertListFingerprint(alerts) {
+      return (alerts || []).map((alert) => ([
+        alertKey(alert),
+        alert.kind,
+        alert.summary || "",
+        alert.updated_at || "",
+        alert.created_at || "",
+        alert.sentiment_score,
+        alert.price_change_pct,
+        JSON.stringify(alert.sections || {}),
+        (alert.articles || []).length,
+      ].join("\t"))).join("\n");
+    }
+
+    function homeAlertFingerprint(alerts) {
+      return alertListFingerprint(alerts);
+    }
+
+    function selectTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach((other) => {
+        const on = other.dataset.tab === tabId;
+        other.classList.toggle("active", on);
+        other.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.hidden = panel.id !== tabId;
+      });
+      if (tabId === "homeTab") clearUnreadBadge();
     }
 
     window.addEventListener("pagehide", () => {
+      // Used only for unread/badge bookkeeping — does not clear Recent.
       localStorage.setItem(LAST_CLOSED_KEY, new Date().toISOString());
     });
-
-    function alertsForHome(alerts) {
-      const mark = homeWatermark();
-      if (!mark) return alerts;
-      const cut = new Date(mark).getTime();
-      if (Number.isNaN(cut)) return alerts;
-      return alerts.filter((alert) => new Date(alert.created_at || 0).getTime() > cut);
-    }
     const watchEl = document.querySelector("#watchlist");
 
     function setStatus(text, isError) {
       statusEl.textContent = text || "";
       statusEl.className = isError ? "status error" : "status";
+    }
+
+    function setHomeStatus(text, isError) {
+      homeStatusEl.textContent = text || "";
+      homeStatusEl.className = isError ? "status error" : "status";
     }
 
     async function readJson(res) {
@@ -866,8 +1247,12 @@
     }
 
     function renderWatchlist(symbols) {
+      const rows = Array.isArray(symbols) ? symbols : [];
+      watchlistSymbols = rows
+        .map((row) => String(row.symbol || "").toUpperCase())
+        .filter(Boolean);
       watchEl.replaceChildren();
-      for (const row of symbols) {
+      for (const row of rows) {
         const chip = document.createElement("span");
         chip.className = "chip";
         chip.textContent = row.symbol;
@@ -1002,10 +1387,11 @@
     function alertMetrics(alert) {
       const row = document.createElement("div");
       row.className = "alert-metrics";
+      // News-led: sentiment only at the top. Price-led / aligned: price + sentiment when present.
       if (alert.kind !== "news" && alert.price_change_pct != null) {
         row.append(metricBlock("Price change", formatMove(alert.price_change_pct), priceClass(alert.price_change_pct)));
       }
-      if (alert.kind !== "price" && alert.sentiment_score != null) {
+      if (alert.sentiment_score != null) {
         row.append(metricBlock(
           "Sentiment",
           formatScore(alert.sentiment_score) + "/100",
@@ -1013,6 +1399,72 @@
         ));
       }
       return row.childElementCount ? row : null;
+    }
+
+    function addCollapsibleSection(parent, title, builder, options) {
+      const opts = options || {};
+      if (!builder) return;
+      const block = document.createElement("details");
+      block.className = "alert-section";
+      const sectionKey = opts.sectionKey || "";
+      const sectionKeys = opts.sectionKeys || openHomeSectionKeys;
+      if (sectionKey) {
+        if (sectionKeys.has(sectionKey)) block.open = true;
+        else if (sectionKeys.has(sectionKey + "::closed")) block.open = false;
+        else block.open = Boolean(opts.open);
+      } else {
+        block.open = Boolean(opts.open);
+      }
+      const summary = document.createElement("summary");
+      summary.textContent = title;
+      const body = document.createElement("div");
+      body.className = "section-body";
+      const filled = builder(body);
+      if (filled === false) return;
+      if (sectionKey) {
+        block.addEventListener("toggle", () => {
+          if (block.open) {
+            sectionKeys.add(sectionKey);
+            sectionKeys.delete(sectionKey + "::closed");
+          } else {
+            sectionKeys.delete(sectionKey);
+            sectionKeys.add(sectionKey + "::closed");
+          }
+        });
+      }
+      block.append(summary, body);
+      parent.append(block);
+    }
+
+    function renderEvidenceStory(target, evidence) {
+      if (!evidence || !Array.isArray(evidence.steps) || !evidence.steps.length) return false;
+      if (evidence.headline) {
+        const line = document.createElement("p");
+        line.className = "evidence-headline";
+        line.textContent = evidence.headline;
+        target.append(line);
+      }
+      const list = document.createElement("ol");
+      list.className = "evidence-story";
+      for (const step of evidence.steps) {
+        const item = document.createElement("li");
+        const mark = document.createElement("span");
+        const tone = step.tone || (step.ok ? "ok" : "no");
+        mark.className = "mark " + tone;
+        mark.setAttribute("aria-hidden", "true");
+        const copy = document.createElement("div");
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = step.label || step.id || "";
+        const detail = document.createElement("div");
+        detail.className = "detail";
+        detail.textContent = step.detail || "";
+        copy.append(label, detail);
+        item.append(mark, copy);
+        list.append(item);
+      }
+      target.append(list);
+      return true;
     }
 
     function fillAlertDetail(card, alert, options) {
@@ -1023,33 +1475,90 @@
       }
       if (opts.beforeBody) card.append(opts.beforeBody);
       const sections = alert.sections || {};
-      const combined = sections.price || sections.news;
-      if (combined) {
-        addSection(card, "Price", sections.price);
-        addSection(card, "News", sections.news);
+      const useCollapse = opts.collapsibleSections !== false;
+      const alertKeyValue = opts.alertKey || "";
+      // What happened + Summary stay open; Price / News / Rule stay closed by default.
+      const openByTitle = opts.sectionOpen || {
+        "What happened": true,
+        "Summary": true,
+        "Price": false,
+        "News": false,
+        "Rule": false,
+      };
+
+      const sectionKeys = opts.sectionKeys || openHomeSectionKeys;
+      const appendPlain = (title, bodyFn) => {
+        if (useCollapse) {
+          addCollapsibleSection(card, title, bodyFn, {
+            open: Boolean(openByTitle[title]),
+            sectionKey: alertKeyValue ? alertKeyValue + "::" + title : "",
+            sectionKeys,
+          });
+          return;
+        }
+        const heading = document.createElement("h3");
+        heading.className = "section";
+        heading.textContent = title;
+        const wrap = document.createElement("div");
+        if (bodyFn(wrap) === false) return;
+        card.append(heading, wrap);
+      };
+
+      appendPlain("What happened", (body) => renderEvidenceStory(body, sections.evidence));
+
+      appendPlain("Summary", (body) => {
+        const text = sections.synthesis || alert.summary || "";
+        if (!text) return false;
+        const p = document.createElement("p");
+        p.className = "summary";
+        p.textContent = text;
+        const note = togetherModel(sections);
+        if (note) {
+          const line = document.createElement("span");
+          line.className = "reason";
+          line.textContent = note;
+          p.append(line);
+        }
+        body.append(p);
+        return true;
+      });
+
+      appendPlain("Price", (body) => {
+        if (!sections.price) return false;
+        const p = document.createElement("p");
+        p.className = "summary";
+        p.textContent = sections.price;
+        body.append(p);
+        return true;
+      });
+
+      appendPlain("News", (body) => {
+        if (!sections.news && !(alert.articles || []).length) return false;
+        if (sections.news) {
+          const p = document.createElement("p");
+          p.className = "summary";
+          p.textContent = sections.news;
+          body.append(p);
+        }
         if (alert.sentiment_score != null) {
           const score = document.createElement("p");
           score.className = "combined " + scoreClass(alert.sentiment_score);
           score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score) + "/100";
-          card.append(score);
+          body.append(score);
         }
-        if ((alert.articles || []).length) card.append(articleList(alert.articles));
-        addSection(card, "Together", sections.synthesis, togetherModel(sections));
-        if (sections.rules && sections.rules !== sections.synthesis) addSection(card, "Rule", sections.rules);
-      } else {
-        const summary = document.createElement("p");
-        summary.className = "summary";
-        summary.textContent = alert.summary;
-        card.append(summary);
-        if (sections.rules && sections.rules !== alert.summary) addSection(card, "Rule", sections.rules);
-        if (alert.sentiment_score != null) {
-          const score = document.createElement("p");
-          score.className = "combined " + scoreClass(alert.sentiment_score);
-          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score) + "/100";
-          card.append(score);
-        }
-        if ((alert.articles || []).length) card.append(articleList(alert.articles));
-      }
+        if ((alert.articles || []).length) body.append(articleList(alert.articles));
+        return true;
+      });
+
+      appendPlain("Rule", (body) => {
+        const rule = sections.rules;
+        if (!rule || rule === sections.synthesis || rule === alert.summary) return false;
+        const p = document.createElement("p");
+        p.className = "summary";
+        p.textContent = rule;
+        body.append(p);
+        return true;
+      });
     }
 
     function yahooQuoteUrl(symbol) {
@@ -1066,29 +1575,98 @@
       return link;
     }
 
-    function renderAlerts(alerts) {
-      alertsEl.replaceChildren();
-      const returning = Boolean(localStorage.getItem(LAST_CLOSED_KEY)) || latestAlerts.length > alerts.length;
-      homeScope.hidden = !returning;
-      emptyEl.hidden = alerts.length > 0;
-      emptyEl.textContent = latestAlerts.length > 0
-        ? "No new alerts since you last opened the app. History has the full list."
-        : "No alerts yet. Add a ticker and run a check.";
-      for (const alert of alerts) {
+    function renderAlertCards(target, emptyTarget, alerts, options) {
+      const opts = options || {};
+      const rows = Array.isArray(alerts) ? alerts : [];
+      const openKeys = opts.openKeys || openHomeAlertKeys;
+      const sectionKeys = opts.sectionKeys || openHomeSectionKeys;
+      const fingerprint = typeof opts.fingerprint === "function"
+        ? opts.fingerprint(rows)
+        : alertListFingerprint(rows);
+      // Live polling refreshes every few seconds — skip a full rebuild when nothing changed
+      // so an open card does not slam shut while you are reading it.
+      if (!opts.force && typeof opts.getFingerprint === "function" && fingerprint === opts.getFingerprint()
+          && target.childElementCount === rows.length) {
+        emptyTarget.hidden = rows.length > 0;
+        if (opts.emptyText) emptyTarget.textContent = opts.emptyText;
+        return;
+      }
+      if (typeof opts.setFingerprint === "function") opts.setFingerprint(fingerprint);
+      target.replaceChildren();
+      emptyTarget.hidden = rows.length > 0;
+      if (opts.emptyText) emptyTarget.textContent = opts.emptyText;
+      for (const alert of rows) {
+        const key = alertKey(alert);
         const card = document.createElement("article");
-        card.className = "alert";
+        card.className = "alert-card";
+        card.dataset.alertKey = key;
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "alert-card-toggle";
+        const startOpen = openKeys.has(key);
+        toggle.setAttribute("aria-expanded", startOpen ? "true" : "false");
         const head = document.createElement("div");
         head.className = "alert-head";
         const symbol = symbolLink(alert.symbol);
+        symbol.addEventListener("click", (event) => event.stopPropagation());
         const when = document.createElement("span");
         when.className = "when";
         when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
         when.title = "When the condition was met";
         head.append(kindPill(alert.kind), symbol, when);
-        card.append(head);
-        fillAlertDetail(card, alert);
-        alertsEl.append(card);
+        const chev = document.createElement("span");
+        chev.className = "chev";
+        chev.textContent = "▸";
+        chev.setAttribute("aria-hidden", "true");
+        toggle.append(head, chev);
+        const body = document.createElement("div");
+        body.className = "alert-card-body";
+        body.hidden = !startOpen;
+        if (startOpen) card.classList.add("is-open");
+        fillAlertDetail(body, alert, {
+          collapsibleSections: true,
+          alertKey: key,
+          sectionKeys,
+        });
+        toggle.addEventListener("click", () => {
+          const open = body.hidden;
+          body.hidden = !open;
+          card.classList.toggle("is-open", open);
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) openKeys.add(key);
+          else openKeys.delete(key);
+        });
+        card.append(toggle, body);
+        target.append(card);
       }
+    }
+
+    function renderAlerts(alerts, options) {
+      const opts = options || {};
+      const homeRows = Array.isArray(alerts) ? alerts : [];
+      renderAlertCards(alertsEl, emptyEl, homeRows, {
+        force: opts.force,
+        openKeys: openHomeAlertKeys,
+        sectionKeys: openHomeSectionKeys,
+        fingerprint: (rows) => homeScope + "\n" + alertListFingerprint(rows),
+        getFingerprint: () => lastHomeAlertFingerprint,
+        setFingerprint: (value) => { lastHomeAlertFingerprint = value; },
+        emptyText: homeEmptyText(homeRows.length),
+      });
+    }
+
+    function renderWatchlistCheckAlerts(alerts, options) {
+      const opts = options || {};
+      const rows = Array.isArray(alerts) ? alerts : [];
+      lastWatchlistCheckAlerts = rows;
+      renderAlertCards(watchlistAlertsEl, watchlistEmptyEl, rows, {
+        force: opts.force,
+        openKeys: openWatchAlertKeys,
+        sectionKeys: openWatchSectionKeys,
+        getFingerprint: () => lastWatchAlertFingerprint,
+        setFingerprint: (value) => { lastWatchAlertFingerprint = value; },
+        emptyText: "No results yet. Add tickers and click Scan today.",
+      });
     }
 
     function kindPill(kind) {
@@ -1110,6 +1688,7 @@
     function historyValue(alert, key) {
       if (key === "symbol") return alert.symbol || "";
       if (key === "sector") return alert.sector || "";
+      if (key === "origin") return originLabel(alert.origin);
       if (key === "type") return KIND_LABELS[alert.kind] || alert.kind || "";
       if (key === "when") {
         const time = new Date(alert.triggered_at || alert.updated_at || 0).getTime();
@@ -1132,10 +1711,142 @@
     }
 
     function syncHistoryHeaders() {
-      document.querySelectorAll("table.history th[data-sort]").forEach((header) => {
+      if (!historyHead) return;
+      historyHead.querySelectorAll("th[data-sort]").forEach((header) => {
         const active = header.dataset.sort === historySort.key;
-        header.setAttribute("aria-sort", active ? (historySort.dir === "asc" ? "ascending" : "descending") : "none");
+        header.setAttribute(
+          "aria-sort",
+          active ? (historySort.dir === "asc" ? "ascending" : "descending") : "none",
+        );
       });
+    }
+
+    function setHistorySort(key) {
+      if (historySort.key === key) {
+        historySort.dir = historySort.dir === "asc" ? "desc" : "asc";
+      } else {
+        const numeric = Boolean(HISTORY_COL_META[key] && HISTORY_COL_META[key].numeric);
+        historySort = { key, dir: numeric ? "desc" : "asc" };
+      }
+      renderHistory(latestAlerts);
+    }
+
+    function moveHistoryColumn(fromKey, toKey) {
+      if (!fromKey || !toKey || fromKey === toKey) return;
+      const from = historyColumns.indexOf(fromKey);
+      const to = historyColumns.indexOf(toKey);
+      if (from < 0 || to < 0) return;
+      const next = historyColumns.slice();
+      next.splice(from, 1);
+      next.splice(to, 0, fromKey);
+      historyColumns = next;
+      saveHistoryColumns();
+      buildHistoryHeaders();
+      renderHistory(latestAlerts);
+    }
+
+    function buildHistoryHeaders() {
+      if (!historyHead) return;
+      historyHead.replaceChildren();
+      for (const key of historyColumns) {
+        const meta = HISTORY_COL_META[key] || { label: key };
+        const th = document.createElement("th");
+        th.dataset.sort = key;
+        th.draggable = true;
+        th.title = "Click to sort. Drag to reorder.";
+        if (meta.className) th.classList.add(meta.className);
+        th.setAttribute("aria-sort", "none");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sort-btn";
+        button.textContent = meta.label;
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (historyDragMoved) {
+            historyDragMoved = false;
+            return;
+          }
+          setHistorySort(key);
+        });
+        th.addEventListener("dragstart", (event) => {
+          historyDragKey = key;
+          historyDragMoved = false;
+          th.classList.add("is-dragging");
+          if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", key);
+          }
+        });
+        th.addEventListener("dragend", () => {
+          th.classList.remove("is-dragging");
+          historyHead.querySelectorAll("th.drag-over").forEach((node) => node.classList.remove("drag-over"));
+          historyDragKey = "";
+        });
+        th.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+          th.classList.add("drag-over");
+        });
+        th.addEventListener("dragleave", () => th.classList.remove("drag-over"));
+        th.addEventListener("drop", (event) => {
+          event.preventDefault();
+          th.classList.remove("drag-over");
+          const fromKey = historyDragKey || (event.dataTransfer && event.dataTransfer.getData("text/plain"));
+          if (fromKey && fromKey !== key) historyDragMoved = true;
+          moveHistoryColumn(fromKey, key);
+        });
+        th.append(button);
+        historyHead.append(th);
+      }
+      syncHistoryHeaders();
+    }
+
+    function historyCell(alert, key) {
+      if (key === "symbol") {
+        const cell = document.createElement("td");
+        cell.append(symbolLink(alert.symbol));
+        return cell;
+      }
+      if (key === "sector") {
+        const cell = document.createElement("td");
+        cell.textContent = alert.sector || "—";
+        return cell;
+      }
+      if (key === "origin") {
+        const cell = document.createElement("td");
+        const pill = document.createElement("span");
+        pill.className = "badge origin-" + originTone(alert.origin);
+        pill.textContent = originLabel(alert.origin);
+        pill.title = "Live = Kafka session feed. Watchlist = Scan today. Both = each path wrote this symbol/day.";
+        cell.append(pill);
+        return cell;
+      }
+      if (key === "when") {
+        const cell = document.createElement("td");
+        cell.textContent = formatWhen(alert.triggered_at || alert.updated_at);
+        cell.title = "When the condition was met";
+        return cell;
+      }
+      const summary = document.createElement("td");
+      summary.className = "alert-summary";
+      const line = document.createElement("div");
+      line.className = "alert-summary-row";
+      line.append(kindPill(alert.kind));
+      if (alert.kind !== "price" && alert.sentiment_score != null) {
+        const metric = document.createElement("span");
+        metric.className = "alert-bit score " + scoreClass(alert.sentiment_score);
+        metric.textContent = formatScore(alert.sentiment_score) + "/100";
+        line.append(metric);
+      }
+      if (alert.kind !== "news" && alert.price_change_pct != null) {
+        const metric = document.createElement("span");
+        metric.className = "alert-bit score " + priceClass(alert.price_change_pct);
+        metric.textContent = formatMove(alert.price_change_pct);
+        line.append(metric);
+      }
+      line.append(historyDetailsButton(alert));
+      summary.append(line);
+      return summary;
     }
 
     function renderHistory(alerts) {
@@ -1145,33 +1856,9 @@
       const rows = alerts.slice().sort(compareHistory);
       for (const alert of rows) {
         const row = document.createElement("tr");
-        const symbol = document.createElement("td");
-        symbol.append(symbolLink(alert.symbol));
-        const sector = document.createElement("td");
-        sector.textContent = alert.sector || "—";
-        const when = document.createElement("td");
-        when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
-        when.title = "When the condition was met";
-        const summary = document.createElement("td");
-        summary.className = "alert-summary";
-        const line = document.createElement("div");
-        line.className = "alert-summary-row";
-        line.append(kindPill(alert.kind));
-        if (alert.kind !== "price" && alert.sentiment_score != null) {
-          const metric = document.createElement("span");
-          metric.className = "alert-bit score " + scoreClass(alert.sentiment_score);
-          metric.textContent = formatScore(alert.sentiment_score) + "/100";
-          line.append(metric);
+        for (const key of historyColumns) {
+          row.append(historyCell(alert, key));
         }
-        if (alert.kind !== "news" && alert.price_change_pct != null) {
-          const metric = document.createElement("span");
-          metric.className = "alert-bit score " + priceClass(alert.price_change_pct);
-          metric.textContent = formatMove(alert.price_change_pct);
-          line.append(metric);
-        }
-        line.append(historyDetailsButton(alert));
-        summary.append(line);
-        row.append(symbol, sector, when, summary);
         historyBody.append(row);
       }
     }
@@ -1198,13 +1885,10 @@
       if (!alert) return;
       const title = document.querySelector("#detailTitle");
       const when = document.createElement("span");
+      when.className = "when";
       when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
       when.title = "When the condition was met";
-      title.replaceChildren(
-        symbolLink(alert.symbol),
-        document.createTextNode(" · " + (KIND_LABELS[alert.kind] || alert.kind) + " · "),
-        when,
-      );
+      title.replaceChildren(kindPill(alert.kind), symbolLink(alert.symbol), when);
       const body = document.querySelector("#detailBody");
       body.replaceChildren();
       let rulesNote = null;
@@ -1214,7 +1898,10 @@
         rulesNote.className = "rule-note";
         rulesNote.textContent = rules;
       }
-      fillAlertDetail(body, alert, { beforeBody: rulesNote || undefined });
+      fillAlertDetail(body, alert, {
+        beforeBody: rulesNote || undefined,
+        collapsibleSections: true,
+      });
       detailModal.hidden = false;
       document.querySelector("#detailClose").focus();
     }
@@ -1234,7 +1921,9 @@
       latestAlerts = alerts.alerts;
       noticeNewAlerts(latestAlerts);
       renderWatchlist(watch.symbols);
+      syncHomeScopeControls();
       renderAlerts(alertsForHome(latestAlerts));
+      renderWatchlistCheckAlerts(lastWatchlistCheckAlerts);
       renderHistory(latestAlerts);
       fillSettingsForm(rules);
       applyRulesLine(rules);
@@ -1473,7 +2162,7 @@
     });
 
     document.querySelector("#run").addEventListener("click", async () => {
-      setStatus("Checking prices and headlines…");
+      setStatus("Scanning prices and headlines for today…");
       const permission = await ensureNotificationPermission();
       try {
         const result = await readJson(await fetch("/v1/checks/run", { method: "POST" }));
@@ -1481,15 +2170,21 @@
           ? " Finished with " + result.errors.length + " symbol error(s)."
           : "";
         let notifyNote = "";
+        const checkAlerts = Array.isArray(result.alerts) ? result.alerts : [];
+        openWatchAlertKeys.clear();
+        openWatchSectionKeys.clear();
+        lastWatchAlertFingerprint = "";
+        renderWatchlistCheckAlerts(checkAlerts, { force: true });
+        selectTab("watchlistTab");
         skipOsNotifyOnce = true;
         await refresh();
         skipOsNotifyOnce = false;
-        if (result.alerts && result.alerts.length) {
+        if (checkAlerts.length) {
           const shown = permission === "granted"
-            ? await showOsNotifications(result.alerts)
+            ? await showOsNotifications(checkAlerts)
             : false;
-          bumpUnread(result.alerts.length);
-          for (const alert of result.alerts) knownAlertIds.add(alertKey(alert));
+          bumpUnread(checkAlerts.length);
+          for (const alert of checkAlerts) knownAlertIds.add(alertKey(alert));
           alertsBootstrapped = true;
           if (permission !== "granted") {
             notifyNote = " Desktop Mac notification was not shown — click Enable desktop notifications.";
@@ -1498,7 +2193,9 @@
           }
         }
         setStatus(
-          "Check finished. " + result.alerts.length + " alert row(s) written." + note + reasoningNote(result) + notifyNote,
+          "Scan finished. " + checkAlerts.length + " alert row(s) written."
+            + " Today's results stay on this tab; Home Recent alerts stay on the live feed."
+            + note + reasoningNote(result) + notifyNote,
           Boolean(notifyNote) && permission !== "granted",
         );
       } catch (err) {
@@ -1507,6 +2204,17 @@
       }
     });
 
+    if (clearRecentBtn) {
+      clearRecentBtn.addEventListener("click", () => clearRecentAlerts());
+    }
+
+    document.querySelectorAll(".scope-toggle .scope-opt").forEach((button) => {
+      button.addEventListener("click", () => {
+        setHomeScope(button.dataset.scope);
+      });
+    });
+    syncHomeScopeControls();
+
     enableNotifyBtn.addEventListener("click", async () => {
       const permission = await ensureNotificationPermission();
       if (permission === "granted") {
@@ -1514,13 +2222,13 @@
           id: "notify-test",
           symbol: "S&P 500",
           kind: "price",
-          summary: "Desktop notifications are on. You will get a Mac popup when Run check or live alerts write new rows.",
+          summary: "Desktop notifications are on. You will get a Mac popup when live alerts write new rows.",
         }]);
-        setStatus("Desktop notifications enabled. You should see a Mac/Chrome test popup.");
+        setHomeStatus("Desktop notifications enabled. You should see a Mac/Chrome test popup.");
       } else if (permission === "denied") {
-        setStatus("Chrome blocked notifications. Allow them in the site icon / System Settings → Notifications → Google Chrome, then reload.", true);
+        setHomeStatus("Chrome blocked notifications. Allow them in the site icon / System Settings → Notifications → Google Chrome, then reload.", true);
       } else {
-        setStatus("Still waiting on the browser permission dialog.", true);
+        setHomeStatus("Still waiting on the browser permission dialog.", true);
       }
     });
 
@@ -1569,15 +2277,7 @@
 
     document.querySelectorAll(".tab-btn").forEach((button) => {
       button.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach((other) => {
-          const on = other === button;
-          other.classList.toggle("active", on);
-          other.setAttribute("aria-selected", on ? "true" : "false");
-        });
-        document.querySelectorAll(".tab-panel").forEach((panel) => {
-          panel.hidden = panel.id !== button.dataset.tab;
-        });
-        if (button.dataset.tab === "homeTab") clearUnreadBadge();
+        selectTab(button.dataset.tab);
       });
     });
 
@@ -1608,18 +2308,7 @@
       }
     });
 
-    document.querySelectorAll("table.history th[data-sort]").forEach((header) => {
-      header.querySelector(".sort-btn").addEventListener("click", () => {
-        const key = header.dataset.sort;
-        if (historySort.key === key) {
-          historySort.dir = historySort.dir === "asc" ? "desc" : "asc";
-        } else {
-          const numeric = key === "when";
-          historySort = { key, dir: numeric ? "desc" : "asc" };
-        }
-        renderHistory(latestAlerts);
-      });
-    });
+    buildHistoryHeaders();
 
     document.querySelector("#detailClose").addEventListener("click", closeDetail);
     document.querySelector("#detailBackdrop").addEventListener("click", closeDetail);
