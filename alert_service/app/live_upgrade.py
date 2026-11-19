@@ -61,7 +61,9 @@ async def upgrade_price_draft_with_news(
     if not kept:
         return attach_evidence_story(draft)
 
-    result = kept[0]
+    # evaluate_symbol defaults origin to watchlist; keep the live tag from the price draft.
+    live_origin = draft.origin if draft.origin in ("live", "both") else "live"
+    result = replace(kept[0], origin=live_origin)
     forest = (draft.sections or {}).get("forest")
     if isinstance(forest, dict):
         sections = dict(result.sections or {})
@@ -80,6 +82,9 @@ async def upgrade_price_draft_with_news(
         # Re-apply forest Price section after Perplexity overwrites synthesis.
         result = enrich_price_draft_with_forest_wording(result)
         result = attach_evidence_story(result)
+        # Perplexity / evidence helpers must not drop the live origin tag.
+        if result.origin != live_origin:
+            result = replace(result, origin=live_origin)
     return result
 
 

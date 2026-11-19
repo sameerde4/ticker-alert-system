@@ -31,16 +31,20 @@ from .store import (
     get_alert_for_day,
     get_alert_rules,
     insert_live_feature_row,
-    list_watchlist,
     touch_live_consumer_heartbeat,
     upsert_alert,
 )
+from .symbols import known_universe_symbol, universe_symbols
 
 log = logging.getLogger(__name__)
 
 
 class LiveBarConsumer:
-    """Consume ``prices.raw.bars``: percent + forest, then near-term news upgrade."""
+    """Consume ``prices.raw.bars`` for the S&P 500: percent + forest, then news upgrade.
+
+    Home Recent (S&P 500 scope) is fed by this path. Watchlist is only the focus set
+    for Scan today — not a filter on which Kafka bars become live alerts.
+    """
 
     def __init__(
         self,
@@ -60,7 +64,7 @@ class LiveBarConsumer:
             5, watchlist_refresh_seconds or settings.live_watchlist_refresh_seconds
         )
         self.book = SessionBook()
-        self._watchlist: set[str] = set()
+        self._universe: set[str] = set(universe_symbols())
         self._price_threshold = settings.price_move_threshold
         self._sentiment_threshold = settings.sentiment_threshold
         self._rules_loaded_at = 0.0
@@ -91,11 +95,11 @@ class LiveBarConsumer:
         await consumer.start()
         self._consumer = consumer
         log.info(
-            "Live consumer connected to %s topic=%s group=%s watchlist=%s forest=%s",
+            "Live consumer connected to %s topic=%s group=%s universe=%s forest=%s",
             self.bootstrap,
             self.topic,
             self.group_id,
-            len(self._watchlist),
+            len(self._universe),
             "on" if self.forest.enabled else "off",
         )
         try:
@@ -139,38 +143,64 @@ class LiveBarConsumer:
     async def _refresh_rules(self) -> None:
         async with self.pool.acquire() as conn:
             rules = await get_alert_rules(conn)
-            symbols = [row["symbol"] for row in await list_watchlist(conn)]
+            # Refresh forest history only for symbols already seen this session
+            # (lazy-loaded on first bar). Avoid a full S&P 500 DB walk every 30s.
+            active = sorted(self._history)
             history: dict[str, SymbolHistory] = {}
-            from .engine import eastern_date
+            if active:
+                from .engine import eastern_date
 
-            session_day = eastern_date(datetime.now(UTC))
-            lake_root = Path(settings.lake_root)
-            for symbol in symbols:
-                rows = await fetch_recent_daily_bars(conn, symbol, limit=40)
-                hist = history_from_daily_rows(rows, session_day=session_day)
-                if hist is None:
-                    hist = history_from_lake(lake_root, symbol, session_day=session_day)
-                if hist is not None:
-                    history[symbol.upper()] = hist
-        self._watchlist = {symbol.upper() for symbol in symbols}
+                session_day = eastern_date(datetime.now(UTC))
+                lake_root = Path(settings.lake_root)
+                for symbol in active:
+                    rows = await fetch_recent_daily_bars(conn, symbol, limit=40)
+                    hist = history_from_daily_rows(rows, session_day=session_day)
+                    if hist is None:
+                        hist = history_from_lake(lake_root, symbol, session_day=session_day)
+                    if hist is not None:
+                        history[symbol.upper()] = hist
+        self._universe = set(universe_symbols())
         self._price_threshold = float(rules["price_move_threshold"])
         self._sentiment_threshold = float(rules["sentiment_threshold"])
         self._history = history
         self._rules_loaded_at = asyncio.get_running_loop().time()
         self.forest.reload()
         log.info(
-            "Live rules refreshed: watchlist=%s price_threshold=%.4f forest_history=%s forest=%s",
-            len(self._watchlist),
+            "Live rules refreshed: universe=%s price_threshold=%.4f forest_history=%s forest=%s",
+            len(self._universe),
             self._price_threshold,
             len(self._history),
             "on" if self.forest.enabled else "off",
         )
 
+    async def _ensure_history(self, symbol: str) -> SymbolHistory | None:
+        key = symbol.upper()
+        cached = self._history.get(key)
+        if cached is not None:
+            return cached
+        from .engine import eastern_date
+
+        session_day = eastern_date(datetime.now(UTC))
+        lake_root = Path(settings.lake_root)
+        async with self.pool.acquire() as conn:
+            rows = await fetch_recent_daily_bars(conn, key, limit=40)
+        hist = history_from_daily_rows(rows, session_day=session_day)
+        if hist is None:
+            hist = history_from_lake(lake_root, key, session_day=session_day)
+        if hist is not None:
+            self._history[key] = hist
+        return hist
+
     async def _handle_bar(self, bar: Any) -> None:
         if not isinstance(bar, dict):
             return
         symbol = str(bar.get("symbol") or "").upper()
-        if not symbol or symbol not in self._watchlist:
+        if not symbol:
+            return
+        if self._universe:
+            if symbol not in self._universe:
+                return
+        elif not known_universe_symbol(symbol):
             return
         state = self.book.apply(bar)
         if state is None:
@@ -196,7 +226,7 @@ class LiveBarConsumer:
     async def _score_forest(self, state: SessionState):
         if not self.forest.enabled:
             return None
-        hist = self._history.get(state.symbol)
+        hist = await self._ensure_history(state.symbol)
         if hist is None or hist.prior_close <= 0:
             return None
         scored = self.forest.score_session(
