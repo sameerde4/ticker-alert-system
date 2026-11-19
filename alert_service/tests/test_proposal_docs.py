@@ -91,6 +91,11 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "## Curated features and Isolation Forest" in architecture
     assert "batch_train" in architecture
     assert "python -m app.live" in architecture
+    assert "full S&P 500 universe" in architecture
+    assert "S&P 500 universe?" in architecture
+    assert "origin=live" in architecture
+    assert "clickable headline" in architecture.lower() or "clickable headline titles" in architecture
+    assert "price_span" in architecture
     assert "Live alerts on" in architecture
     assert "Mac/Chrome desktop notification" in architecture
     assert "Desktop notification and tab badge" in architecture
@@ -123,6 +128,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "union by dt keep newest" in architecture
     assert "Skip Yahoo and retrain" in architecture or "skips Yahoo + retrain" in architecture
     assert "last completed session" in architecture
+    assert "Kafka minute bars do **not** write the lake" in architecture or "do **not** write the lake" in architecture
+    assert "US Eastern" in architecture
     assert "Focus session today or last completed" in architecture
     assert "Watchlist Scan today focus session" in architecture
     assert "Price change" in architecture and "Sentiment score" in architecture

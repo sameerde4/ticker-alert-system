@@ -29,7 +29,7 @@ The architecture has to read as big data on the diagram, not only as a Python jo
 | Model registry | Both | Fitted forest, feature list, cutoff | `data/lake/registry/isolation_forest/current/` |
 | FinBERT | Near-term product join | Headline score 0–100; not a batch lake input | Local Transformers + PyTorch |
 | Isolation Forest | Batch, then stream | Price/volume anomalies | Fit in `batch_train`; apply in `python -m app.live` and Watchlist Scan today |
-| Perplexity | After the decision | Richer news / news+price wording; never decides the alert | Settings API key |
+| Perplexity | After the decision | Richer news / news+price wording; never decides the alert; Summary cites headlines as clickable titles | Settings API key |
 | Postgres | Serving | One alert row per symbol per day | Local `ticker_alert_db` |
 
 ## Major decisions (planned vs landed)
@@ -77,7 +77,7 @@ Unsupervised fit (no labeled anomalies). Cutoff chosen by replaying the curated 
 
 ## AI usage
 
-Deterministic sentence from alert fields stays as the fallback (and as the only wording for bare price-only rows, with richer forest-aware copy when Isolation Forest fired). After a news or news+price row exists, Perplexity gets a structured payload and returns three to four short sentences. Batches of eight on check/rebuild. The model never decides whether the alert exists. Together shows the name of the model that wrote it.
+Deterministic sentence from alert fields stays as the fallback (and as the only wording for bare price-only rows, with richer forest-aware copy when Isolation Forest fired). After a news or news+price row exists, Perplexity gets a structured payload and returns three to four short sentences. Batches of eight on check/rebuild. The model never decides whether the alert exists. Together shows the name of the model that wrote it. Bare article URLs in the reply are linkified to the headline title (on save and at display for older rows). Live scores the full S&P 500 Kafka stream; Watchlist remains the Scan today focus set.
 
 ## Slide 6 — High-level lambda
 
