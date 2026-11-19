@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>S&amp;P 500 Alert System</title>
+  <link rel="icon" id="appFavicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231c1a16'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23d4af37'/%3E%3C/svg%3E" />
   <style>
     :root {
       --bg: #12110e;
@@ -432,6 +433,9 @@
     <section class="card">
       <h2>Recent</h2>
       <p class="hint" id="homeScope" hidden>Since you last opened the app.</p>
+      <p class="hint">When new alerts arrive (Run check or live), this tab gets a count badge and Chrome should show a <strong>Mac notification</strong> (Notification Center), even if you are in another app. Allow notifications when prompted. If Mac never pops up, click Enable desktop notifications, and check System Settings → Notifications → Google Chrome.</p>
+      <p class="hint" id="notifyHint">Desktop notifications: checking…</p>
+      <p><button type="button" class="ghost" id="enableNotify">Enable desktop notifications</button></p>
       <div id="alerts"></div>
       <p class="empty" id="empty">No alerts yet. Add a ticker and run a check.</p>
     </section>
@@ -590,6 +594,207 @@
     let homeOpenedAt = null;
     let latestAlerts = [];
     let historySort = { key: "when", dir: "desc" };
+    const BASE_TITLE = "S&P 500 Alert System";
+    const plainFavicon = document.querySelector("#appFavicon").href;
+    const notifyHint = document.querySelector("#notifyHint");
+    const enableNotifyBtn = document.querySelector("#enableNotify");
+    let knownAlertIds = new Set();
+    let alertsBootstrapped = false;
+    let unreadAlertCount = 0;
+    let liveWasOn = false;
+    let permissionRequest = null;
+    let skipOsNotifyOnce = false;
+    let swRegistration = null;
+
+    function alertKey(alert) {
+      return String(alert.id || [alert.symbol, alert.bar_date, alert.kind].join("|"));
+    }
+
+    function updateNotifyHint(permission) {
+      if (!notifyHint || !enableNotifyBtn) return;
+      if (!("Notification" in window)) {
+        notifyHint.textContent = "Desktop notifications: not supported in this browser.";
+        enableNotifyBtn.hidden = true;
+        return;
+      }
+      if (permission === "granted") {
+        notifyHint.textContent = "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive.";
+        enableNotifyBtn.hidden = true;
+        return;
+      }
+      if (permission === "denied") {
+        notifyHint.textContent = "Desktop notifications: blocked. Allow Google Chrome in System Settings → Notifications, then reload this page.";
+        enableNotifyBtn.hidden = false;
+        return;
+      }
+      notifyHint.textContent = "Desktop notifications: off. Click Enable desktop notifications (needed for Mac popups while you are in another app).";
+      enableNotifyBtn.hidden = false;
+    }
+
+    async function ensureNotificationPermission() {
+      if (!("Notification" in window)) {
+        updateNotifyHint("denied");
+        return "denied";
+      }
+      if (Notification.permission === "granted" || Notification.permission === "denied") {
+        updateNotifyHint(Notification.permission);
+        return Notification.permission;
+      }
+      if (!permissionRequest) {
+        permissionRequest = Notification.requestPermission()
+          .then((permission) => {
+            updateNotifyHint(permission);
+            return permission;
+          })
+          .catch(() => {
+            updateNotifyHint("denied");
+            return "denied";
+          })
+          .finally(() => {
+            permissionRequest = null;
+          });
+      }
+      return permissionRequest;
+    }
+
+    async function registerNotificationWorker() {
+      if (!("serviceWorker" in navigator)) return null;
+      try {
+        swRegistration = await navigator.serviceWorker.register("/ui/sw-notifications.js", {
+          scope: "/ui",
+        });
+        return swRegistration;
+      } catch (_err) {
+        swRegistration = null;
+        return null;
+      }
+    }
+
+    function drawFaviconBadge(count) {
+      const link = document.querySelector("#appFavicon");
+      if (!link) return;
+      if (!count) {
+        link.href = plainFavicon;
+        return;
+      }
+      const size = 64;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#1c1a16";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#d4af37";
+      ctx.beginPath();
+      ctx.arc(size * 0.42, size * 0.48, size * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      const label = count > 9 ? "9+" : String(count);
+      const badge = size * 0.42;
+      ctx.fillStyle = "#ff6b6b";
+      ctx.beginPath();
+      ctx.arc(size - badge * 0.55, badge * 0.55, badge * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold " + Math.floor(size * 0.34) + "px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, size - badge * 0.55, badge * 0.58);
+      link.href = canvas.toDataURL("image/png");
+    }
+
+    function updateTabBadge(count) {
+      document.title = count > 0 ? "(" + count + ") " + BASE_TITLE : BASE_TITLE;
+      drawFaviconBadge(count);
+    }
+
+    function clearUnreadBadge() {
+      unreadAlertCount = 0;
+      updateTabBadge(0);
+    }
+
+    async function showOsNotifications(fresh) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return false;
+      const rows = Array.isArray(fresh) ? fresh : [];
+      if (!rows.length) return false;
+      let title;
+      let body;
+      let tag;
+      if (rows.length === 1) {
+        const alert = rows[0];
+        const kind = KIND_LABELS[alert.kind] || alert.kind;
+        title = alert.symbol + " · " + kind;
+        body = String(alert.summary || "New alert").slice(0, 160);
+        tag = "sp500-alert-" + alertKey(alert);
+      } else {
+        const symbols = rows.map((alert) => alert.symbol).filter(Boolean);
+        title = rows.length + " new S&P 500 alerts";
+        body = symbols.slice(0, 8).join(", ") + (symbols.length > 8 ? "…" : "");
+        tag = "sp500-alert-batch-" + Date.now();
+      }
+      const options = {
+        body,
+        tag,
+        requireInteraction: true,
+        silent: false,
+        renotify: true,
+        icon: plainFavicon,
+        badge: plainFavicon,
+        data: { url: "/ui" },
+      };
+      try {
+        const reg = swRegistration || (await navigator.serviceWorker?.ready.catch(() => null));
+        if (reg && typeof reg.showNotification === "function") {
+          await reg.showNotification(title, options);
+        } else {
+          const note = new Notification(title, options);
+          note.onclick = () => {
+            window.focus();
+            note.close();
+          };
+        }
+        return true;
+      } catch (_err) {
+        try {
+          new Notification(title, options);
+          return true;
+        } catch (_err2) {
+          return false;
+        }
+      }
+    }
+
+    function bumpUnread(count) {
+      unreadAlertCount += count;
+      updateTabBadge(unreadAlertCount);
+    }
+
+    async function announceAlerts(alerts, { osNotify = true } = {}) {
+      const rows = Array.isArray(alerts) ? alerts : [];
+      if (!rows.length) return;
+      for (const alert of rows) knownAlertIds.add(alertKey(alert));
+      alertsBootstrapped = true;
+      bumpUnread(rows.length);
+      if (!osNotify) return;
+      const permission = await ensureNotificationPermission();
+      if (permission === "granted") {
+        await showOsNotifications(rows);
+      }
+    }
+
+    function noticeNewAlerts(alerts) {
+      const rows = Array.isArray(alerts) ? alerts : [];
+      if (!alertsBootstrapped) {
+        knownAlertIds = new Set(rows.map(alertKey));
+        alertsBootstrapped = true;
+        return;
+      }
+      const fresh = rows.filter((alert) => !knownAlertIds.has(alertKey(alert)));
+      for (const alert of rows) knownAlertIds.add(alertKey(alert));
+      if (!fresh.length || skipOsNotifyOnce) return;
+      bumpUnread(fresh.length);
+      showOsNotifications(fresh);
+    }
 
     function homeWatermark() {
       const closedAt = localStorage.getItem(LAST_CLOSED_KEY);
@@ -968,6 +1173,7 @@
       currentRules = rules;
       displayTimeZone = rules.display_timezone || displayTimeZone;
       latestAlerts = alerts.alerts;
+      noticeNewAlerts(latestAlerts);
       renderWatchlist(watch.symbols);
       renderAlerts(alertsForHome(latestAlerts));
       renderHistory(latestAlerts);
@@ -1209,15 +1415,53 @@
 
     document.querySelector("#run").addEventListener("click", async () => {
       setStatus("Checking prices and headlines…");
+      const permission = await ensureNotificationPermission();
       try {
         const result = await readJson(await fetch("/v1/checks/run", { method: "POST" }));
         const note = result.errors && result.errors.length
           ? " Finished with " + result.errors.length + " symbol error(s)."
           : "";
-        setStatus("Check finished. " + result.alerts.length + " alert row(s) written." + note + reasoningNote(result));
+        let notifyNote = "";
+        skipOsNotifyOnce = true;
         await refresh();
+        skipOsNotifyOnce = false;
+        if (result.alerts && result.alerts.length) {
+          const shown = permission === "granted"
+            ? await showOsNotifications(result.alerts)
+            : false;
+          bumpUnread(result.alerts.length);
+          for (const alert of result.alerts) knownAlertIds.add(alertKey(alert));
+          alertsBootstrapped = true;
+          if (permission !== "granted") {
+            notifyNote = " Desktop Mac notification was not shown — click Enable desktop notifications.";
+          } else if (!shown) {
+            notifyNote = " Could not show a desktop notification; check Chrome is allowed in System Settings → Notifications.";
+          }
+        }
+        setStatus(
+          "Check finished. " + result.alerts.length + " alert row(s) written." + note + reasoningNote(result) + notifyNote,
+          Boolean(notifyNote) && permission !== "granted",
+        );
       } catch (err) {
+        skipOsNotifyOnce = false;
         setStatus(err.message, true);
+      }
+    });
+
+    enableNotifyBtn.addEventListener("click", async () => {
+      const permission = await ensureNotificationPermission();
+      if (permission === "granted") {
+        await showOsNotifications([{
+          id: "notify-test",
+          symbol: "S&P 500",
+          kind: "price",
+          summary: "Desktop notifications are on. You will get a Mac popup when Run check or live alerts write new rows.",
+        }]);
+        setStatus("Desktop notifications enabled. You should see a Mac/Chrome test popup.");
+      } else if (permission === "denied") {
+        setStatus("Chrome blocked notifications. Allow them in the site icon / System Settings → Notifications → Google Chrome, then reload.", true);
+      } else {
+        setStatus("Still waiting on the browser permission dialog.", true);
       }
     });
 
@@ -1274,7 +1518,14 @@
         document.querySelectorAll(".tab-panel").forEach((panel) => {
           panel.hidden = panel.id !== button.dataset.tab;
         });
+        if (button.dataset.tab === "homeTab") clearUnreadBadge();
       });
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      const home = document.querySelector("#homeTab");
+      if (home && !home.hidden) clearUnreadBadge();
     });
 
     document.querySelector("#settings-form").addEventListener("submit", async (event) => {
@@ -1513,6 +1764,10 @@
 
     async function pollLive() {
       const on = await refreshLiveStatus();
+      if (on && !liveWasOn) {
+        await ensureNotificationPermission();
+      }
+      liveWasOn = on;
       if (on) {
         try {
           await refresh();
@@ -1521,6 +1776,9 @@
         }
       }
     }
+
+    updateNotifyHint(("Notification" in window) ? Notification.permission : "denied");
+    registerNotificationWorker().catch(() => {});
 
     refresh().catch((err) => setStatus(err.message, true));
     refreshLiveStatus().catch(() => {});

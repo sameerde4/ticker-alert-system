@@ -122,6 +122,16 @@ async def ui() -> FileResponse:
     return FileResponse(_UI)
 
 
+@app.get("/ui/sw-notifications.js")
+async def ui_notification_worker() -> FileResponse:
+    """Service worker so alert popups use the OS / Chrome notification center."""
+    return FileResponse(
+        _UI_DIR / "sw-notifications.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/ui"},
+    )
+
+
 @app.get("/ui/symbol_universe.json")
 @app.get("/ui/sp500_universe.json")
 async def symbol_universe() -> FileResponse:
