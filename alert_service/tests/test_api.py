@@ -8,8 +8,8 @@ def test_health_and_ui_without_a_database():
     assert client.get("/health").json() == {"status": "ok"}
     page = client.get("/ui")
     assert page.status_code == 200
-    assert "S&amp;P 500 Alert System" in page.text
-    assert "<span>S&amp;P 500</span> Alert System" in page.text
+    assert "S&amp;P 500 Radar" in page.text
+    assert "<span>S&amp;P 500</span> Radar" in page.text
     assert 'id="liveStatus"' in page.text
     assert "Live alerts off" in page.text
     assert "live-pulse" in page.text
@@ -74,9 +74,11 @@ def test_health_and_ui_without_a_database():
     assert "screenerTab" in page.text
     assert 'id="screenerTabBtn"' in page.text
     assert 'id="enableScreener"' in page.text
-    assert "Show Screener tab" in page.text
+    assert "Enable Screener" in page.text
+    assert "<h2>Screener</h2>" in page.text
     assert "tickerAlertScreenerEnabled" in page.text
     assert "function applyScreenerVisibility" in page.text
+    assert ".tab-btn[hidden] { display: none; }" in page.text
     assert "Alert History" in page.text
     assert "Watchlist results" in page.text
     assert "Scan today" in page.text
@@ -164,7 +166,7 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     rules = page.text.split('id="rules"', 1)[1].split("</p>", 1)[0]
     assert rules.index('id="rulesBefore"') < rules.index('id="finbertExplain"') < rules.index('id="priceExplain"') < rules.index('id="rulesAfter"')
     assert "homeLede" in page.text
-    assert "S&amp;P 500 alerts for price movements and anomalies" in page.text
+    assert "S&amp;P 500 Radar monitors the index for price movements and anomalies" in page.text
     assert "grade how well the news explains the session" in page.text
     assert ".modal-header h3" in page.text
     modal_h3 = page.text.split(".modal-header h3 {", 1)[1].split("}", 1)[0]
@@ -211,6 +213,9 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert 'data-scope="sp500"' in page.text
     assert 'data-scope="watchlist"' in page.text
     assert "scope-toggle" in page.text
+    scope_css = page.text.split(".scope-toggle {", 1)[1].split("}", 1)[0]
+    assert "border-radius: 8px" in scope_css
+    assert "font-family: ui-sans-serif, system-ui, sans-serif" in page.text.split(".scope-toggle .scope-opt {", 1)[1].split("}", 1)[0]
     assert 'id="homeScope"' not in page.text
     home_panel = page.text.split('id="homeTab"', 1)[1].split('id="watchlistTab"', 1)[0]
     watch_panel = page.text.split('id="watchlistTab"', 1)[1].split('id="screenerTab"', 1)[0]
