@@ -28,6 +28,7 @@ from .store import (
     get_alert_rules,
     list_alerts,
     list_watchlist,
+    live_consumer_status,
     perplexity_api_key,
     perplexity_model,
     remove_symbol,
@@ -220,6 +221,13 @@ async def get_alerts(limit: int = 100) -> dict[str, list]:
             for alert in alerts:
                 alert["sector"] = sectors.get(alert["symbol"]) or alert.get("sector")
         return {"alerts": alerts}
+
+
+@app.get("/v1/live/status")
+async def get_live_status() -> dict[str, object]:
+    """Whether ``python -m app.live`` is heartbeating (UI cue for live alerts)."""
+    async with _pool().acquire() as conn:
+        return await live_consumer_status(conn)
 
 
 @app.post("/v1/checks/run")

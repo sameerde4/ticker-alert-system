@@ -47,5 +47,13 @@ class Settings(BaseSettings):
     perplexity_model: str = "openai/gpt-5.4-mini"
     perplexity_timeout_s: float = 45
 
+    # Live Kafka → session-move path (python -m app.live).
+    kafka_bootstrap_servers: str = "127.0.0.1:9092"
+    kafka_topic_bars: str = "prices.raw.bars"
+    kafka_group_id: str = "ticker-alert-live"
+    live_watchlist_refresh_seconds: int = 30
+    # UI treats the live consumer as on when the heartbeat is newer than this.
+    live_heartbeat_stale_seconds: int = 15
+
 
 settings = Settings()

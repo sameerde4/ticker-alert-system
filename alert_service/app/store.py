@@ -275,16 +275,90 @@ async def list_alert_days(conn: asyncpg.Connection, symbol: str) -> list[dict[st
         symbol,
     )
     return [dict(row) for row in rows]
-    rows = await conn.fetch(
+
+
+async def touch_live_consumer_heartbeat(conn: asyncpg.Connection) -> datetime:
+    """Mark that ``python -m app.live`` is still running."""
+    row = await conn.fetchrow(
         """
-        SELECT dt, open, high, low, close, volume
-        FROM daily_bars
-        WHERE symbol = $1
-        ORDER BY dt
+        INSERT INTO app_settings (
+          id, price_move_threshold, sentiment_threshold, live_consumer_heartbeat_at
+        )
+        VALUES (TRUE, $1, $2, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          live_consumer_heartbeat_at = NOW()
+        RETURNING live_consumer_heartbeat_at
+        """,
+        settings.price_move_threshold,
+        settings.sentiment_threshold,
+    )
+    return row["live_consumer_heartbeat_at"]
+
+
+async def clear_live_consumer_heartbeat(conn: asyncpg.Connection) -> None:
+    """Clear the live cue when the consumer process exits cleanly."""
+    await conn.execute(
+        """
+        UPDATE app_settings
+        SET live_consumer_heartbeat_at = NULL
+        WHERE id
+        """
+    )
+
+
+def heartbeat_is_fresh(
+    heartbeat: datetime | None,
+    *,
+    now: datetime | None = None,
+    stale_after_seconds: int | None = None,
+) -> bool:
+    """True when the live-consumer heartbeat is recent enough for the UI cue."""
+    if heartbeat is None:
+        return False
+    stamp = heartbeat if heartbeat.tzinfo else heartbeat.replace(tzinfo=UTC)
+    moment = now or datetime.now(UTC)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    limit = settings.live_heartbeat_stale_seconds if stale_after_seconds is None else stale_after_seconds
+    age = (moment.astimezone(UTC) - stamp.astimezone(UTC)).total_seconds()
+    return age <= max(5, int(limit))
+
+
+async def live_consumer_status(
+    conn: asyncpg.Connection, *, stale_after_seconds: int | None = None, now: datetime | None = None
+) -> dict[str, Any]:
+    """Whether the live consumer heartbeat is fresh enough for the UI cue."""
+    row = await conn.fetchrow(
+        "SELECT live_consumer_heartbeat_at FROM app_settings WHERE id"
+    )
+    heartbeat = None if row is None else row["live_consumer_heartbeat_at"]
+    if heartbeat is not None and heartbeat.tzinfo is None:
+        heartbeat = heartbeat.replace(tzinfo=UTC)
+    enabled = heartbeat_is_fresh(
+        heartbeat, now=now, stale_after_seconds=stale_after_seconds
+    )
+    return {
+        "enabled": enabled,
+        "heartbeat_at": heartbeat.isoformat() if heartbeat is not None else None,
+    }
+
+
+async def get_alert_for_day(
+    conn: asyncpg.Connection, symbol: str, bar_date: date
+) -> dict[str, Any] | None:
+    """The one alert row for a symbol on a calendar day, if any."""
+    row = await conn.fetchrow(
+        f"""
+        SELECT {_ALERT_COLUMNS}
+        FROM alerts
+        WHERE symbol = $1 AND bar_date = $2
         """,
         symbol,
+        bar_date,
     )
-    return [dict(row) for row in rows]
+    if row is None:
+        return None
+    return alert_record(row)
 
 
 async def upsert_headlines(conn: asyncpg.Connection, symbol: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:

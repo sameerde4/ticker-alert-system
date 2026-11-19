@@ -9,6 +9,10 @@ def test_health_and_ui_without_a_database():
     page = client.get("/ui")
     assert page.status_code == 200
     assert "Ticker Alert System" in page.text
+    assert 'id="liveStatus"' in page.text
+    assert "Live alerts off" in page.text
+    assert "live-pulse" in page.text
+    assert "/v1/live/status" in page.text
     assert "Ticker or company name" in page.text
     assert "function rankSymbolUniverseMatches" in page.text
     assert "tickerAlertLastClosedAt" in page.text
@@ -52,6 +56,12 @@ def test_health_and_ui_without_a_database():
 def test_watchlist_reports_database_down():
     client = TestClient(app)
     response = client.get("/v1/watchlist")
+    assert response.status_code == 503
+
+
+def test_live_status_reports_database_down():
+    client = TestClient(app)
+    response = client.get("/v1/live/status")
     assert response.status_code == 503
 
 
