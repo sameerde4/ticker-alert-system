@@ -92,26 +92,31 @@ class AlpacaRestBarPoller:
             end.isoformat(),
             len(self.symbols),
         )
+        # Publish only the cash-open bar + the latest bar per symbol. A full-day
+        # minute stream (thousands of bars) floods the live consumer into FinBERT
+        # work on every intermediate print; open+last is enough for SessionBook.
         published = 0
         for chunk in _chunks(self.symbols, self.symbols_per_request):
             bars_by_symbol = await self._fetch_bars(client, chunk, start=start, end=end)
             for symbol in chunk:
                 rows = bars_by_symbol.get(symbol) or []
-                for row in rows:
+                if not rows:
+                    continue
+                slim = [rows[0]]
+                if len(rows) > 1:
+                    slim.append(rows[-1])
+                for row in slim:
                     bar = bar_from_rest(symbol, row, feed=self.feed)
                     if not bar or not bar.get("ts"):
                         continue
                     stamp = str(bar["ts"])
-                    if self._seen.get(symbol) == stamp:
-                        continue
-                    # Keep the newest stamp per symbol; still publish every distinct bar.
                     prior = self._seen.get(symbol)
                     if prior is not None and stamp <= prior:
                         continue
                     self._seen[symbol] = stamp
                     await self.publisher.publish(bar)
                     published += 1
-        log.info("REST session backfill published %s bar(s)", published)
+        log.info("REST session backfill published %s bar(s) (open+last per symbol)", published)
 
     async def _poll_once(self, client: httpx.AsyncClient) -> None:
         # Stay outside the free-plan 15-minute SIP restriction.

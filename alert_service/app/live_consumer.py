@@ -153,9 +153,17 @@ class LiveBarConsumer:
                 batches = await consumer.getmany(timeout_ms=1000, max_records=200)
                 if not batches:
                     continue
+                # Apply every bar to SessionBook, but only alert on the latest
+                # print per symbol in this batch (avoids N news upgrades mid-backfill).
+                latest_by_symbol: dict[str, SessionState] = {}
                 for _tp, messages in batches.items():
                     for message in messages:
-                        await self._handle_bar(message.value)
+                        state = self._apply_bar(message.value)
+                        if state is None:
+                            continue
+                        latest_by_symbol[state.symbol] = state
+                for state in latest_by_symbol.values():
+                    await self._handle_state(state)
         finally:
             hb_task.cancel()
             try:
@@ -247,21 +255,26 @@ class LiveBarConsumer:
             self._history[key] = hist
         return hist
 
-    async def _handle_bar(self, bar: Any) -> None:
+    def _apply_bar(self, bar: Any) -> SessionState | None:
         if not isinstance(bar, dict):
-            return
+            return None
         symbol = str(bar.get("symbol") or "").upper()
         if not symbol:
-            return
+            return None
         if self._universe:
             if symbol not in self._universe:
-                return
+                return None
         elif not known_universe_symbol(symbol):
-            return
-        state = self.book.apply(bar)
+            return None
+        return self.book.apply(bar)
+
+    async def _handle_bar(self, bar: Any) -> None:
+        state = self._apply_bar(bar)
         if state is None:
             return
+        await self._handle_state(state)
 
+    async def _handle_state(self, state: SessionState) -> None:
         forest_draft = await self._score_forest(state)
 
         percent_draft = price_draft_from_session(

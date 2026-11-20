@@ -1611,7 +1611,11 @@
       if (mark) {
         const cut = new Date(mark).getTime();
         if (!Number.isNaN(cut)) {
-          rows = rows.filter((alert) => new Date(alert.created_at || 0).getTime() > cut);
+          // Prefer updated_at: live refreshes the same symbol-day row and keeps created_at.
+          rows = rows.filter((alert) => {
+            const stamp = new Date(alert.updated_at || alert.created_at || 0).getTime();
+            return stamp > cut;
+          });
         }
       }
       return filterAlertsByHomeScope(rows);

@@ -26,6 +26,8 @@ def test_health_and_ui_without_a_database():
     assert "function lakeHeaderCopy" in page.text
     assert "!status.running && (status.ok === true || status.has_raw_prices === true)" in page.text
     assert ".lake-status[hidden] { display: none !important; }" in page.text
+    assert "alert.updated_at || alert.created_at" in page.text
+
     assert "daily schedule" in page.text
     assert "manual overrides" in page.text
     assert "function applyLakeProgressBar" in page.text

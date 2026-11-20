@@ -54,7 +54,8 @@ async def test_session_backfill_publishes_ordered_bars(monkeypatch):
         return {
             "AAPL": [
                 {"t": "2026-11-20T14:30:00Z", "o": 100.0, "h": 101.0, "l": 99.0, "c": 100.5, "v": 1000},
-                {"t": "2026-11-20T14:31:00Z", "o": 100.5, "h": 101.0, "l": 100.0, "c": 100.8, "v": 800},
+                {"t": "2026-11-20T14:31:00Z", "o": 100.5, "h": 101.0, "l": 100.0, "c": 100.6, "v": 100},
+                {"t": "2026-11-20T15:00:00Z", "o": 100.6, "h": 101.0, "l": 100.0, "c": 100.8, "v": 800},
             ],
             "MSFT": [
                 {"t": "2026-11-20T14:30:00Z", "o": 400.0, "h": 401.0, "l": 399.0, "c": 400.2, "v": 500},
@@ -71,8 +72,10 @@ async def test_session_backfill_publishes_ordered_bars(monkeypatch):
     )
 
     await poller._backfill_session(MagicMock())
+    # Open + last only (AAPL had 3 rows → 2 pubs; middle minute skipped).
     assert len(published) == 3
     assert [row["symbol"] for row in published] == ["AAPL", "AAPL", "MSFT"]
-    assert published[0]["ts"] < published[1]["ts"]
-    assert poller._seen["AAPL"] == "2026-11-20T14:31:00Z"
+    assert published[0]["ts"] == "2026-11-20T14:30:00Z"
+    assert published[1]["ts"] == "2026-11-20T15:00:00Z"
+    assert poller._seen["AAPL"] == "2026-11-20T15:00:00Z"
     assert poller._session_backfilled is False  # flag set by run(), not backfill alone
