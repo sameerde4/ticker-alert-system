@@ -156,9 +156,13 @@ class AlpacaRestBarPoller:
         )
 
 
-def _session_backfill_window() -> tuple[datetime, datetime] | None:
+def _session_backfill_window(now: datetime | None = None) -> tuple[datetime, datetime] | None:
     """UTC [cash open, delayed-safe end] for today's RTH, or None when there is nothing to load."""
-    now_utc = datetime.now(UTC)
+    now_utc = now or datetime.now(UTC)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=UTC)
+    else:
+        now_utc = now_utc.astimezone(UTC)
     now_et = now_utc.astimezone(_EASTERN)
     if now_et.weekday() >= 5:
         return None

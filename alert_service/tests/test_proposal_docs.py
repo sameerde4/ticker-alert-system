@@ -102,6 +102,12 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "clickable headline" in architecture.lower() or "clickable headline titles" in architecture
     assert "price_span" in architecture
     assert "Live alerts on" in architecture
+    assert "arm switch" in architecture
+    assert "live_alerts_armed" in architecture
+    assert "Background heartbeat" in architecture or "background task" in architecture
+    assert "backfill" in architecture.lower() and "9:30" in architecture
+    assert "schema_migrations" in architecture
+    assert "has_raw_prices" in architecture
     assert "Mac/Chrome desktop notification" in architecture
     assert "Desktop notification" in architecture and "tab badge" in architecture
     assert "ui/sw-notifications.js" in architecture
@@ -186,6 +192,25 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Revised target: high-level lambda architecture" not in architecture
 
 
+def test_aws_deployment_doc_matches_as_built_demo():
+    aws = _text(DOCS / "aws-deployment.md")
+    assert "# AWS deployment" in aws
+    assert "deployed on EC2" in aws
+    assert "market-radar-" in aws
+    assert "i-0e437ba8984153370" in aws or "market-radar" in aws
+    assert "sync-and-deploy.sh" in aws
+    assert "schema_migrations" in aws
+    assert "live_alerts_armed" in aws or "Live alerts" in aws
+    assert "backfill" in aws.lower()
+    assert "ALPACA_WS_SYMBOL_LIMIT" in aws
+    assert "Cache-Control" in aws or "no-store" in aws
+    assert "Postgres container" in aws
+    assert "not EKS" in aws
+    assert "Secrets Manager" in aws
+    assert "8010/ui" in aws
+    assert "[architecture.md](architecture.md)" in aws
+
+
 def test_ui_uses_desktop_notifications_and_tab_badge():
     ui = _text(ROOT / "alert_service" / "ui" / "index.html")
     assert "ensureNotificationPermission" in ui
@@ -216,8 +241,13 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert 'id="refreshLake"' in ui
     assert 'id="lakeHeaderStatus"' in ui
     assert "Loading historical prices" in ui
+    assert "function lakeHeaderCopy" in ui
+    assert "has_raw_prices === true" in ui
+    assert "Live alerts starting…" in ui
     assert "manual overrides" in ui
     assert "/v1/admin/lake/refresh" in ui
+    main = _text(ROOT / "alert_service" / "app" / "main.py")
+    assert "Cache-Control" in main and "no-store" in main
     assert "Price move threshold" in ui
     assert "Price alert percentage" not in ui
     assert "Two price gates" in ui
@@ -327,7 +357,9 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Mac/Chrome desktop notification" in sources
     assert "Slack and email are not used" in sources
     assert "Slack or email" not in sources
-    assert "demo stack is **local**" in sources or "demo stack is local" in sources.lower()
+    assert "local" in sources.lower() and "aws-deployment.md" in sources
+    assert "backfill from the 9:30 ET open" in sources or "backfill from cash open" in sources
+    assert "background task" in sources
     assert "BTC-USD" not in sources
     assert "Watchlist Scan today" in sources
     assert "Home Live alerts" in sources or "Home Recent" in sources

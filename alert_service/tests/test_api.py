@@ -8,10 +8,12 @@ def test_health_and_ui_without_a_database():
     assert client.get("/health").json() == {"status": "ok"}
     page = client.get("/ui")
     assert page.status_code == 200
+    assert "no-store" in page.headers.get("cache-control", "")
     assert "S&amp;P 500 Radar" in page.text
     assert "<span>S&amp;P 500</span> Radar" in page.text
     assert 'id="liveStatus"' in page.text
     assert "Live alerts off" in page.text
+    assert "Live alerts starting…" in page.text
     assert "/v1/live/armed" in page.text
     assert "toggleLiveArmed" in page.text
     assert 'aria-pressed="false"' in page.text
@@ -21,6 +23,9 @@ def test_health_and_ui_without_a_database():
     assert 'id="lakeSettingsProgress"' in page.text
     assert "lake-run-status" in page.text
     assert "Loading historical prices" in page.text
+    assert "function lakeHeaderCopy" in page.text
+    assert "!status.running && (status.ok === true || status.has_raw_prices === true)" in page.text
+    assert ".lake-status[hidden] { display: none !important; }" in page.text
     assert "daily schedule" in page.text
     assert "manual overrides" in page.text
     assert "function applyLakeProgressBar" in page.text

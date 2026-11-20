@@ -242,3 +242,14 @@ def test_heartbeat_is_fresh_within_stale_window():
     assert heartbeat_is_fresh(fresh, now=now, stale_after_seconds=15)
     assert not heartbeat_is_fresh(stale, now=now, stale_after_seconds=15)
     assert not heartbeat_is_fresh(None, now=now, stale_after_seconds=15)
+
+
+def test_live_consumer_heartbeats_on_a_background_task():
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "app" / "live_consumer.py"
+    text = source.read_text(encoding="utf-8")
+    assert "async def _heartbeat_loop" in text
+    assert 'name="live-heartbeat"' in text
+    assert "self.book = SessionBook()" in text
+    assert "FinBERT/Perplexity" in text or "starting…" in text or "starve the UI cue" in text
