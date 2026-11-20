@@ -630,7 +630,8 @@
       gap: 8px;
       min-width: 0;
     }
-    .lake-status[hidden] { display: none; }
+    /* Beat the shared .lake-status { display: inline-flex } rule when JS hides the cue. */
+    .lake-status[hidden] { display: none !important; }
     .lake-status.is-busy {
       color: var(--gold);
       border-color: rgba(212, 175, 55, 0.45);
@@ -3398,6 +3399,8 @@
 
     function lakeHeaderCopy(status) {
       if (!status) return "";
+      // Finished (or lake already on disk) always wins over a leftover job name like "bootstrap".
+      if (!status.running && (status.ok === true || status.has_raw_prices === true)) return "";
       if (status.running) {
         if (status.phase === "train") return "Training Isolation Forest";
         if (status.job === "refresh") return "Refreshing historical prices";
@@ -3405,8 +3408,6 @@
         return "Landing historical prices";
       }
       if (status.ok === false && status.auto) return "Historical price load failed";
-      // Successful land/train (or raw lake present) — hide the header cue.
-      if (status.ok === true || status.has_raw_prices) return "";
       if (!status.has_raw_prices && status.auto_enabled) return "Loading historical prices";
       return "";
     }

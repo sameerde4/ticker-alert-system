@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -14,6 +15,8 @@ from .publisher import BarPublisher
 from .symbols import from_alpaca_symbol, to_alpaca_symbol
 
 log = logging.getLogger(__name__)
+
+_EASTERN = ZoneInfo("America/New_York")
 
 
 class AlpacaRestBarPoller:
@@ -41,6 +44,7 @@ class AlpacaRestBarPoller:
         self.symbols_per_request = max(1, symbols_per_request)
         self._stop = asyncio.Event()
         self._seen: dict[str, str] = {}
+        self._session_backfilled = False
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -58,6 +62,9 @@ class AlpacaRestBarPoller:
         async with httpx.AsyncClient(timeout=30.0) as client:
             while not self._stop.is_set():
                 try:
+                    if not self._session_backfilled:
+                        await self._backfill_session(client)
+                        self._session_backfilled = True
                     await self._poll_once(client)
                 except asyncio.CancelledError:
                     raise
@@ -67,6 +74,44 @@ class AlpacaRestBarPoller:
                     await asyncio.wait_for(self._stop.wait(), timeout=self.poll_seconds)
                 except asyncio.TimeoutError:
                     continue
+
+    async def _backfill_session(self, client: httpx.AsyncClient) -> None:
+        """Publish today's RTH bars from the cash open so live SessionBook gets the real open.
+
+        Latest-only polls start mid-session with a minute bar open (~last price), so
+        open→last never clears the percent rule. One ordered backfill fixes that.
+        """
+        window = _session_backfill_window()
+        if window is None:
+            log.info("REST session backfill skipped (outside the cash session window).")
+            return
+        start, end = window
+        log.info(
+            "REST session backfill from %s to %s for %s symbol(s)",
+            start.isoformat(),
+            end.isoformat(),
+            len(self.symbols),
+        )
+        published = 0
+        for chunk in _chunks(self.symbols, self.symbols_per_request):
+            bars_by_symbol = await self._fetch_bars(client, chunk, start=start, end=end)
+            for symbol in chunk:
+                rows = bars_by_symbol.get(symbol) or []
+                for row in rows:
+                    bar = bar_from_rest(symbol, row, feed=self.feed)
+                    if not bar or not bar.get("ts"):
+                        continue
+                    stamp = str(bar["ts"])
+                    if self._seen.get(symbol) == stamp:
+                        continue
+                    # Keep the newest stamp per symbol; still publish every distinct bar.
+                    prior = self._seen.get(symbol)
+                    if prior is not None and stamp <= prior:
+                        continue
+                    self._seen[symbol] = stamp
+                    await self.publisher.publish(bar)
+                    published += 1
+        log.info("REST session backfill published %s bar(s)", published)
 
     async def _poll_once(self, client: httpx.AsyncClient) -> None:
         # Stay outside the free-plan 15-minute SIP restriction.
@@ -109,6 +154,22 @@ class AlpacaRestBarPoller:
             start=start,
             end=end,
         )
+
+
+def _session_backfill_window() -> tuple[datetime, datetime] | None:
+    """UTC [cash open, delayed-safe end] for today's RTH, or None when there is nothing to load."""
+    now_utc = datetime.now(UTC)
+    now_et = now_utc.astimezone(_EASTERN)
+    if now_et.weekday() >= 5:
+        return None
+    open_et = datetime.combine(now_et.date(), time(9, 30), tzinfo=_EASTERN)
+    if now_et < open_et:
+        return None
+    end = now_utc - timedelta(minutes=16)
+    start = open_et.astimezone(UTC)
+    if start >= end:
+        return None
+    return start, end
 
 
 async def fetch_stock_bars(

@@ -116,6 +116,11 @@ class LiveBarConsumer:
             await asyncio.sleep(2)
 
     async def _run_armed_session(self) -> None:
+        # Fresh open→last state each arm so a REST session backfill can set the
+        # real 9:30 open (mid-day "latest bar only" polls otherwise use a minute open).
+        self.book = SessionBook()
+        self._last_feature_write.clear()
+        self._last_news_lookup.clear()
         consumer = AIOKafkaConsumer(
             self.topic,
             bootstrap_servers=self.bootstrap,

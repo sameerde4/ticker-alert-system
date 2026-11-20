@@ -142,7 +142,11 @@ async def health() -> dict[str, str]:
 @app.get("/")
 @app.get("/ui")
 async def ui() -> FileResponse:
-    return FileResponse(_UI)
+    # Avoid sticky "Loading historical prices" from a cached index.html after deploys.
+    return FileResponse(
+        _UI,
+        headers={"Cache-Control": "no-store, max-age=0", "Pragma": "no-cache"},
+    )
 
 
 @app.get("/ui/sw-notifications.js")
