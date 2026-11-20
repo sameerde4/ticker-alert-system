@@ -41,7 +41,7 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Capability |
 |---|
 | Watchlist tab: S&P 500 focus set (search + chips), Scan today, Watchlist results separate from Home Live alerts |
-| Home tab: **Live alerts** feed with S&P 500 / Watchlist scope switch; Clear alerts; desktop notification controls |
+| Home tab: **Live alerts** feed with All / Watchlist / Others scope switch; Clear alerts; desktop notification controls |
 | History tab: full list with Origin, Company, Type, Price change, Sentiment score; click row for details; sortable + draggable columns |
 | Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares |
@@ -148,7 +148,7 @@ flowchart LR
 | | Live | Watchlist Scan today |
 |---|---|---|
 | Job | Continuous monitoring while RTH is open | Deliberate review of the focus set under **current** rules |
-| UI | Home → **Live alerts** (scope: full S&P 500 or Watchlist only) | Watchlist → chips + **Scan today** → **Watchlist results** |
+| UI | Home → **Live alerts** (scope: All, Watchlist, or Others) | Watchlist → chips + **Scan today** → **Watchlist results** |
 | Inputs | Kafka minute bars (+ near-term Yahoo headlines after a price/forest hit) | Yahoo `daily_bars` + near-term headlines for watchlist symbols |
 | Focus session | Wall-clock RTH / live open→last | **Today** during RTH or after the close; **last completed weekday** before the open / on weekends |
 | Price gate | open→last **percent or** Isolation Forest (lake registry) | Same **percent or** Isolation Forest on the focus session’s vector |

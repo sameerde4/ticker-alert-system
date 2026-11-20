@@ -73,7 +73,7 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Screener" not in architecture
     assert "Live alerts" in architecture
     assert "<h2>Recent alerts</h2>" not in architecture
-    assert "S&P 500 / Watchlist" in architecture or "scope: full S&P 500 or Watchlist" in architecture
+    assert "All / Watchlist / Others" in architecture or "scope: All, Watchlist, or Others" in architecture
     assert "Home Live alerts" in architecture
     assert "alerts.origin" in architecture
     assert "training lake" in architecture.lower() or "training only" in architecture.lower()
@@ -260,10 +260,14 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "function setHomeScope" in ui
     assert "function alertsForHome" in ui
     assert "homeScope === \"watchlist\"" in ui or "homeScope === 'watchlist'" in ui
+    assert "homeScope === \"others\"" in ui or "homeScope === 'others'" in ui
+    assert "filterAlertsByHomeScope" in ui
     assert "tickerAlertHomeScope" in ui
     assert "scope-toggle" in ui
-    assert 'data-scope="sp500"' in ui
+    assert 'data-scope="all"' in ui
     assert 'data-scope="watchlist"' in ui
+    assert 'data-scope="others"' in ui
+    assert "All, Watchlist, or Others" in ui
     assert "border-radius: 8px" in ui.split(".scope-toggle {", 1)[1].split("}", 1)[0]
     assert "font-family: ui-sans-serif, system-ui, sans-serif" in ui.split(".scope-toggle .scope-opt {", 1)[1].split("}", 1)[0]
     assert 'id="recentTip"' in ui

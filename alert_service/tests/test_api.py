@@ -226,8 +226,9 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "function setRecentTip" in page.text
     assert "function setHomeScope" in page.text
     assert "tickerAlertHomeScope" in page.text
-    assert 'data-scope="sp500"' in page.text
+    assert 'data-scope="all"' in page.text
     assert 'data-scope="watchlist"' in page.text
+    assert 'data-scope="others"' in page.text
     assert "scope-toggle" in page.text
     scope_css = page.text.split(".scope-toggle {", 1)[1].split("}", 1)[0]
     assert "border-radius: 8px" in scope_css

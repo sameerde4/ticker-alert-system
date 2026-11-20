@@ -970,15 +970,16 @@
             type="button"
             class="tip-btn"
             id="recentTip"
-            title="Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist symbols. Watchlist Scan today stays on that tab; Alert History has the full list."
-            aria-label="About Live alerts: Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist symbols. Watchlist Scan today stays on that tab; Alert History has the full list."
+            title="Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for All, Watchlist, or Others (not on your list). Watchlist Scan today stays on that tab; Alert History has the full list."
+            aria-label="About Live alerts: Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for All, Watchlist, or Others (not on your list). Watchlist Scan today stays on that tab; Alert History has the full list."
           >?</button>
         </div>
         <div class="section-head-actions">
           <button type="button" class="ghost" id="enableNotify">Enable desktop notifications</button>
           <div class="scope-toggle" role="group" aria-label="Live alerts scope">
-            <button type="button" class="scope-opt active" data-scope="sp500" id="homeScopeSp500" title="Show live alerts for the full S&amp;P 500 feed">S&amp;P 500</button>
+            <button type="button" class="scope-opt active" data-scope="all" id="homeScopeAll" title="Show all live alerts">All</button>
             <button type="button" class="scope-opt" data-scope="watchlist" id="homeScopeWatchlist" title="Show only live alerts for symbols on your watchlist">Watchlist</button>
+            <button type="button" class="scope-opt" data-scope="others" id="homeScopeOthers" title="Show live alerts for symbols not on your watchlist">Others</button>
           </div>
           <button type="button" class="ghost" id="clearRecent">Clear alerts</button>
         </div>
@@ -1287,13 +1288,20 @@
     let homeScope = loadHomeScope();
     let historySort = { key: "when", dir: "desc" };
 
+    function normalizeHomeScope(scope) {
+      const value = String(scope || "all").toLowerCase();
+      if (value === "watchlist") return "watchlist";
+      if (value === "others") return "others";
+      // Older builds stored "sp500" for the unfiltered feed.
+      return "all";
+    }
+
     function loadHomeScope() {
-      const raw = String(localStorage.getItem(HOME_SCOPE_KEY) || "sp500").toLowerCase();
-      return raw === "watchlist" ? "watchlist" : "sp500";
+      return normalizeHomeScope(localStorage.getItem(HOME_SCOPE_KEY));
     }
 
     function saveHomeScope(scope) {
-      homeScope = scope === "watchlist" ? "watchlist" : "sp500";
+      homeScope = normalizeHomeScope(scope);
       localStorage.setItem(HOME_SCOPE_KEY, homeScope);
     }
 
@@ -1351,7 +1359,7 @@
     const enableNotifyBtn = document.querySelector("#enableNotify");
     const RECENT_TIP_BASE =
       "Alerts from the live Kafka stream. They stay here across refresh until you clear. "
-      + "Use the scope switch for the full S&P 500 feed or only your watchlist symbols. "
+      + "Use the scope switch for All, Watchlist, or Others (not on your list). "
       + "Watchlist Scan today stays on that tab; Alert History has the full list.";
     let knownAlertIds = new Set();
     let alertsBootstrapped = false;
@@ -1546,12 +1554,24 @@
       const fresh = rows.filter((alert) => !knownAlertIds.has(alertKey(alert)));
       for (const alert of rows) knownAlertIds.add(alertKey(alert));
       if (!fresh.length || skipOsNotifyOnce) return;
-      bumpUnread(fresh.length);
-      showOsNotifications(fresh);
+      const visibleFresh = filterAlertsByHomeScope(fresh);
+      if (!visibleFresh.length) return;
+      bumpUnread(visibleFresh.length);
+      showOsNotifications(visibleFresh);
     }
 
     function homeClearedAt() {
       return localStorage.getItem(HOME_CLEARED_KEY) || "";
+    }
+
+    function filterAlertsByHomeScope(alerts) {
+      let rows = Array.isArray(alerts) ? alerts.slice() : [];
+      if (homeScope !== "watchlist" && homeScope !== "others") return rows;
+      const focus = new Set(watchlistSymbols);
+      if (homeScope === "watchlist") {
+        return rows.filter((alert) => focus.has(String(alert.symbol || "").toUpperCase()));
+      }
+      return rows.filter((alert) => !focus.has(String(alert.symbol || "").toUpperCase()));
     }
 
     function alertsForHome(alerts) {
@@ -1563,22 +1583,23 @@
           rows = rows.filter((alert) => new Date(alert.created_at || 0).getTime() > cut);
         }
       }
-      if (homeScope === "watchlist") {
-        const focus = new Set(watchlistSymbols);
-        rows = rows.filter((alert) => focus.has(String(alert.symbol || "").toUpperCase()));
-      }
-      return rows;
+      return filterAlertsByHomeScope(rows);
     }
 
     function homeEmptyText(visibleCount) {
       if (visibleCount > 0) return "";
       if (homeScope === "watchlist") {
         if (!watchlistSymbols.length) {
-          return "Watchlist scope is on, but your watchlist is empty. Add symbols on the Watchlist tab, or switch back to S&P 500.";
+          return "Watchlist scope is on, but your watchlist is empty. Add symbols on the Watchlist tab, or switch to All.";
         }
         return latestAlerts.length > 0
-          ? "No live alerts for your watchlist symbols. Switch to S&P 500 to see the broader feed, or Scan today on Watchlist."
+          ? "No live alerts for your watchlist symbols. Switch to All or Others, or Scan today on Watchlist."
           : "No live alerts for your watchlist yet. Live Kafka alerts for those symbols show up here.";
+      }
+      if (homeScope === "others") {
+        return latestAlerts.length > 0
+          ? "No live alerts outside your watchlist. Switch to All or Watchlist."
+          : "No live alerts yet for symbols outside your watchlist.";
       }
       return latestAlerts.length > 0
         ? "No live alerts on Home for this scope. Watchlist Scan today stays on that tab. History has the full list."
@@ -1603,7 +1624,9 @@
       setHomeStatus(
         homeScope === "watchlist"
           ? "Showing live alerts for your watchlist only."
-          : "Showing live alerts for the full S&P 500 feed.",
+          : homeScope === "others"
+            ? "Showing live alerts for symbols not on your watchlist."
+            : "Showing all live alerts.",
       );
     }
 
