@@ -338,8 +338,6 @@
     .status.error { color: var(--down); }
     .alert-head {
       display: flex;
-      flex-direction: column;
-      gap: 10px;
       flex: 1;
       min-width: 0;
     }
@@ -352,20 +350,14 @@
       width: 100%;
       min-width: 0;
     }
-    .alert-head-primary .when,
-    .detail-title-primary .when {
+    .alert-head-primary .when {
       margin-left: auto;
     }
-    .detail-title-primary {
-      padding-bottom: 10px;
-      border-bottom: 1px solid rgba(243, 239, 228, 0.12);
+    .alert-head-primary .pill {
+      flex: 0 0 auto;
     }
-    .alert-head-tags,
-    .detail-title-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
+    .detail-title-primary .pill {
+      flex: 0 0 auto;
     }
     .symbol, a.symbol-link { font-weight: 700; }
     a.symbol-link { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
@@ -408,15 +400,17 @@
       line-height: 1.4;
     }
     .run-stamp:empty { display: none; }
-    .when { margin-left: auto; color: var(--muted); font-size: 13px; }
+    .when {
+      margin-left: auto;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+    }
     .alert-metrics {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin: 10px 0;
-    }
-    .modal-body > .alert-metrics:first-child {
-      margin-top: 0;
     }
     .alert-metric {
       display: flex;
@@ -897,6 +891,32 @@
     table.history tbody tr.history-row { cursor: pointer; }
     table.history tbody tr.history-row:hover td { background: rgba(212, 175, 55, 0.07); }
     table.history tbody tr.history-row:focus-visible { outline: 2px solid rgba(212, 175, 55, 0.55); outline-offset: -2px; }
+    .history-pager {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    .history-pager[hidden] { display: none; }
+    .history-page-status {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      min-width: 12ch;
+      text-align: center;
+    }
+    .history-pager .ghost {
+      min-width: 2.5rem;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+    .history-pager .ghost:disabled {
+      opacity: 0.35;
+      cursor: default;
+    }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     .sort-btn {
       width: 100%;
@@ -951,7 +971,7 @@
     .modal-panel {
       position: relative;
       z-index: 1;
-      width: min(720px, 100%);
+      width: min(960px, 100%);
       max-height: min(80vh, 900px);
       display: flex;
       flex-direction: column;
@@ -964,8 +984,10 @@
     .modal-header {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
-      padding: 16px 16px 0;
+      flex: 0 0 auto;
+      gap: 8px;
+      padding: 16px 16px 14px;
+      border-bottom: 1px solid rgba(243, 239, 228, 0.08);
     }
     .modal-header h3 {
       margin: 0;
@@ -974,15 +996,16 @@
       font-family: ui-sans-serif, system-ui, sans-serif;
       font-size: 20px;
       line-height: 1.3;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 10px;
     }
-    .modal-header h3 .when { font-size: 13px; font-weight: 500; }
-    .modal-header h3 .detail-title-tags {
+    .modal-header > .when {
+      flex: 0 0 auto;
       margin: 0;
-      padding: 0;
+      padding-top: 4px;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      line-height: 1.3;
     }
     .modal-close {
       flex: 0 0 auto;
@@ -992,12 +1015,12 @@
       color: var(--muted);
       border: 0;
       border-radius: 8px;
-      min-width: 36px;
-      min-height: 36px;
-      padding: 6px;
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0;
       font-size: 22px;
       font-weight: 500;
-      line-height: 1;
+      line-height: 1.15;
     }
     .modal-close:hover {
       color: var(--text);
@@ -1009,8 +1032,10 @@
       outline-offset: 2px;
     }
     .modal-body {
+      flex: 1 1 auto;
+      min-height: 0;
       overflow: auto;
-      padding: 10px 16px 16px;
+      padding: 0 16px 14px;
       font-family: ui-sans-serif, system-ui, sans-serif;
     }
     .modal-body:focus { outline: none; }
@@ -1209,8 +1234,8 @@
             <button
               type="button"
               class="tip-btn"
-              title="Click a row for the full write-up. Click a column heading to sort. Drag a heading to reorder columns (saved on this browser)."
-              aria-label="About Alert History: Click a row for the full write-up. Click a column heading to sort. Drag a heading to reorder columns (saved on this browser)."
+              title="Click a row for the full write-up. Twenty rows per page — use First / Previous / Next / Last under the table. Click a column heading to sort (returns to page 1). Drag a heading to reorder columns (saved on this browser)."
+              aria-label="About Alert History: Click a row for the full write-up. Twenty rows per page — use First / Previous / Next / Last under the table. Click a column heading to sort (returns to page 1). Drag a heading to reorder columns (saved on this browser)."
             >?</button>
           </div>
         </div>
@@ -1222,6 +1247,13 @@
             <tbody id="historyBody"></tbody>
           </table>
         </div>
+        <nav class="history-pager" id="historyPager" hidden aria-label="Alert History pages">
+          <button type="button" class="ghost" id="historyFirst" aria-label="First page">First</button>
+          <button type="button" class="ghost" id="historyPrev" aria-label="Previous page">Previous</button>
+          <span class="history-page-status" id="historyPageStatus" aria-live="polite"></span>
+          <button type="button" class="ghost" id="historyNext" aria-label="Next page">Next</button>
+          <button type="button" class="ghost" id="historyLast" aria-label="Last page">Last</button>
+        </nav>
         <p class="empty" id="historyEmpty">No alerts yet. Live alerts and Watchlist Scan today both land here.</p>
       </section>
     </section>
@@ -1449,6 +1481,13 @@
     const historyHead = document.querySelector("#historyHead");
     const historyBody = document.querySelector("#historyBody");
     const historyEmpty = document.querySelector("#historyEmpty");
+    const historyPager = document.querySelector("#historyPager");
+    const historyPageStatus = document.querySelector("#historyPageStatus");
+    const historyFirstBtn = document.querySelector("#historyFirst");
+    const historyPrevBtn = document.querySelector("#historyPrev");
+    const historyNextBtn = document.querySelector("#historyNext");
+    const historyLastBtn = document.querySelector("#historyLast");
+    const HISTORY_PAGE_SIZE = 20;
     const detailModal = document.querySelector("#detailModal");
     const finbertModal = document.querySelector("#finbertModal");
     const priceModal = document.querySelector("#priceModal");
@@ -1504,6 +1543,7 @@
     let liveWsLimit = 30;
     let homeScope = loadHomeScope();
     let historySort = { key: "when", dir: "desc" };
+    let historyPage = 0;
 
     function normalizeHomeScope(scope) {
       const value = String(scope || "all").toLowerCase();
@@ -2919,8 +2959,6 @@
         head.className = "alert-head";
         const primary = document.createElement("div");
         primary.className = "alert-head-primary";
-        const tags = document.createElement("div");
-        tags.className = "alert-head-tags";
         const symbol = symbolLink(alert.symbol);
         symbol.addEventListener("click", (event) => event.stopPropagation());
         const company = companyNameEl(alert.symbol);
@@ -2928,13 +2966,12 @@
         when.className = "when";
         when.textContent = formatWhen(alertWhenStamp(alert));
         when.title = "Last updated (same symbol-day row can refresh during the session)";
-        // Collapsed: who + when, then story pills. Price/sentiment live in the open body
-        // as large tiles so the closed card stays short and numbers are not duplicated.
+        // One line: symbol, company, story pills, then when. Price/sentiment stay in the open body.
         primary.append(symbol);
         if (company) primary.append(company);
+        appendStoryAndShapePills(primary, alert);
         primary.append(when);
-        appendStoryAndShapePills(tags, alert);
-        head.append(primary, tags);
+        head.append(primary);
         const chev = document.createElement("span");
         chev.className = "chev";
         chev.textContent = "▸";
@@ -3202,6 +3239,16 @@
         const numeric = Boolean(HISTORY_COL_META[key] && HISTORY_COL_META[key].numeric);
         historySort = { key, dir: numeric ? "desc" : "asc" };
       }
+      historyPage = 0;
+      renderHistory(latestAlerts);
+    }
+
+    function historyPageCount(total) {
+      return Math.max(1, Math.ceil(Math.max(0, total) / HISTORY_PAGE_SIZE));
+    }
+
+    function setHistoryPage(page) {
+      historyPage = Math.max(0, page | 0);
       renderHistory(latestAlerts);
     }
 
@@ -3371,10 +3418,18 @@
 
     function renderHistory(alerts) {
       historyBody.replaceChildren();
-      historyEmpty.hidden = alerts.length > 0;
+      const list = Array.isArray(alerts) ? alerts : [];
+      historyEmpty.hidden = list.length > 0;
       syncHistoryHeaders();
-      const rows = alerts.slice().sort(compareHistory);
-      for (const alert of rows) {
+      const rows = list.slice().sort(compareHistory);
+      const total = rows.length;
+      const pages = historyPageCount(total);
+      if (historyPage > pages - 1) historyPage = pages - 1;
+      if (historyPage < 0) historyPage = 0;
+      const start = total === 0 ? 0 : historyPage * HISTORY_PAGE_SIZE;
+      const end = Math.min(total, start + HISTORY_PAGE_SIZE);
+      const pageRows = rows.slice(start, end);
+      for (const alert of pageRows) {
         const row = document.createElement("tr");
         row.className = "history-row";
         row.tabIndex = 0;
@@ -3392,6 +3447,22 @@
           row.append(historyCell(alert, key));
         }
         historyBody.append(row);
+      }
+      if (historyPager) {
+        historyPager.hidden = total === 0;
+        const from = total === 0 ? 0 : start + 1;
+        const to = end;
+        if (historyPageStatus) {
+          historyPageStatus.textContent = total === 0
+            ? ""
+            : "Page " + (historyPage + 1) + " of " + pages + " · " + from + "–" + to + " of " + total;
+        }
+        const atStart = historyPage <= 0;
+        const atEnd = historyPage >= pages - 1;
+        if (historyFirstBtn) historyFirstBtn.disabled = atStart;
+        if (historyPrevBtn) historyPrevBtn.disabled = atStart;
+        if (historyNextBtn) historyNextBtn.disabled = atEnd || total === 0;
+        if (historyLastBtn) historyLastBtn.disabled = atEnd || total === 0;
       }
     }
 
@@ -3422,22 +3493,25 @@
 
     function openDetail(alert) {
       if (!alert) return;
+      const header = document.querySelector("#detailModal .modal-header");
       const title = document.querySelector("#detailTitle");
+      const closeBtn = document.querySelector("#detailClose");
       const primary = document.createElement("div");
       primary.className = "detail-title-primary";
-      const tags = document.createElement("div");
-      tags.className = "detail-title-tags";
-      const when = document.createElement("span");
-      when.className = "when";
-      when.textContent = formatWhen(alertWhenStamp(alert));
-      when.title = "Last updated";
-      // Same order as cards: symbol → company → when; pills on the next row.
+      // Same one-line head as Live cards: symbol, company, pills; when + × sit on the right.
       primary.append(symbolLink(alert.symbol));
       const company = companyNameEl(alert.symbol);
       if (company) primary.append(company);
-      primary.append(when);
-      appendStoryAndShapePills(tags, alert);
-      title.replaceChildren(primary, tags);
+      appendStoryAndShapePills(primary, alert);
+      title.replaceChildren(primary);
+      let when = header.querySelector(":scope > .when");
+      if (!when) {
+        when = document.createElement("span");
+        when.className = "when";
+        header.insertBefore(when, closeBtn);
+      }
+      when.textContent = formatWhen(alertWhenStamp(alert));
+      when.title = "Last updated";
       const body = document.querySelector("#detailBody");
       body.replaceChildren();
       let rulesNote = null;
@@ -3968,6 +4042,20 @@
     });
 
     buildHistoryHeaders();
+    if (historyFirstBtn) {
+      historyFirstBtn.addEventListener("click", () => setHistoryPage(0));
+    }
+    if (historyPrevBtn) {
+      historyPrevBtn.addEventListener("click", () => setHistoryPage(historyPage - 1));
+    }
+    if (historyNextBtn) {
+      historyNextBtn.addEventListener("click", () => setHistoryPage(historyPage + 1));
+    }
+    if (historyLastBtn) {
+      historyLastBtn.addEventListener("click", () => {
+        setHistoryPage(historyPageCount((latestAlerts || []).length) - 1);
+      });
+    }
 
     document.querySelector("#detailClose").addEventListener("click", closeDetail);
     document.querySelector("#detailBackdrop").addEventListener("click", closeDetail);
