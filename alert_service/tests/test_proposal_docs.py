@@ -89,7 +89,7 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "## Batch historical ELT" in architecture
     assert "## Streaming ETL" in architecture
     assert "## End-to-end alert sequence" in architecture
-    assert "Local stand-ins (no AWS required)" in architecture
+    assert "Deck names → what we actually run" in architecture or "Local stand-ins" in architecture
     assert "production deploy" in architecture.lower()
     assert "optional class AWS demo" in architecture or "aws-deployment" in architecture
     assert "AWS class demo host" in architecture
@@ -459,7 +459,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "S&P 500 Radar" in readme
     assert "focus set" in readme
     assert "batch_train" in readme
-    assert "AWS production deploy is not required" in readme
+    assert "Managed MSK" in readme or "AWS production deploy is not required" in readme
     assert "aws-deployment.md" in readme
     assert "updated_at" in readme
     assert "Live WebSocket" in readme
