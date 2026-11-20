@@ -71,7 +71,7 @@ def test_health_and_ui_without_a_database():
     assert "detail-title-primary" in page.text
     assert "detail-title-tags" in page.text
     assert "PRICE_SHAPE_LABELS" in page.text
-    assert "if (company) head.append(company)" in page.text
+    assert "if (company) primary.append(company)" in page.text
     assert "function alertHeadMetrics" in page.text
     assert "for (const bit of alertHeadMetrics(alert)) head.append(bit)" in page.text
     assert "function badgeClass" not in page.text
