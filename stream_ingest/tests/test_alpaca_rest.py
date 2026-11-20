@@ -32,7 +32,7 @@ def test_session_backfill_window_during_rth():
 
 
 @pytest.mark.asyncio
-async def test_session_backfill_publishes_ordered_bars(monkeypatch):
+async def test_session_backfill_publishes_open_and_last_only(monkeypatch):
     published: list[dict] = []
 
     class _Pub:
@@ -76,6 +76,9 @@ async def test_session_backfill_publishes_ordered_bars(monkeypatch):
     assert len(published) == 3
     assert [row["symbol"] for row in published] == ["AAPL", "AAPL", "MSFT"]
     assert published[0]["ts"] == "2026-11-20T14:30:00Z"
+    assert published[0]["open"] == 100.0
     assert published[1]["ts"] == "2026-11-20T15:00:00Z"
+    assert published[1]["close"] == 100.8
+    assert "2026-11-20T14:31:00Z" not in {row["ts"] for row in published}
     assert poller._seen["AAPL"] == "2026-11-20T15:00:00Z"
     assert poller._session_backfilled is False  # flag set by run(), not backfill alone

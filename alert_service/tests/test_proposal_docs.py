@@ -90,7 +90,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "## Streaming ETL" in architecture
     assert "## End-to-end alert sequence" in architecture
     assert "Local stand-ins (no AWS required)" in architecture
-    assert "does **not** require an AWS production deploy" in architecture or "AWS production deploy" in architecture
+    assert "production deploy" in architecture.lower()
+    assert "optional class AWS demo" in architecture or "aws-deployment" in architecture
     assert "## Live price stream" in architecture
     assert "## Batch lake land and refresh" in architecture
     assert "## Curated features and Isolation Forest" in architecture
@@ -106,9 +107,13 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "live_alerts_armed" in architecture
     assert "Background heartbeat" in architecture or "background task" in architecture
     assert "backfill" in architecture.lower() and "9:30" in architecture
+    assert "cash-open" in architecture.lower() or "open+last" in architecture.lower()
+    assert "updated_at" in architecture
+    assert "re-enter" in architecture.lower() or "reenter" in architecture.lower()
     assert "schema_migrations" in architecture
     assert "has_raw_prices" in architecture
     assert "TICKER_ALERT_LAKE_S3_BUCKET" in architecture or "S3" in architecture
+    assert "aws-deployment.md" in architecture
     assert "Mac/Chrome desktop notification" in architecture
     assert "Desktop notification" in architecture and "tab badge" in architecture
     assert "ui/sw-notifications.js" in architecture
@@ -203,20 +208,26 @@ def test_aws_deployment_doc_matches_as_built_demo():
     assert "schema_migrations" in aws
     assert "live_alerts_armed" in aws or "Live alerts" in aws
     assert "backfill" in aws.lower()
+    assert "cash-open + latest" in aws.lower() or "open+last" in aws.lower()
+    assert "updated_at" in aws
     assert "ALPACA_WS_SYMBOL_LIMIT" in aws
     assert "Cache-Control" in aws or "no-store" in aws
     assert "Postgres container" in aws
     assert "not EKS" in aws
     assert "Secrets Manager" in aws
     assert "8010/ui" in aws
+    assert "98.94.232.101" in aws
+    assert "unsafely-treat-insecure-origin-as-secure" in aws
     assert "market-radar-lake" in aws
     assert "TICKER_ALERT_LAKE_S3_BUCKET" in aws
     assert "Durable" in aws or "durable" in aws
     assert "/market-radar/demo" in aws
     assert "awslogs" in aws
+    assert "CloudWatch Logs" in aws
     assert "Elastic IP" in aws
     assert "release" in aws.lower()
     assert "infra/eip.tf" in aws or "aws_eip" in aws or "elastic_ip" in aws
+    assert "infra/" in aws and "CloudWatch" in aws
     assert "[architecture.md](architecture.md)" in aws
 
 
@@ -282,6 +293,7 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert 'id="clearRecent"' in ui
     assert "Clear alerts" in ui
     assert "tickerAlertHomeClearedAt" in ui
+    assert "alert.updated_at || alert.created_at" in ui
     assert "clearRecentAlerts" in ui
     assert "openHomeAlertKeys" in ui
     assert "openWatchAlertKeys" in ui
@@ -367,7 +379,9 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Slack and email are not used" in sources
     assert "Slack or email" not in sources
     assert "local" in sources.lower() and "aws-deployment.md" in sources
-    assert "backfill from the 9:30 ET open" in sources or "backfill from cash open" in sources
+    assert "cash-open + latest" in sources.lower() or "backfill cash-open" in sources.lower()
+    assert "updated_at" in sources
+    assert "CloudWatch" in sources or "Elastic IP" in sources
     assert "background task" in sources
     assert "BTC-USD" not in sources
     assert "Watchlist Scan today" in sources
@@ -397,6 +411,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "focus set" in readme
     assert "batch_train" in readme
     assert "AWS production deploy is not required" in readme
+    assert "aws-deployment.md" in readme
+    assert "updated_at" in readme
     assert "Finished-system diagrams" in readme
     assert "planned → landed" in readme.lower() or "keep / change / drop" in readme.lower()
     assert "As-built vs local final" not in readme
