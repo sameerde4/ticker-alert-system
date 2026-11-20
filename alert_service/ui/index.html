@@ -336,23 +336,49 @@
     }
     .status:empty { display: none; }
     .status.error { color: var(--down); }
-    .alert-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; flex: 1; }
+    .alert-head {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .alert-head-primary,
+    .detail-title-primary {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      flex-wrap: wrap;
+      width: 100%;
+      min-width: 0;
+    }
+    .alert-head-primary .when,
+    .detail-title-primary .when {
+      margin-left: auto;
+    }
+    .alert-head-tags,
+    .detail-title-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
     .symbol, a.symbol-link { font-weight: 700; }
     a.symbol-link { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
     a.symbol-link:hover { color: var(--text); }
     .company-name {
       color: var(--muted);
       font-family: ui-sans-serif, system-ui, sans-serif;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       min-width: 0;
-      max-width: min(42ch, 100%);
+      max-width: min(56ch, 100%);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .modal-header h3 .company-name {
-      max-width: min(36ch, 55vw);
+      max-width: min(48ch, 70vw);
       font-size: 18px;
       font-weight: 600;
       color: var(--text);
@@ -942,11 +968,14 @@
       font-size: 20px;
       line-height: 1.3;
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
     }
-    .modal-header h3 .when { margin-left: auto; font-size: 13px; font-weight: 500; }
+    .modal-header h3 .when { font-size: 13px; font-weight: 500; }
+    .modal-header h3 .detail-title-tags {
+      padding-bottom: 2px;
+    }
     .modal-close {
       margin-left: auto;
       background: transparent;
@@ -2869,6 +2898,10 @@
         toggle.setAttribute("aria-expanded", startOpen ? "true" : "false");
         const head = document.createElement("div");
         head.className = "alert-head";
+        const primary = document.createElement("div");
+        primary.className = "alert-head-primary";
+        const tags = document.createElement("div");
+        tags.className = "alert-head-tags";
         const symbol = symbolLink(alert.symbol);
         symbol.addEventListener("click", (event) => event.stopPropagation());
         const company = companyNameEl(alert.symbol);
@@ -2876,11 +2909,13 @@
         when.className = "when";
         when.textContent = formatWhen(alertWhenStamp(alert));
         when.title = "Last updated (same symbol-day row can refresh during the session)";
-        appendStoryAndShapePills(head, alert);
-        head.append(symbol);
-        if (company) head.append(company);
-        for (const bit of alertHeadMetrics(alert)) head.append(bit);
-        head.append(when);
+        // Line 1: who + numbers. Line 2: story pills (what triggered).
+        primary.append(symbol);
+        if (company) primary.append(company);
+        for (const bit of alertHeadMetrics(alert)) primary.append(bit);
+        primary.append(when);
+        appendStoryAndShapePills(tags, alert);
+        head.append(primary, tags);
         const chev = document.createElement("span");
         chev.className = "chev";
         chev.textContent = "▸";
@@ -3369,19 +3404,21 @@
     function openDetail(alert) {
       if (!alert) return;
       const title = document.querySelector("#detailTitle");
+      const primary = document.createElement("div");
+      primary.className = "detail-title-primary";
+      const tags = document.createElement("div");
+      tags.className = "detail-title-tags";
       const when = document.createElement("span");
       when.className = "when";
       when.textContent = formatWhen(alertWhenStamp(alert));
       when.title = "Last updated";
-      const detailParts = [kindPill(alert.kind, alert)];      const detailShape = priceShapePill(alert);
-      if (detailShape) detailParts.push(detailShape);
-      const detailAgree = agreementPill(alert);
-      if (detailAgree) detailParts.push(detailAgree);
-      detailParts.push(symbolLink(alert.symbol));
+      // Top left: company identity; top right: when. Pills sit above the metric tiles.
       const company = companyNameEl(alert.symbol);
-      if (company) detailParts.push(company);
-      detailParts.push(when);
-      title.replaceChildren(...detailParts);
+      if (company) primary.append(company);
+      primary.append(symbolLink(alert.symbol));
+      primary.append(when);
+      appendStoryAndShapePills(tags, alert);
+      title.replaceChildren(primary, tags);
       const body = document.querySelector("#detailBody");
       body.replaceChildren();
       let rulesNote = null;

@@ -265,7 +265,9 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Enable desktop notifications" in ui
     assert "Mac notification" in ui
     assert "function alertMetrics" in ui
-    assert "appendStoryAndShapePills(head, alert)" in ui
+    assert "appendStoryAndShapePills(tags, alert)" in ui
+    assert "alert-head-primary" in ui
+    assert "detail-title-primary" in ui
     assert "companyNameEl(alert.symbol)" in ui
     assert "function alertHeadMetrics" in ui
     assert '"type"' in ui and '"shape"' in ui and '"direction"' in ui

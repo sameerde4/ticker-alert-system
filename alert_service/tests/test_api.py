@@ -65,7 +65,11 @@ def test_health_and_ui_without_a_database():
     assert "function alertMetrics" in page.text
     assert "alert-metric-value" in page.text
     assert "Price change" in page.text
-    assert "appendStoryAndShapePills(head, alert)" in page.text
+    assert "appendStoryAndShapePills(tags, alert)" in page.text
+    assert "alert-head-primary" in page.text
+    assert "alert-head-tags" in page.text
+    assert "detail-title-primary" in page.text
+    assert "detail-title-tags" in page.text
     assert "PRICE_SHAPE_LABELS" in page.text
     assert "if (company) head.append(company)" in page.text
     assert "function alertHeadMetrics" in page.text
