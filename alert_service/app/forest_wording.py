@@ -31,30 +31,53 @@ def forest_feature_callouts(features: dict[str, Any] | None) -> list[str]:
     return out
 
 
-def forest_driver_sentence(features: dict[str, Any] | None) -> str:
-    """Name the strongest drivers so the card is not only a raw score dump."""
+def forest_driver_explanations(
+    features: dict[str, Any] | None, *, limit: int = 2
+) -> list[str]:
+    """Loudest features as short 'number (why it matters)' phrases for What happened."""
     if not isinstance(features, dict):
-        return "The registered model marked this session's price/volume pattern unusual."
+        return []
     ranked: list[tuple[float, str]] = []
     gap = _as_float(features.get("gap_return"))
     session = _as_float(features.get("session_return"))
     close = _as_float(features.get("close_return"))
     volume_z = _as_float(features.get("volume_zscore"))
     if gap is not None:
-        ranked.append((abs(gap), f"the overnight gap ({_fmt_pct(gap)})"))
+        if gap <= -0.02:
+            why = "big overnight drop vs prior close"
+        elif gap >= 0.02:
+            why = "big overnight jump vs prior close"
+        else:
+            why = "overnight move vs prior close"
+        ranked.append((abs(gap), f"gap {_fmt_pct(gap)} ({why})"))
     if session is not None:
-        ranked.append((abs(session), f"the open→last move ({_fmt_pct(session)})"))
+        ranked.append(
+            (abs(session), f"open→last {_fmt_pct(session)} (regular-session move from the open)")
+        )
     if close is not None:
-        ranked.append((abs(close), f"the close versus prior ({_fmt_pct(close)})"))
+        ranked.append(
+            (abs(close), f"close vs prior {_fmt_pct(close)} (last vs prior close)")
+        )
     if volume_z is not None:
-        ranked.append((abs(volume_z) / 10.0, f"session volume (z {volume_z:+.2f})"))
+        if volume_z <= -1.5:
+            why = "session volume far below its usual level"
+        elif volume_z >= 1.5:
+            why = "session volume far above its usual level"
+        else:
+            why = "session volume vs its usual level"
+        ranked.append((abs(volume_z) / 10.0, f"vol z {volume_z:+.2f} ({why})"))
     ranked.sort(key=lambda row: row[0], reverse=True)
-    if not ranked:
+    return [label for _, label in ranked[: max(0, limit)]]
+
+
+def forest_driver_sentence(features: dict[str, Any] | None) -> str:
+    """Name the strongest drivers so the card is not only a raw score dump."""
+    lines = forest_driver_explanations(features, limit=2)
+    if not lines:
         return "The registered model marked this session's price/volume pattern unusual."
-    top = [label for _, label in ranked[:2]]
-    if len(top) == 1:
-        return f"What stood out most was {top[0]}."
-    return f"What stood out most was {top[0]} and {top[1]}."
+    if len(lines) == 1:
+        return f"What stood out most was {lines[0]}."
+    return f"What stood out most was {lines[0]} and {lines[1]}."
 
 
 def forest_price_summary(
@@ -131,25 +154,25 @@ def forest_price_section(
     )
 
 
-def forest_evidence_detail(forest: dict[str, Any] | None) -> str:
-    """Measurement line for What happened when the forest tripped."""
+def forest_evidence_bullets(forest: dict[str, Any] | None) -> list[str]:
+    """Why-anomalous bullets for What happened (one driver per line)."""
     if not isinstance(forest, dict) or not forest.get("anomalous"):
+        return []
+    features = forest.get("features") if isinstance(forest.get("features"), dict) else None
+    lines = forest_driver_explanations(features, limit=2)
+    if lines:
+        return list(lines)
+    return ["Session price/volume pattern looked unusual versus recent history."]
+
+
+def forest_evidence_detail(forest: dict[str, Any] | None) -> str:
+    """Joined Why-anomalous copy (legacy single-string callers)."""
+    bullets = forest_evidence_bullets(forest)
+    if not bullets:
         return ""
-    model_id = str(forest.get("model_id") or "model")
-    score = _as_float(forest.get("forest_score")) or 0.0
-    cutoff = _as_float(forest.get("score_cutoff"))
-    cutoff_bit = f", cutoff {cutoff:.4f}" if cutoff is not None else ""
-    drivers = forest_driver_sentence(
-        forest.get("features") if isinstance(forest.get("features"), dict) else None
-    )
-    callouts = forest_feature_callouts(
-        forest.get("features") if isinstance(forest.get("features"), dict) else None
-    )
-    feature_bit = f" Features: {', '.join(callouts)}." if callouts else ""
-    return (
-        f"Isolation Forest {model_id} marked the session anomalous "
-        f"(score {score:.4f}{cutoff_bit}). {drivers}{feature_bit}"
-    )
+    if len(bullets) == 1:
+        return f"Marked anomalous: {bullets[0]}."
+    return "Marked anomalous: " + "; ".join(bullets) + "."
 
 
 def news_tail_from_sections(sections: dict[str, Any] | None, summary: str | None = None) -> str | None:
@@ -157,16 +180,34 @@ def news_tail_from_sections(sections: dict[str, Any] | None, summary: str | None
     if isinstance(sections, dict):
         if sections.get("second_supports") is True:
             return "Near-term headlines lined up with this move."
+        if sections.get("news_join_path") == "climate":
+            return "News joined via climate FinBERT average (soft join)."
+        if sections.get("news_gate_cleared") is False and (
+            "climate sentiment" in str(sections.get("news") or "").lower()
+            or "none cleared the" in str(sections.get("news") or "").lower()
+            or "climate average" in (summary or "").lower()
+            or "soft combined sentiment" in (summary or "").lower()
+        ):
+            return "Near-term headlines were scored below the FinBERT join gates (climate context only)."
         news = str(sections.get("news") or "")
-        if "no near-term headlines" in news.lower() or "no news evidence" in news.lower():
+        news_l = news.lower()
+        if "were found on this trading day" in news_l or (
+            "no near-term headlines" in news_l and "cleared" not in news_l
+        ):
+            return "News was checked; no near-term headlines were found."
+        if "no near-term headlines" in news_l or "no news evidence" in news_l:
             return "News was checked with no qualifying headlines."
-        if "did not line up" in news.lower() or "none of these headlines lined up" in news.lower():
+        if "did not line up" in news_l or "none of these headlines lined up" in news_l:
             return "Near-term headlines were checked; none lined up with this move."
+        if "none cleared the" in news_l and "finbert gate" in news_l:
+            return "Near-term headlines were scored below the FinBERT gate (soft lean only)."
     text = (summary or "").lower()
     if "no headline lined up" in text:
         return "No headline lined up with this move."
-    if "no qualifying headlines" in text:
-        return "News was checked with no qualifying headlines."
+    if "soft combined sentiment" in text or "stays price-led" in text:
+        return "Near-term headlines were scored below the FinBERT gate (soft lean only)."
+    if "no qualifying headlines" in text or "no near-term headlines" in text:
+        return "News was checked with no near-term headlines."
     return None
 
 

@@ -9,7 +9,9 @@ from app.evidence import attach_evidence_story
 from app.forest_live import ForestScore
 from app.forest_wording import (
     enrich_price_draft_with_forest_wording,
+    forest_driver_explanations,
     forest_driver_sentence,
+    forest_evidence_detail,
     forest_price_summary,
 )
 from app.live_alerts import forest_price_draft_from_session
@@ -87,6 +89,41 @@ def test_forest_driver_prefers_loudest_features():
         }
     )
     assert "volume" in sentence.lower()
+
+
+def test_forest_evidence_detail_explains_drivers_not_raw_score():
+    text = forest_evidence_detail(
+        {
+            "anomalous": True,
+            "model_id": "isolation_forest_v1",
+            "forest_score": -0.0531,
+            "score_cutoff": 0.0,
+            "features": {
+                "gap_return": -0.1151,
+                "session_return": 0.0021,
+                "close_return": -0.1133,
+                "volume_zscore": -2.18,
+            },
+        }
+    )
+    assert "Marked anomalous:" in text
+    assert "gap" in text and "-11.51%" in text
+    assert "prior close" in text
+    assert "vol z" in text and "-2.18" in text
+    assert "far below" in text
+    assert "score" not in text.lower()
+    assert "cutoff" not in text.lower()
+    bits = forest_driver_explanations(
+        {
+            "gap_return": -0.1151,
+            "session_return": 0.0021,
+            "close_return": -0.1133,
+            "volume_zscore": -2.18,
+        }
+    )
+    assert len(bits) == 2
+    assert any(bit.startswith("gap") for bit in bits)
+    assert any(bit.startswith("vol z") for bit in bits)
 
 
 def test_forest_draft_uses_richer_wording_and_sections():
@@ -238,8 +275,9 @@ def test_evidence_price_noticed_is_forest_aware_when_under_percent():
     )
     story = attach_evidence_story(draft).sections["evidence"]
     price_step = next(step for step in story["steps"] if step["id"] == "price_noticed")
-    assert "stayed under the 3.0% percent rule" in price_step["detail"]
-    assert "(forest only)" in price_step["detail"]
-    assert "Isolation Forest" in price_step["detail"]
-    assert "What stood out" in price_step["detail"]
+    details = price_step["details"]
+    assert "stayed under the 3.0% percent rule" in details[0]
+    assert details[0].endswith("(not volatile).")
+    assert any("vol z" in line or "gap" in line for line in details[1:])
+    assert "score -0.1" not in price_step["detail"]
     assert "cleared the product gate" not in price_step["detail"]

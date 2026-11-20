@@ -2,13 +2,17 @@ from datetime import date
 
 from app.engine import AlertDraft
 from app.evidence import (
+    AGREEMENT_AGREES,
+    AGREEMENT_DISAGREES,
     ALIGNMENT_CONTRADICTS,
     ALIGNMENT_LEANS,
+    ALIGNMENT_LEANS_AGAINST,
     ALIGNMENT_NEUTRAL,
     ALIGNMENT_SUPPORTS,
     attach_evidence_story,
     build_evidence_story,
     price_trigger_note,
+    resolve_direction_agreement,
     _forest_feature_case_tags,
     _price_gate_case,
 )
@@ -104,6 +108,75 @@ def test_evidence_price_led_no_news_is_neutral():
     assert story["alignment"] == ALIGNMENT_NEUTRAL
     assert "no news evidence" in story["headline"]
     assert story["steps"][-1]["ok"] is False
+    assert "No near-term headlines were found" in story["steps"][-1]["detail"]
+    assert story["agreement"] == "no_news"
+    tagged = attach_evidence_story(draft)
+    assert tagged.sections["agreement"] == "no_news"
+
+
+def test_evidence_price_led_below_gate_soft_lean_supports():
+    draft = _draft(
+        price_change_pct=-0.04,
+        sentiment_score=40.0,
+        articles=(
+            {"title": "Slightly softer guidance tone", "sentiment_score": 42.0},
+            {"title": "Peers ease in afternoon", "sentiment_score": 38.0},
+        ),
+        sections={
+            "entry": "price",
+            "second_supports": False,
+            "news_gate_cleared": False,
+        },
+    )
+    story = build_evidence_story(draft)
+    assert story["alignment"] == ALIGNMENT_LEANS
+    assert "soft news lean supports" in story["headline"]
+    assert "soft evidence only" in story["steps"][1]["detail"] or "climate average" in story["steps"][1]["detail"]
+    assert story["agreement"] == AGREEMENT_AGREES
+    assert resolve_direction_agreement(draft) == AGREEMENT_AGREES
+
+
+def test_evidence_price_led_below_gate_soft_lean_disagrees():
+    draft = _draft(
+        price_change_pct=-0.04,
+        sentiment_score=58.0,
+        articles=({"title": "Mildly constructive note", "sentiment_score": 58.0},),
+        sections={
+            "entry": "price",
+            "second_supports": False,
+            "news_gate_cleared": False,
+        },
+    )
+    story = build_evidence_story(draft)
+    assert story["alignment"] == ALIGNMENT_LEANS_AGAINST
+    assert "soft news lean disagrees" in story["headline"]
+    assert story["agreement"] == AGREEMENT_DISAGREES
+
+
+def test_evidence_polarized_climate_forces_mixed_direction():
+    draft = _draft(
+        price_change_pct=-0.04,
+        sentiment_score=50.0,
+        articles=(
+            {"title": "Bull", "sentiment_score": 90.0},
+            {"title": "Bear", "sentiment_score": 10.0},
+        ),
+        sections={
+            "entry": "price",
+            "second_supports": True,
+            "news_gate_cleared": True,
+            "news_join_path": "headline",
+            "sentiment_split": {
+                "positive": 1,
+                "negative": 1,
+                "neutral": 0,
+                "polarized": True,
+            },
+        },
+    )
+    assert resolve_direction_agreement(draft) == "mixed"
+    story = build_evidence_story(draft)
+    assert story["agreement"] == "mixed"
 
 
 def test_evidence_news_led_price_somewhat_supports_same_direction():
@@ -132,8 +205,9 @@ def test_evidence_news_led_price_somewhat_supports_same_direction():
     # Step 2 is measurement only — no duplicated verdict language.
     assert "does not support" not in story["steps"][1]["detail"]
     assert "does not line up" not in story["steps"][1]["detail"]
-    assert "under the 3.0% rule" in story["steps"][1]["detail"]
-    assert "(neither gate)" in story["steps"][1]["detail"]
+    assert "under the 3.0% percent rule" in story["steps"][1]["detail"]
+    assert "(not volatile)" in story["steps"][1]["detail"]
+    assert story["price_gate"] == "neither gate"
     assert story["alignment"] == ALIGNMENT_LEANS
     assert "somewhat supports" in story["steps"][-1]["label"].lower()
     assert story["steps"][-1]["detail"] != story["steps"][1]["detail"]
@@ -212,7 +286,7 @@ def test_price_checked_tags_percent_only():
     )
     story = build_evidence_story(draft)
     detail = story["steps"][0]["detail"]
-    assert "(percent only)" in detail
+    assert "(volatile)" in detail
     assert "[triggers: #1 percent]" in detail
     assert story["price_triggers"] == "triggers: #1 percent"
     assert "cleared the 3.0% percent rule" in detail or "cleared the 3.0% rule" in detail
@@ -239,11 +313,14 @@ def test_price_checked_tags_percent_plus_forest():
         },
     )
     story = build_evidence_story(draft)
-    detail = story["steps"][0]["detail"]
-    assert "(percent + forest)" in detail
-    assert "#1 percent" in detail
-    assert "#2 forest" in detail
-    assert story["price_gate"] == "percent + forest"
+    details = story["steps"][0]["details"]
+    assert details[0].endswith("(volatile).")
+    assert "(not volatile)" not in details[0]
+    assert any("vol z" in line or "close vs prior" in line or "gap" in line for line in details[1:])
+    assert "#1 percent" in story["price_triggers"]
+    assert "#2 forest" in story["price_triggers"]
+    assert story["price_gate"] == "volatile + anomalous"
+    assert story.get("price_shape") == "volatile_anomalous"
 
 
 def test_price_checked_tags_forest_only():
@@ -266,11 +343,13 @@ def test_price_checked_tags_forest_only():
             },
         },
     )
-    detail = build_evidence_story(draft)["steps"][0]["detail"]
-    assert "(forest only)" in detail
-    assert "stayed under" in detail
-    assert "#2 forest" in detail
-    assert "#6 volume z" in detail or "#3 gap" in detail
+    story = build_evidence_story(draft)
+    details = story["steps"][0]["details"]
+    assert details[0].endswith("(not volatile).")
+    assert "stayed under" in details[0]
+    assert any("vol z" in line or "gap" in line for line in details[1:])
+    assert "#2 forest" in story["price_triggers"]
+    assert "#6 volume z" in story["price_triggers"] or "#3 gap" in story["price_triggers"]
 
 
 def test_price_checked_notes_volume_spike_as_case_7():
@@ -298,10 +377,11 @@ def test_news_led_price_checked_tags_neither_when_under_and_forest_normal():
         },
     )
     story = build_evidence_story(draft)
-    detail = story["steps"][1]["detail"]
-    assert "(neither gate)" in detail
-    assert "stayed under the 3.0% rule" in detail
-    assert "triggers: none (price under both gates)" in detail
+    details = story["steps"][1]["details"]
+    assert details[0].endswith("(not volatile).") or "(not volatile)" in details[0]
+    assert "stayed under the 3.0% percent rule" in details[0]
+    assert story["price_gate"] == "neither gate"
+    assert "triggers: none (price under both gates)" in story["price_triggers"]
 
 
 def test_news_led_price_checked_tags_forest_only_when_under_but_anomalous():
@@ -328,9 +408,100 @@ def test_news_led_price_checked_tags_forest_only_when_under_but_anomalous():
             },
         },
     )
-    detail = build_evidence_story(draft)["steps"][1]["detail"]
-    assert "(forest only)" in detail
-    assert "#2 forest" in detail
+    # Forest-anomalous doors are price-first even when the kind chip is news-led.
+    story = build_evidence_story(draft)
+    assert story["entry"] == "price"
+    assert story["steps"][0]["id"] == "price_noticed"
+    details = story["steps"][0]["details"]
+    assert details[0].endswith("(not volatile).")
+    assert any("vol z" in line or "gap" in line for line in details[1:])
+    assert "#2 forest" in story["price_triggers"]
+
+
+def test_live_news_kind_forces_price_first_what_happened():
+    draft = _draft(
+        kind="news",
+        origin="live",
+        price_change_pct=None,
+        sentiment_score=80.0,
+        articles=({"title": "Beats", "sentiment_score": 80.0},),
+        sections={
+            "entry": "news",
+            "second_supports": False,
+            "observed_price_change_pct": 0.0039,
+            "forest": {
+                "anomalous": True,
+                "model_id": "isolation_forest_v1",
+                "forest_score": -0.21,
+                "score_cutoff": 0.0,
+                "features": {
+                    "gap_return": -0.0601,
+                    "session_return": 0.0015,
+                    "close_return": -0.058,
+                    "volume_zscore": -4.29,
+                },
+            },
+        },
+    )
+    story = build_evidence_story(draft)
+    assert story["entry"] == "price"
+    assert story["headline"].startswith("Price noticed")
+    assert [step["id"] for step in story["steps"]][:2] == ["price_noticed", "news_checked"]
+    details = story["steps"][0]["details"]
+    assert len(details) >= 2
+    assert details[0].endswith("(not volatile).")
+    assert "(anomalous)" not in details[0]
+    assert any("vol z" in line for line in details[1:])
+    assert any("gap" in line for line in details[1:])
+    out = attach_evidence_story(draft)
+    assert out.sections["entry"] == "price"
+    assert out.sections["evidence"]["entry"] == "price"
+
+
+def test_price_noticed_bullets_keep_volatile_separate_from_anomalous():
+    draft = _draft(
+        price_change_pct=0.04,
+        sections={
+            "entry": "price",
+            "second_supports": False,
+            "forest": {
+                "anomalous": True,
+                "model_id": "isolation_forest_v1",
+                "forest_score": -0.1,
+                "score_cutoff": 0.0,
+                "features": {
+                    "gap_return": 0.02,
+                    "session_return": 0.04,
+                    "close_return": 0.05,
+                    "volume_zscore": 3.0,
+                },
+            },
+        },
+    )
+    details = build_evidence_story(draft)["steps"][0]["details"]
+    assert details[0].endswith("(volatile).")
+    assert all("(anomalous)" not in line for line in details)
+    assert len(details) >= 2
+
+
+def test_watchlist_news_without_forest_can_stay_news_first():
+    draft = _draft(
+        kind="news",
+        origin="watchlist",
+        price_change_pct=None,
+        sentiment_score=80.0,
+        articles=({"title": "Beats", "sentiment_score": 80.0},),
+        sections={
+            "entry": "news",
+            "second_supports": False,
+            "observed_price_change_pct": 0.01,
+        },
+    )
+    story = build_evidence_story(draft)
+    assert story["entry"] == "news"
+    assert story["steps"][0]["id"] == "news_checked"
+    assert story["steps"][1]["id"] == "price_checked"
+    assert "(not volatile)" in story["steps"][1]["details"][0]
 
 
 def test_should_write_live_alert_upgrade_rules():
@@ -349,11 +520,40 @@ def test_should_write_live_alert_upgrade_rules():
 
 
 def test_price_gate_case_matrix():
-    assert _price_gate_case(percent_cleared=True, forest_anomalous=False) == "(percent only)"
-    assert _price_gate_case(percent_cleared=True, forest_anomalous=True) == "(percent + forest)"
-    assert _price_gate_case(percent_cleared=False, forest_anomalous=True) == "(forest only)"
+    assert _price_gate_case(percent_cleared=True, forest_anomalous=False) == "(volatile)"
+    assert _price_gate_case(percent_cleared=True, forest_anomalous=True) == "(volatile + anomalous)"
+    assert _price_gate_case(percent_cleared=False, forest_anomalous=True) == "(anomalous)"
     assert _price_gate_case(percent_cleared=False, forest_anomalous=False) == "(neither gate)"
     assert _price_gate_case(percent_cleared=None, forest_anomalous=False) == "(neither gate)"
+
+
+def test_resolve_price_shape_keys():
+    from app.evidence import resolve_price_shape, PRICE_SHAPE_BOTH, PRICE_SHAPE_VOLATILE, PRICE_SHAPE_ANOMALOUS
+
+    assert resolve_price_shape(percent_cleared=True, forest_anomalous=False) == PRICE_SHAPE_VOLATILE
+    assert resolve_price_shape(percent_cleared=True, forest_anomalous=True) == PRICE_SHAPE_BOTH
+    assert resolve_price_shape(percent_cleared=False, forest_anomalous=True) == PRICE_SHAPE_ANOMALOUS
+    assert resolve_price_shape(percent_cleared=False, forest_anomalous=False) is None
+
+
+def test_resolve_direction_agreement_compares_move_to_sentiment():
+    from app.evidence import (
+        AGREEMENT_AGREES,
+        AGREEMENT_DISAGREES,
+        resolve_direction_agreement,
+    )
+
+    agrees = attach_evidence_story(
+        _draft(kind="news_price", price_change_pct=0.04, sentiment_score=80.0)
+    )
+    assert agrees.sections["agreement"] == AGREEMENT_AGREES
+    assert resolve_direction_agreement(agrees) == AGREEMENT_AGREES
+
+    disagrees = attach_evidence_story(
+        _draft(kind="news_price", price_change_pct=-0.04, sentiment_score=80.0)
+    )
+    assert disagrees.sections["agreement"] == AGREEMENT_DISAGREES
+    assert resolve_direction_agreement(disagrees) == AGREEMENT_DISAGREES
 
 
 def test_forest_feature_case_tags_rank_loudest():

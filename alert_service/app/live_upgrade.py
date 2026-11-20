@@ -64,11 +64,14 @@ async def upgrade_price_draft_with_news(
     # evaluate_symbol defaults origin to watchlist; keep the live tag from the price draft.
     live_origin = draft.origin if draft.origin in ("live", "both") else "live"
     result = replace(kept[0], origin=live_origin)
+    # Live always noticed price/forest first — even when the final kind is news-led.
+    sections = dict(result.sections or {})
+    sections["entry"] = "price"
     forest = (draft.sections or {}).get("forest")
     if isinstance(forest, dict):
-        sections = dict(result.sections or {})
         sections["forest"] = forest
-        result = replace(result, sections=sections)
+    result = replace(result, sections=sections)
+    if isinstance(forest, dict):
         # Price-only: rebuild Summary/Price with forest-aware deterministic wording.
         # News / news_price: keep Together text; enrich only the Price accordion.
         result = enrich_price_draft_with_forest_wording(result)
