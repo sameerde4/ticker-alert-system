@@ -75,7 +75,7 @@ def test_news_alert_without_a_price_move():
     assert drafts[0].price_change_pct is None
     assert drafts[0].latest_close is None
     assert "candidate reason" not in drafts[0].summary
-    assert "Combined sentiment is 17/100" in drafts[0].sections["news"]
+    assert "Climate sentiment (average of all listed) is 17/100" in drafts[0].sections["news"]
     assert "does not support a price alert" in drafts[0].summary
     assert drafts[0].sections["entry"] == "news"
     assert "plunge" in drafts[0].articles[0]["reason"]
@@ -99,7 +99,7 @@ def test_mixed_headlines_become_one_news_alert():
     news = [d for d in drafts if d.kind == "news"]
     assert len(news) == 1
     assert news[0].sentiment_score == 50
-    assert "disagree" in news[0].sections["news"]
+    assert "polarized" in news[0].sections["news"]
     assert [article["url"] for article in news[0].articles] == [
         "https://example.com/surge",
         "https://example.com/plunge",
@@ -116,7 +116,7 @@ def test_price_and_news_become_one_alert():
     assert "candidate reason" in alert.summary
     assert alert.triggered_at == datetime(2026, 11, 17, 16, 0, tzinfo=ZoneInfo("America/New_York"))
     assert "+4.00%" in alert.sections["price"]
-    assert "Combined sentiment is 17/100" in alert.sections["news"]
+    assert "Climate sentiment (average of all listed) is 17/100" in alert.sections["news"]
     assert alert.summary == alert.sections["synthesis"]
 
 
@@ -176,6 +176,98 @@ def test_mild_sentiment_stays_below_the_news_threshold():
     mild = _headline(sentiment_score=60, title="Company hosts an investor day")
     drafts = _evaluate(_bars(100, 100), [mild])
     assert drafts == []
+
+
+def test_price_led_keeps_mild_headlines_as_soft_evidence():
+    """Below both join gates: climate listed, kind stays price-led."""
+    mild_down = _headline(
+        sentiment_score=42,
+        title="Analyst trims target slightly",
+    )
+    mild_down2 = _headline(
+        id="22222222-2222-2222-2222-222222222222",
+        sentiment_score=38,
+        title="Sector peers soft in afternoon trade",
+        published_at=NOW - timedelta(hours=1),
+    )
+    drafts = _evaluate(_bars(96, 100), [mild_down, mild_down2])
+    assert [d.kind for d in drafts] == ["price"]
+    assert drafts[0].sections["news_gate_cleared"] is False
+    assert drafts[0].sections["news_join_path"] is None
+    assert drafts[0].sections["second_supports"] is False
+    assert len(drafts[0].articles) == 2
+    assert drafts[0].sentiment_score == 40.0
+    assert "climate sentiment" in drafts[0].summary.lower()
+    assert "stays price-led" in drafts[0].summary.lower()
+    assert drafts[0].sections["sentiment_split"]["polarized"] is False
+
+
+def test_climate_join_upgrades_price_when_average_clears_without_screamers():
+    """No single headline clears (all inside ±25), but climate clears half-gate → price + news."""
+    # 35 is inside the headline gate (needs ≤25 or ≥75) but climate |35-50|=15 ≥ 12.5.
+    mild = [
+        _headline(id=f"00000000-0000-0000-0000-00000000000{i}", sentiment_score=35, title=f"Soft negative {i}")
+        for i in range(3)
+    ]
+    drafts = _evaluate(_bars(96, 100), mild)
+    assert [d.kind for d in drafts] == ["news_price"]
+    assert drafts[0].sections["news_join_path"] == "climate"
+    assert drafts[0].sections["second_supports"] is True
+    assert drafts[0].sentiment_score == 35.0
+    assert "climate" in drafts[0].summary.lower()
+    assert len(drafts[0].articles) == 3
+
+
+def test_climate_join_opens_news_led_without_price():
+    mild = [
+        _headline(id=f"00000000-0000-0000-0000-00000000001{i}", sentiment_score=35, title=f"Soft negative {i}")
+        for i in range(4)
+    ]
+    drafts = _evaluate(_bars(100, 100), mild)
+    assert [d.kind for d in drafts] == ["news"]
+    assert drafts[0].sections["news_join_path"] == "climate"
+    assert drafts[0].sentiment_score == 35.0
+
+
+def test_polarized_headlines_mark_split_and_keep_mid_climate():
+    """Screamers on both sides: climate ~50, polarized flag, Direction should read mixed."""
+    headlines = [
+        _headline(id="00000000-0000-0000-0000-0000000000a1", sentiment_score=90, title="Bull note"),
+        _headline(id="00000000-0000-0000-0000-0000000000a2", sentiment_score=10, title="Bear note"),
+        _headline(id="00000000-0000-0000-0000-0000000000a3", sentiment_score=85, title="Bull note 2"),
+        _headline(id="00000000-0000-0000-0000-0000000000a4", sentiment_score=15, title="Bear note 2"),
+    ]
+    drafts = _evaluate(_bars(96, 100), headlines)
+    assert drafts[0].kind in ("price", "news_price")
+    assert abs(drafts[0].sentiment_score - 50.0) < 0.01
+    assert drafts[0].sections["sentiment_split"]["polarized"] is True
+    assert drafts[0].sections["sentiment_split"]["positive"] == 2
+    assert drafts[0].sections["sentiment_split"]["negative"] == 2
+    assert "polarized" in drafts[0].sections["news"].lower()
+
+
+def test_sentiment_uses_full_climate_not_only_qualifiers():
+    """One screamer + mild headlines: Sentiment averages all near-term scores."""
+    headlines = [
+        _headline(sentiment_score=10, title="Strong negative"),
+        _headline(
+            id="22222222-2222-2222-2222-222222222222",
+            sentiment_score=50,
+            title="Neutral note",
+            published_at=NOW - timedelta(hours=1),
+        ),
+        _headline(
+            id="33333333-3333-3333-3333-333333333333",
+            sentiment_score=50,
+            title="Another neutral",
+            published_at=NOW - timedelta(minutes=30),
+        ),
+    ]
+    drafts = _evaluate(_bars(96, 100), headlines)
+    assert drafts
+    # Climate = (10+50+50)/3 ≈ 36.67, not the screamer-only 10.
+    assert abs(drafts[0].sentiment_score - (110 / 3)) < 0.01
+    assert len(drafts[0].articles) == 3
 
 
 def test_around_the_clock_symbol_uses_the_last_24_hours():

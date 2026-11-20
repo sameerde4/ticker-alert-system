@@ -237,7 +237,47 @@ def combined_sentiment(scores: list[float]) -> float:
     return sum(scores) / len(scores)
 
 
-def _tone(score: float) -> str:
+def sentiment_split(scores: list[float]) -> dict[str, Any]:
+    """Count leans above/below 50; polarized when both sides appear."""
+    positive = sum(1 for score in scores if score > 50.0)
+    negative = sum(1 for score in scores if score < 50.0)
+    neutral = max(0, len(scores) - positive - negative)
+    return {
+        "positive": positive,
+        "negative": negative,
+        "neutral": neutral,
+        "polarized": positive > 0 and negative > 0,
+    }
+
+
+def climate_join_threshold(sentiment_threshold: float) -> float:
+    """Softer distance-from-50 for climate join.
+
+    A full average of scores that each sit inside the headline gate cannot clear that
+    same gate (the mean stays inside). Climate join therefore uses half the headline
+    distance (floor 5) so a consistent mild lean can still upgrade the alert kind.
+    """
+    try:
+        value = float(sentiment_threshold)
+    except (TypeError, ValueError):
+        value = 25.0
+    return max(5.0, value * 0.5)
+
+
+def climate_clears_gate(score: float | None, sentiment_threshold: float) -> bool:
+    """True when the full near-term average clears the softer climate-join distance."""
+    if score is None:
+        return False
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return False
+    return abs(value - 50.0) >= climate_join_threshold(sentiment_threshold)
+
+
+def _tone(score: float, *, polarized: bool = False) -> str:
+    if polarized:
+        return "polarized"
     if score >= 57.5:
         return "bullish"
     if score <= 42.5:
@@ -247,6 +287,14 @@ def _tone(score: float) -> str:
 
 def _score(value: float) -> str:
     return f"{value:.0f}/100"
+
+
+def _split_phrase(split: dict[str, Any]) -> str:
+    return (
+        f"{int(split.get('positive') or 0)} positive / "
+        f"{int(split.get('negative') or 0)} negative / "
+        f"{int(split.get('neutral') or 0)} neutral"
+    )
 
 
 def article_view(item: dict[str, Any]) -> dict[str, Any]:
@@ -336,41 +384,105 @@ def news_summary(
     *,
     sentiment_threshold: float,
     news_lookback_hours: int,
+    qualifying_count: int | None = None,
+    join_path: str = "headline",
 ) -> str:
+    """News accordion copy. Sentiment is always the full near-term climate average."""
     scores = [float(article["sentiment_score"]) for article in articles]
     combined = combined_sentiment(scores)
+    split = sentiment_split(scores)
     count = len(articles)
     story = "headline" if count == 1 else "headlines"
-    text = (
-        f"{symbol} news alert covers {count} {story} published on this trading day. "
-        f"Each cleared the {sentiment_threshold:.0f}-point distance from 50 on its own. "
-        f"Combined sentiment is {_score(combined)} ({_tone(combined)}), the average of the headline scores."
-    )
-    positive = sum(1 for score in scores if score > 50)
-    negative = sum(1 for score in scores if score < 50)
-    if positive and negative:
+    qualifiers = qualifying_count if qualifying_count is not None else count
+    if join_path == "climate":
+        climate_bar = climate_join_threshold(sentiment_threshold)
+        text = (
+            f"{symbol} news joins via climate: {count} near-term {story} were scored; none cleared "
+            f"the {sentiment_threshold:.0f}-point FinBERT gate on their own, but the full average "
+            f"cleared the softer {climate_bar:.0f}-point climate bar "
+            f"({_score(combined)}, {_tone(combined, polarized=split['polarized'])})."
+        )
+    else:
+        text = (
+            f"{symbol} news alert covers {count} near-term {story} on this trading day. "
+            f"{qualifiers} cleared the {sentiment_threshold:.0f}-point distance from 50 on their own. "
+            f"Climate sentiment (average of all listed) is {_score(combined)} "
+            f"({_tone(combined, polarized=split['polarized'])})."
+        )
+    if split["polarized"]:
         text += (
-            f" The headlines disagree ({positive} positive, {negative} negative), so the average "
-            "can sit near 50 even though every story was strong enough to alert."
+            f" Headlines are polarized ({_split_phrase(split)}), so treat the average carefully — "
+            "Direction reads mixed when both sides show up."
         )
     elif count > 1:
         text += " The headlines agree in direction."
     return text
 
 
-def together_summary(symbol: str, change: float, news_score: float, move_label: str) -> str:
-    """How a headline sits next to the price slice it can explain."""
+def below_gate_news_summary(
+    symbol: str,
+    articles: list[dict[str, Any]],
+    *,
+    sentiment_threshold: float,
+) -> str:
+    """Price-led soft evidence: climate listed, but neither headline nor climate join cleared."""
+    scores = [float(article["sentiment_score"]) for article in articles]
+    combined = combined_sentiment(scores)
+    split = sentiment_split(scores)
+    count = len(articles)
+    story = "headline" if count == 1 else "headlines"
+    climate_bar = climate_join_threshold(sentiment_threshold)
+    text = (
+        f"{symbol}: {count} near-term {story} were scored on this trading day; none cleared the "
+        f"{sentiment_threshold:.0f}-point FinBERT gate on their own, and the climate average "
+        f"({_score(combined)}) stayed inside the softer {climate_bar:.0f}-point climate join bar, "
+        f"so news does not join the alert. Climate sentiment is {_score(combined)} "
+        f"({_tone(combined, polarized=split['polarized'])}) — context only."
+    )
+    if split["polarized"]:
+        text += f" Split: {_split_phrase(split)}."
+    elif split["negative"] and not split["positive"]:
+        text += " The soft lean is negative across the listed headlines."
+    elif split["positive"] and not split["negative"]:
+        text += " The soft lean is positive across the listed headlines."
+    return text
+
+
+def together_summary(
+    symbol: str,
+    change: float,
+    news_score: float,
+    move_label: str,
+    *,
+    join_path: str = "headline",
+    polarized: bool = False,
+) -> str:
+    """How news sits next to the price slice it can explain."""
     price_side = f"the move was {_direction(change)} {_fmt_pct(change)}"
-    news_side = f"news sentiment is {_score(news_score)} ({_tone(news_score)})"
-    if change > 0 and news_score > 57.5 or change < 0 and news_score < 42.5:
+    news_side = (
+        f"climate sentiment is {_score(news_score)} "
+        f"({_tone(news_score, polarized=polarized)})"
+    )
+    if polarized:
+        relation = (
+            "Near-term headlines disagree in sign (polarized), so Direction is mixed even though "
+            "news joined the alert."
+        )
+    elif change > 0 and news_score > 57.5 or change < 0 and news_score < 42.5:
         relation = "The two sides agree in direction."
     elif change > 0 and news_score < 42.5 or change < 0 and news_score > 57.5:
         relation = "The two sides disagree: the price move and the news tone point in opposite directions."
     else:
         relation = "The news side is mixed, so it does not clearly confirm or contradict the price move."
+    if join_path == "climate":
+        return (
+            f"Price and climate news both cleared for {symbol} (soft join: the full FinBERT average "
+            f"cleared the gate though no single headline did). Candidate context for {move_label}. "
+            f"On price, {price_side}. On news, {news_side}. {relation}"
+        )
     return (
         f"Both the price rule and the news rule fired for {symbol}, so this is one news + price alert. "
-        f"The headline is a candidate reason for {move_label}. On price, {price_side}. "
+        f"At least one strong headline is a candidate reason for {move_label}. On price, {price_side}. "
         f"On news, {news_side}. {relation}"
     )
 
@@ -395,12 +507,15 @@ def evaluate_symbol(
     fusion_window_hours: int,
     trailing_24h: dict[str, float] | None = None,
     live_session: dict[str, float] | None = None,
+    seed_price_draft: AlertDraft | None = None,
 ) -> list[AlertDraft]:
     """Build the one alert a symbol should show for this check.
 
     A symbol gets a single row: price, news, or news plus price.
     ``bars`` are daily rows with dt, close, and volume, oldest first.
     ``headlines`` include id, title, source, published_at, and sentiment_score.
+    ``seed_price_draft`` keeps an existing price-led row (backfill) and only re-runs
+    the near-term FinBERT / climate join on top of it.
     """
     ordered = sorted(bars, key=lambda row: row["dt"])
     price_draft: AlertDraft | None = None
@@ -408,7 +523,14 @@ def evaluate_symbol(
     session_day = eastern_date(now)
     latest_close: float | None = None
     prior_close: float | None = None
-    if trailing_24h is not None:
+    if seed_price_draft is not None:
+        price_draft = seed_price_draft
+        if seed_price_draft.bar_date is not None:
+            session_day = seed_price_draft.bar_date
+        change = seed_price_draft.price_change_pct
+        latest_close = seed_price_draft.latest_close
+        prior_close = seed_price_draft.prior_close
+    elif trailing_24h is not None:
         latest_close = float(trailing_24h["price"])
         prior_close = float(trailing_24h["prior_price"])
         change = price_change_pct(latest_close, prior_close)
@@ -516,10 +638,27 @@ def evaluate_symbol(
             )
 
     news_cutoff = _as_utc(now) - timedelta(hours=news_lookback_hours)
-    news_items = _qualifying_headlines(
-        headlines,
-        sentiment_threshold,
-        lambda published: published >= news_cutoff and headline_session(published) == session_day,
+
+    def _in_news_window(published: datetime) -> bool:
+        return published >= news_cutoff and headline_session(published) == session_day
+
+    near_term = _near_term_headlines(headlines, _in_news_window)
+    news_items = _qualifying_headlines(near_term, sentiment_threshold)
+    climate_scores = [float(item["sentiment_score"]) for item in near_term]
+    climate_score = combined_sentiment(climate_scores) if near_term else None
+    climate_split = sentiment_split(climate_scores) if near_term else sentiment_split([])
+    climate_join = (not news_items) and climate_clears_gate(climate_score, sentiment_threshold)
+    all_articles = tuple(article_view(item) for item in near_term)
+    # Live / seeded / trailing paths checked price before news — even if the final
+    # card is news-only because the percent floor did not clear.
+    news_entry = (
+        "price"
+        if (
+            seed_price_draft is not None
+            or live_session is not None
+            or trailing_24h is not None
+        )
+        else "news"
     )
     measured = _headline_windows(
         news_items,
@@ -531,12 +670,14 @@ def evaluate_symbol(
     )
     clearing = [row for row in measured if abs(row["change"]) >= price_move_threshold]
     if clearing:
+        # Join path 1: at least one strong headline lines up with a clearing price slice.
         clearing.sort(key=lambda row: abs(row["change"]), reverse=True)
         chosen_change = clearing[0]["change"]
         chosen_name = clearing[0]["name"]
         matched = [row for row in clearing if row["name"] == chosen_name]
-        articles = tuple(article_view(row["item"]) for row in matched)
-        news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        news_score = float(climate_score) if climate_score is not None else combined_sentiment(
+            [float(row["item"]["sentiment_score"]) for row in matched]
+        )
         span_key = "live" if live_session is not None and chosen_name == "session" else chosen_name
         move_label = SLICE_LABEL.get(span_key, SLICE_LABEL.get(chosen_name, "the headline's price slice"))
         end_px = matched[0]["end"] if chosen_name != "close" else float(matched[0]["end"])
@@ -568,18 +709,28 @@ def evaluate_symbol(
                 move_label=move_label,
             )
             span_caption = price_span_caption(span_key)
+        articles = all_articles or tuple(article_view(row["item"]) for row in matched)
         news_text = news_summary(
             symbol,
             list(articles),
             sentiment_threshold=sentiment_threshold,
             news_lookback_hours=news_lookback_hours,
+            qualifying_count=len(news_items),
+            join_path="headline",
         )
-        synthesis = together_summary(symbol, shown_change, news_score, move_label)
+        synthesis = together_summary(
+            symbol,
+            shown_change,
+            news_score,
+            move_label,
+            join_path="headline",
+            polarized=bool(climate_split.get("polarized")),
+        )
         left_out = len(news_items) - len(matched)
         if left_out:
             synthesis += (
-                f" {left_out} other headline(s) from a different part of the day were left off, "
-                "because they line up with a different price."
+                f" {left_out} other strong headline(s) from a different part of the day were left "
+                "off the slice match, because they line up with a different price."
             )
         known_at = max(row["known_at"] for row in matched)
         entry = "price" if price_draft is not None else "news"
@@ -589,6 +740,9 @@ def evaluate_symbol(
             "synthesis": synthesis,
             "entry": entry,
             "second_supports": True,
+            "news_gate_cleared": True,
+            "news_join_path": "headline",
+            "sentiment_split": climate_split,
         }
         if span_caption:
             sections["price_span"] = span_caption
@@ -614,23 +768,75 @@ def evaluate_symbol(
             )
         ]
 
+    if price_draft is not None and climate_join:
+        # Join path 2: no single screamer, but full climate average clears the gate.
+        news_score = float(climate_score)
+        move_label = (
+            (price_draft.sections or {}).get("price_span")
+            or SLICE_LABEL.get("live" if live_session is not None else "close", "the session move")
+        )
+        news_text = news_summary(
+            symbol,
+            list(all_articles),
+            sentiment_threshold=sentiment_threshold,
+            news_lookback_hours=news_lookback_hours,
+            qualifying_count=0,
+            join_path="climate",
+        )
+        shown_change = float(price_draft.price_change_pct or 0.0)
+        synthesis = together_summary(
+            symbol,
+            shown_change,
+            news_score,
+            str(move_label),
+            join_path="climate",
+            polarized=bool(climate_split.get("polarized")),
+        )
+        price_sections = {
+            "price": price_draft.summary,
+            "news": news_text,
+            "synthesis": synthesis,
+            "entry": "price",
+            "second_supports": True,
+            "news_gate_cleared": True,
+            "news_join_path": "climate",
+            "sentiment_split": climate_split,
+        }
+        if (price_draft.sections or {}).get("price_span"):
+            price_sections["price_span"] = price_draft.sections["price_span"]
+        return [
+            replace(
+                price_draft,
+                kind="news_price",
+                summary=synthesis,
+                articles=all_articles,
+                sentiment_score=news_score,
+                sections=price_sections,
+            )
+        ]
+
     if price_draft is not None and news_items:
-        articles = tuple(article_view(item) for item in news_items)
-        news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        news_score = float(climate_score) if climate_score is not None else combined_sentiment(
+            [float(item["sentiment_score"]) for item in news_items]
+        )
+        articles = all_articles or tuple(article_view(item) for item in news_items)
         news_text = (
             news_summary(
                 symbol,
                 list(articles),
                 sentiment_threshold=sentiment_threshold,
                 news_lookback_hours=news_lookback_hours,
+                qualifying_count=len(news_items),
+                join_path="headline",
             )
-            + " None of these headlines lined up with the price slice that moved, so news does not "
-            "support the price alert as a candidate reason."
+            + " Strong headlines cleared FinBERT, but none lined up with the price slice that "
+            "moved, so news does not join as a candidate reason."
         )
+        tone = _tone(news_score, polarized=bool(climate_split.get("polarized")))
         synthesis = (
             f"Price led for {symbol}: the move cleared the rule, near-term news was checked, "
-            f"and the headlines did not line up with that slice. Combined news sentiment is "
-            f"{_score(news_score)} ({_tone(news_score)})."
+            f"and the strong headlines did not line up with that slice. Climate sentiment is "
+            f"{_score(news_score)} ({tone})."
         )
         price_sections = {
             "price": price_draft.summary,
@@ -638,6 +844,9 @@ def evaluate_symbol(
             "synthesis": synthesis,
             "entry": "price",
             "second_supports": False,
+            "news_gate_cleared": True,
+            "news_join_path": None,
+            "sentiment_split": climate_split,
         }
         if (price_draft.sections or {}).get("price_span"):
             price_sections["price_span"] = price_draft.sections["price_span"]
@@ -650,14 +859,20 @@ def evaluate_symbol(
                 sections=price_sections,
             )
         ]
-    if price_draft is not None:
-        news_text = (
-            f"No near-term headlines for {symbol} cleared the {sentiment_threshold:.0f}-point "
-            "FinBERT gate on this trading day, so there is no news evidence beside the price move."
+    if price_draft is not None and near_term:
+        # Climate listed but neither per-headline nor climate-average join cleared.
+        news_score = float(climate_score) if climate_score is not None else 50.0
+        news_text = below_gate_news_summary(
+            symbol,
+            list(all_articles),
+            sentiment_threshold=sentiment_threshold,
         )
+        tone = _tone(news_score, polarized=bool(climate_split.get("polarized")))
         synthesis = (
-            f"Price led for {symbol}: the move cleared the rule, and news was checked with no "
-            "qualifying headlines."
+            f"Price led for {symbol}: the move cleared the rule. Near-term headlines were scored; "
+            f"neither a single headline nor the climate average cleared the "
+            f"{sentiment_threshold:.0f}-point FinBERT gate, so the day stays price-led. "
+            f"Climate sentiment is {_score(news_score)} ({tone})."
         )
         price_sections = {
             "price": price_draft.summary,
@@ -665,6 +880,38 @@ def evaluate_symbol(
             "synthesis": synthesis,
             "entry": "price",
             "second_supports": False,
+            "news_gate_cleared": False,
+            "news_join_path": None,
+            "sentiment_split": climate_split,
+        }
+        if (price_draft.sections or {}).get("price_span"):
+            price_sections["price_span"] = price_draft.sections["price_span"]
+        return [
+            replace(
+                price_draft,
+                summary=synthesis,
+                articles=all_articles,
+                sentiment_score=news_score,
+                sections=price_sections,
+            )
+        ]
+    if price_draft is not None:
+        news_text = (
+            f"No near-term headlines for {symbol} were found on this trading day, so there is no "
+            "news evidence beside the price move."
+        )
+        synthesis = (
+            f"Price led for {symbol}: the move cleared the rule, and news was checked with no "
+            "near-term headlines."
+        )
+        price_sections = {
+            "price": price_draft.summary,
+            "news": news_text,
+            "synthesis": synthesis,
+            "entry": "price",
+            "second_supports": False,
+            "news_gate_cleared": False,
+            "news_join_path": None,
         }
         if (price_draft.sections or {}).get("price_span"):
             price_sections["price_span"] = price_draft.sections["price_span"]
@@ -676,13 +923,18 @@ def evaluate_symbol(
             )
         ]
     if news_items:
-        articles = tuple(article_view(item) for item in news_items)
-        news_score = combined_sentiment([article["sentiment_score"] for article in articles])
+        # News-led via per-headline gate; sentiment still the full climate average.
+        articles = all_articles or tuple(article_view(item) for item in news_items)
+        news_score = float(climate_score) if climate_score is not None else combined_sentiment(
+            [float(item["sentiment_score"]) for item in news_items]
+        )
         news_text = news_summary(
             symbol,
             list(articles),
             sentiment_threshold=sentiment_threshold,
             news_lookback_hours=news_lookback_hours,
+            qualifying_count=len(news_items),
+            join_path="headline",
         )
         price_text, observed_change = _price_side_when_news_only(
             symbol=symbol,
@@ -694,8 +946,8 @@ def evaluate_symbol(
             measured=measured,
         )
         synthesis = (
-            f"News led for {symbol}: FinBERT cleared the gate, price was checked, and the "
-            f"session move does not support a price alert"
+            f"News led for {symbol}: at least one headline cleared FinBERT, price was checked, "
+            f"and the session move does not support a price alert"
             + (
                 f" (observed {observed_change * 100:+.2f}%, under the "
                 f"{price_move_threshold * 100:.1f}% rule)."
@@ -723,11 +975,76 @@ def evaluate_symbol(
                     "price": price_text,
                     "news": news_text,
                     "synthesis": synthesis,
-                    "entry": "news",
+                    "entry": news_entry,
                     "second_supports": False,
+                    "news_gate_cleared": True,
+                    "news_join_path": "headline",
+                    "sentiment_split": climate_split,
                     "observed_price_change_pct": observed_change,
                 },
                 triggered_at=earliest_published(news_items),
+                price_move_threshold=price_move_threshold,
+                sentiment_threshold=sentiment_threshold,
+            )
+        ]
+    if climate_join:
+        # News-led via climate average alone (no single screamer).
+        news_score = float(climate_score)
+        news_text = news_summary(
+            symbol,
+            list(all_articles),
+            sentiment_threshold=sentiment_threshold,
+            news_lookback_hours=news_lookback_hours,
+            qualifying_count=0,
+            join_path="climate",
+        )
+        price_text, observed_change = _price_side_when_news_only(
+            symbol=symbol,
+            ordered=ordered,
+            session_day=session_day,
+            live_session=live_session,
+            trailing_24h=trailing_24h,
+            price_move_threshold=price_move_threshold,
+            measured=[],
+        )
+        synthesis = (
+            f"News led for {symbol} via climate: no single headline cleared FinBERT, but the "
+            f"full average did ({_score(news_score)}). Price was checked and does not support a "
+            "price alert"
+            + (
+                f" (observed {observed_change * 100:+.2f}%, under the "
+                f"{price_move_threshold * 100:.1f}% rule)."
+                if observed_change is not None
+                else "."
+            )
+        )
+        return [
+            AlertDraft(
+                kind="news",
+                symbol=symbol,
+                bar_date=session_day,
+                headline_id=None,
+                price_change_pct=None,
+                latest_close=None,
+                prior_close=None,
+                volume_ratio=None,
+                volume_spike=False,
+                sentiment_score=news_score,
+                headline_title=None,
+                summary=synthesis,
+                articles=all_articles,
+                sections={
+                    "price": price_text,
+                    "news": news_text,
+                    "synthesis": synthesis,
+                    "entry": news_entry,
+                    "second_supports": False,
+                    "news_gate_cleared": True,
+                    "news_join_path": "climate",
+                    "sentiment_split": climate_split,
+                    "observed_price_change_pct": observed_change,
+                },
+                triggered_at=earliest_published(near_term),
                 price_move_threshold=price_move_threshold,
                 sentiment_threshold=sentiment_threshold,
             )
@@ -888,14 +1205,23 @@ def _session_slices(
     }
 
 
-def _qualifying_headlines(headlines, sentiment_threshold: float, in_window) -> list[dict[str, Any]]:
+def _near_term_headlines(headlines, in_window) -> list[dict[str, Any]]:
+    """Same-day / lookback headlines, regardless of FinBERT strength."""
+    kept = []
+    for item in headlines:
+        if not in_window(_as_utc(item["published_at"])):
+            continue
+        kept.append(item)
+    kept.sort(key=lambda item: _as_utc(item["published_at"]), reverse=True)
+    return kept
+
+
+def _qualifying_headlines(headlines, sentiment_threshold: float) -> list[dict[str, Any]]:
+    """Headlines already in-window that clear the FinBERT distance-from-50 gate."""
     kept = []
     for item in headlines:
         score = float(item["sentiment_score"])
         if abs(score - 50.0) < sentiment_threshold:
             continue
-        if not in_window(_as_utc(item["published_at"])):
-            continue
         kept.append(item)
-    kept.sort(key=lambda item: _as_utc(item["published_at"]), reverse=True)
     return kept
