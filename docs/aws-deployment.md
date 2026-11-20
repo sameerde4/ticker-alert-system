@@ -19,9 +19,9 @@ Local finished-system docs remain the product truth: [architecture.md](architect
 | 2 | Kafka | **On the same EC2** (Docker Kafka — same shape as local). Not MSK. |
 | 3 | Account / region / names | **Your account** · **`us-east-1`** · prefix **`market-radar-`** |
 | 4 | Batch / Spark | **Spark-role jobs on the EC2** (same `batch_ingest` / `batch_train` code) reading/writing **S3**. No EMR. |
-| 5 | Secrets / auth | **RDS URL/password** + **Alpaca** in **Secrets Manager** (you paste values in console — do not put keys in chat). **Perplexity** entered in the UI after stand-up. **No app login.** |
+| 5 | Secrets / auth | **Alpaca** in Secrets Manager (`market-radar/alpaca`). **Postgres on the EC2** (Docker) by default to save credits — optional RDS via `enable_rds=true`. **Perplexity** entered in the UI after stand-up. **No app login.** |
 
-**Cost posture:** Prefer free-tier / credit-friendly sizes; tear down after the talk. Credits are nearly exhausted on estimate (~$1–2) until the EC2 Explore task adds **$20**.
+**Cost posture:** Prefer free-tier / credit-friendly sizes; tear down after the talk. Explore EC2 **$20** unlocked; avoid RDS unless needed (it would burn most of that credit).
 
 ---
 
@@ -67,7 +67,7 @@ Deploy enough of Radar on AWS that we can open **one dashboard URL** (EC2 public
 | Local piece | Job | AWS / EC2 stand-in |
 |---|---|---|
 | `data/lake/` Parquet | Batch price lake | **S3** `market-radar-lake` (raw / curated / registry) |
-| Local Postgres | Alerts, watchlist, settings, feature rows | **RDS Postgres** (small, same VPC / SG as EC2) |
+| Local Postgres | Alerts, watchlist, settings, feature rows | **Postgres container on EC2** (default); optional small RDS |
 | Docker Kafka | Minute bar bus | **Kafka container on EC2** |
 | `stream_ingest` | Alpaca → Kafka | Container on EC2 (Alpaca from Secrets Manager) |
 | `python -m app.live` | Flink-**role** live scorer | Container on EC2 |
@@ -131,36 +131,17 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] Branch + planning doc
 - [x] Lock compute (**EC2**), Kafka (on-box Docker), account/region/prefix, Spark-role on EC2→S3, secrets approach
 - [x] Billing API access for `cursor-deploy` (credits readable)
+- [x] Explore EC2 activity completed (**$20** credit); keep instance `market-radar` (`i-0e437ba8984153370`); explore clone terminated
+- [x] Secrets Manager `market-radar/alpaca` created
+- [x] Terraform scaffold under `infra/` (S3 lake, IAM instance profile, UI port SG rule; RDS optional/off)
 
 ### Next (implementation)
 
-1. **Explore EC2 credit (you, ~10 min)**  
-   - In the console **Explore AWS** widget, run **Launch an instance using EC2** so the **$20** posts.  
-   - Prefer that we **reuse that instance** (tag `market-radar`) instead of launching a second one via Terraform later — or terminate the Explore instance and let Terraform create the real `market-radar` host if the Explore AMI/size is wrong.
-
-2. **Secrets Manager (you)**  
-   - Create `market-radar/alpaca` (key + secret).  
-   - RDS secret can be created by Terraform or by hand after RDS exists.  
-   - Do **not** paste secrets into chat.
-
-3. **Terraform scaffold (`infra/`)**  
-   - S3 lake bucket `market-radar-lake`  
-   - Security groups (SSH from your IP optional; HTTP/API port for demo; Postgres only from EC2 SG)  
-   - Small RDS Postgres  
-   - EC2 (or adopt Explore instance) + IAM instance profile (S3 + Secrets Manager read)  
-   - Outputs: public DNS, bucket, RDS endpoint  
-
-4. **App packaging**  
-   - Dockerfiles / compose overlay for cloud env (Kafka + API + live + stream_ingest)  
-   - Point lake root at S3 (or sync/mount strategy documented if code still expects disk — implement the smallest change that works)  
-   - Wire DB URL + Alpaca from instance env / Secrets Manager  
-
-5. **Bring-up + smoke**  
-   - Migrations, one lake land/train, live heartbeat, Scan today, History Origin  
-   - Perplexity key in UI when you want that path  
-
-6. **Presentation**  
-   - Freeze AWS diagram + demo script + teardown (`terraform destroy` / stop EC2)
+1. **`terraform apply`** in `infra/` (S3 + IAM attach to EC2 + open port 8010)
+2. **App packaging** — Dockerfiles / compose on EC2 (Kafka + Postgres + API + live + stream_ingest)
+3. **Wire config** — lake → S3, Alpaca from Secrets Manager, DB on-box
+4. **Smoke** — migrations, land/train, Live, Scan today, History
+5. **Presentation + teardown**
 
 ---
 

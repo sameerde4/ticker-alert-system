@@ -14,3 +14,10 @@ data/lake/registry/
 
 # Personal / local-only docs (not for teammates)
 docs/architecture-working-notes.md
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/tfplan
+infra/.terraform.lock.hcl
