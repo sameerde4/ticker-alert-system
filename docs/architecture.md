@@ -11,7 +11,7 @@ Both write the same Postgres `alerts` table. History shows **Origin**, **Company
 
 The class design (CISC 525) is a **local lambda architecture** in the classic sense — a **batch layer** (historical lake + train) plus a **speed/stream layer** (Kafka + live scorer) that serve the same alerts table. That is *not* AWS Lambda. On this machine: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. How the original proposal slides map onto this stack — including what we kept, changed, or dropped and why — is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
 
-**Deploy target:** one developer machine (Docker Desktop + Postgres + local lake). Cloud names from the original deck (S3, Aurora, managed Flink) map to local stand-ins below. This project does **not** require an AWS production deploy for the class demo.
+**Deploy target:** one developer machine (Docker Desktop + Postgres + local lake) is the finished product path. Cloud names from the original deck (S3, Aurora, managed Flink) map to local stand-ins below. An optional class AWS demo on branch `aws-deployment` runs the same app on one EC2 with Docker Compose, durable lake on S3, CloudWatch logs, and an Elastic IP — see [aws-deployment.md](aws-deployment.md). That is still a demo host, not a multi-AZ production deploy.
 
 **How to read the diagrams below.** They are one finished system at increasing grain — not two generations of the design. Keep all of them for the presentation. Flowcharts are laid out **left → right** in numbered stage columns (slide-friendly landscape); sequence diagrams stay top → bottom in time order. Each box names the **job in plain language**, then the **technical role** in parentheses (data lake, Kafka topic, Flink-role processor, Postgres table, and so on).
 
@@ -42,7 +42,7 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Capability |
 |---|
 | Watchlist tab: S&P 500 focus set (search + chips), Scan today, Watchlist results separate from Home Live alerts |
-| Home tab: **Live alerts** feed with All / Watchlist / Others scope switch; Clear alerts; desktop notification controls |
+| Home tab: **Live alerts** feed with All / Watchlist / Others scope switch; Clear alerts (hides until `updated_at` / `created_at` moves again); desktop notification controls |
 | History tab: full list with Origin, Company, Type, Price change, Sentiment score; click row for details; sortable + draggable columns |
 | Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares |
@@ -51,7 +51,7 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic); Summary citations render as clickable headline titles (bare URLs linked from the alert’s article list) |
 | Expanded alert metric tiles: Price change shows `$from → $to` plus a short span caption (`open → last`, `prior close → close`, …); Sentiment score shows FinBERT class counts (lead bucket, then the other two) |
 | Saved thresholds; admin rebuild of recent sessions for the watchlist |
-| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500; REST-only demos backfill from the 9:30 ET open so open→last uses the real session open) |
+| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest; REST-only demos backfill **cash-open + latest** bar per symbol from 9:30 ET so open→last uses the real session open without flooding the live consumer) |
 | Live Kafka consumer over the **full S&P 500** stream (not limited to Watchlist chips): open→last price alerts (`python -m app.live`); Home clickable Live alerts arm; “on” when a fresh consumer heartbeat is present |
 | Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone (**training lake**, not the Watchlist UI) |
 | Auto first-boot lake land + train when `data/lake` is empty; header “Loading historical prices” cue + % progress while running, then hides when the lake is ready (`ok` / `has_raw_prices`) |
@@ -290,11 +290,11 @@ Home asks for notification permission (Enable desktop notifications). When Scan 
 
 ## Live price stream
 
-Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`.
+Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). A later live **price** draft for the same symbol-day may re-enter that upgrade path so open→last moves can refresh an earlier live news / news_price row; a Watchlist-origin price draft still must not clobber a news kind. News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`.
 
 Home’s Live alerts control is a clickable **arm switch**: `POST /v1/live/armed` sets `app_settings.live_alerts_armed`. `/v1/live/status` returns `armed` (user switch) and `enabled` (fresh `live_consumer_heartbeat_at`). The UI shows **off** / **starting…** / **on** from that pair. While armed, the consumer heartbeats on a **background task** so FinBERT / Perplexity work on a bar cannot starve the cue into a stuck “starting…” state. Disarm clears the heartbeat and idles both the consumer and the producer (producer polls the same status). Demo hosts may set `TICKER_ALERT_LIVE_DISARM_ON_BOOT=true` so a redeploy starts idle until you click Live alerts on.
 
-On Basic, WebSocket may be capped or set to REST-only (`ALPACA_WS_SYMBOL_LIMIT=0`). Latest-only REST polls start mid-session with a minute bar’s open ≈ last price, so open→last never clears the percent rule. The REST poller therefore **backfills today’s RTH bars from the 9:30 ET cash open** once per producer session (still outside the free-plan ~15-minute SIP wall), then continues with latest-only polls. The live consumer resets its session book each arm so that backfill can stamp the real open. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
+On Basic, WebSocket may be capped or set to REST-only (`ALPACA_WS_SYMBOL_LIMIT=0`). Latest-only REST polls start mid-session with a minute bar’s open ≈ last price, so open→last never clears the percent rule. The REST poller therefore **backfills the cash-open bar and the latest bar per symbol** from the 9:30 ET open once per producer session (still outside the free-plan ~15-minute SIP wall), then continues with latest-only polls. Publishing every minute of the day would flood FinBERT/news upgrades. The live consumer resets its session book each arm, applies every Kafka bar to the book, and runs the alert/news path once per symbol per batch (latest print). Home **Clear alerts** filters on `updated_at` (falling back to `created_at`) so a same-day live refresh can reappear after Clear. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
 
 ```mermaid
 flowchart LR
@@ -343,7 +343,7 @@ sequenceDiagram
     participant UI as Home (dashboard UI)
 
     UI->>PG: Arm Live alerts
-    Producer->>Alpaca: Session backfill from 9:30 ET (REST-only)
+    Producer->>Alpaca: Session backfill open+last from 9:30 ET (REST-only)
     Alpaca->>Producer: Minute bars delayed_sip
     Producer->>Kafka: Publish prices.raw.bars
     Live->>Kafka: Consume bar
@@ -409,7 +409,7 @@ flowchart LR
 
 ## High-level lambda architecture
 
-This is the classic **lambda architecture pattern** (batch layer + speed/stream layer → serving), **not** AWS Lambda. Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. Everything stays on the local machine. No historical news lake. No AWS requirement.
+This is the classic **lambda architecture pattern** (batch layer + speed/stream layer → serving), **not** AWS Lambda. Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. The finished product path stays on the local machine. No historical news lake. An optional class AWS demo host is documented separately; a multi-AZ production deploy is not required.
 
 ```mermaid
 flowchart LR

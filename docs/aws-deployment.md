@@ -52,7 +52,7 @@ Open **one dashboard URL** and walk Live, Watchlist Scan today, History, lake re
 |---|---|---|
 | Runtime | Laptop: Docker Kafka, local Postgres, `data/lake/` on disk | **EC2** + Docker Compose; **Postgres container**; working lake on Docker volume; **S3** `market-radar-lake` durable |
 | Docs | Local architecture is the finished system | This plan + AWS diagram; local docs stay product reference |
-| IaC | `docker-compose.yml` for Kafka | `infra/` Terraform (S3, IAM, SG; RDS optional/off) |
+| IaC | `docker-compose.yml` for Kafka | `infra/` Terraform (S3, IAM, SG, CloudWatch, Elastic IP; RDS optional/off) |
 | Packaging | `dev.sh` / venv | `deploy/` Dockerfiles + compose + `sync-and-deploy.sh` |
 | Config | Local env / Settings UI | Alpaca from Secrets Manager; Settings UI for thresholds + Perplexity |
 | Serving URL | `localhost` | EC2 public IPv4 `:8010/ui` |
@@ -103,7 +103,8 @@ flowchart LR
 
         S3[("Durable price lake + registry<br/>(S3 market-radar-lake)")]
         SM["Secrets Manager<br/>(Alpaca)"]
-        URL["Public demo URL<br/>(EC2 :8010/ui)"]
+        CW["CloudWatch Logs<br/>(/market-radar/demo)"]
+        EIP["Elastic IP<br/>(stable :8010/ui)"]
     end
 
     ALP --> INGEST --> KAFKA --> LIVE
@@ -118,7 +119,10 @@ flowchart LR
     LIVE --> YF
     API --> YF
     API --> PPLX
-    API --> URL
+    API --> EIP
+    API -.-> CW
+    LIVE -.-> CW
+    INGEST -.-> CW
 ```
 
 Same product paths as local: Live → Home Live alerts; Watchlist Scan today → Watchlist results; lake trains Isolation Forest; Perplexity only after news / news+price.
@@ -135,10 +139,11 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | Lake path | Compose mounts volume at `/data/lake`; API image also exposes `/app/data/lake` → `/data/lake` so land, status, and forest registry agree |
 | S3 lake | `TICKER_ALERT_LAKE_S3_BUCKET=market-radar-lake`. After successful land/train the API syncs `raw/` + `curated/` + `registry/` to S3. Empty local volume hydrates from S3 on boot; empty S3 gets a one-time push from the volume. |
 | Live arm | Home cue toggles `live_alerts_armed`. Boot starts **disarmed** on this host. Producer idles until armed. |
-| REST bars | Demo uses `ALPACA_WS_SYMBOL_LIMIT=0` (REST-only) so we do not fight another app for the Basic WebSocket slot. On arm, producer **backfills from 9:30 ET**, then polls latest delayed bars. |
+| REST bars | Demo uses `ALPACA_WS_SYMBOL_LIMIT=0` (REST-only) so we do not fight another app for the Basic WebSocket slot. On arm, producer **backfills cash-open + latest** per symbol from 9:30 ET (not the full minute stream), then polls latest delayed bars. Live coalesces alert writes per Kafka batch. |
+| Home Clear | Hides Live cards until `updated_at` (or `created_at`) is newer than the clear mark — same-day live refreshes bump `updated_at` and show again. |
+| Chrome notifications | Plain `http://` Elastic IP is an insecure origin. For local demo machines only: `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → enable → add `http://98.94.232.101:8010` → relaunch → Allow notifications on Home. |
 | Heartbeat cue | `armed` + fresh heartbeat → **Live alerts on**. Heartbeat runs on a background task so news scoring cannot flip the cue back to **starting…**. |
 | Lake header | Shows “Loading historical prices” only while a land/refresh is running (or before raw prices exist); hides when `ok` / `has_raw_prices`. `/ui` is served `Cache-Control: no-store`. |
-| Notifications | Chrome often blocks Notification permission on **http://** public IPs; HTTPS or localhost is required for OS popups. Alerts still appear in the Home feed. |
 | CloudWatch Logs | Docker Compose uses the **awslogs** driver → log group **`/market-radar/demo`** (7-day retention). Named streams: `api`, `live`, `producer`, `kafka`, `postgres`, `migrate`. |
 | Elastic IP | Allocated + associated via Terraform (`infra/eip.tf`). Stable public IPv4 for the demo URL (not a hostname). **Free while attached to a running instance.** When you stop/tear down the EC2, **release the EIP** (`terraform destroy` on this stack, or disassociate + `aws ec2 release-address`) — an idle/unattached EIP is billed hourly. |
 
@@ -158,10 +163,11 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] EC2 resized to **t3.medium** / **30 GB** disk for Docker + FinBERT
 - [x] `deploy/` Docker Compose stack on EC2 (Kafka, Postgres, API/UI, live, producer)
 - [x] Alpaca from Secrets Manager; one-shot migrations; UI + live arm/heartbeat smoke-tested
-- [x] Lake path + header hide; REST session backfill; background live heartbeat
+- [x] Lake path + header hide; REST open+last session backfill; background live heartbeat
+- [x] Home Clear uses `updated_at`; live price drafts may re-enter headline upgrade
 - [x] Durable lake sync to S3 `market-radar-lake` (hydrate on empty boot)
 - [x] CloudWatch log group `/market-radar/demo` + awslogs on Compose
-- [x] Elastic IP associated for a stable demo URL
+- [x] Elastic IP associated for a stable demo URL (`http://98.94.232.101:8010/ui`)
 
 ### Still optional / later
 
@@ -202,7 +208,8 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | 2026-11-20 | `us-east-1`, prefix `market-radar-` | Account `038084590655` |
 | 2026-11-20 | Spark-role jobs on EC2; lake volume first, S3 bucket ready | No EMR |
 | 2026-11-20 | Secrets Manager for Alpaca; Postgres on EC2; Perplexity via UI; no login | |
-| 2026-11-20 | Live arm + REST-only + session backfill + migrator once | Demo stability on shared Alpaca Basic |
+| 2026-11-20 | Live arm + REST-only + open+last backfill + migrator once | Demo stability on shared Alpaca Basic; avoid FinBERT flood |
+| 2026-11-20 | Home Clear on `updated_at`; live upgrade re-enter | Same-day live refreshes stay visible after Clear |
 | 2026-11-20 | Durable lake on S3 `market-radar-lake` | Working copy on EC2 volume; sync after land/train |
 | 2026-11-20 | CloudWatch `/market-radar/demo` | awslogs from Compose; 7-day retention |
 | 2026-11-20 | Elastic IP for demo URL | Release on teardown so idle EIP is not billed |
