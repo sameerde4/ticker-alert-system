@@ -335,12 +335,17 @@ def test_news_led_price_checked_tags_forest_only_when_under_but_anomalous():
 
 def test_should_write_live_alert_upgrade_rules():
     price = _draft(kind="price")
+    live_price = _draft(kind="price", origin="live")
     news_price = _draft(kind="news_price", sentiment_score=20.0)
     assert should_write_live_alert(None, price)
     assert should_write_live_alert({"kind": "price"}, news_price)
     assert should_write_live_alert({"kind": "price"}, price)
+    # Watchlist-origin price must not clobber an existing news row.
     assert not should_write_live_alert({"kind": "news"}, price)
     assert should_write_live_alert({"kind": "news_price"}, news_price)
+    # Live price drafts must re-enter upgrade so session moves can refresh news_price.
+    assert should_write_live_alert({"kind": "news_price", "origin": "live"}, live_price)
+    assert should_write_live_alert({"kind": "news", "origin": "live"}, live_price)
 
 
 def test_price_gate_case_matrix():

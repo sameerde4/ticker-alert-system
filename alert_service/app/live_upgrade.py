@@ -91,15 +91,21 @@ async def upgrade_price_draft_with_news(
 def should_write_live_alert(existing: dict[str, Any] | None, draft: AlertDraft) -> bool:
     """Live may insert/refresh price and may upgrade price → news / news_price.
 
-    Never overwrite a news or news_price row that already exists from Scan today with a
-    weaker price-only draft. Upgrading price → news_price is allowed.
+    Never overwrite a Watchlist news / news_price row with a bare price-only draft.
+    Live price drafts must still pass this gate so the headline-upgrade path can
+    refresh an earlier live news_price when open→last keeps moving.
     """
     if existing is None:
         return True
     existing_kind = existing.get("kind")
     if existing_kind == "price":
         return True
-    if existing_kind in ("news", "news_price") and draft.kind in ("news", "news_price"):
-        # Refresh an earlier live upgrade with newer prints / headlines.
-        return True
+    if existing_kind in ("news", "news_price"):
+        if draft.kind in ("news", "news_price"):
+            # Refresh an earlier live upgrade with newer prints / headlines.
+            return True
+        # Re-enter the upgrade path for the same live session (percent/forest still trips).
+        if draft.kind == "price" and draft.origin in ("live", "both"):
+            return True
+        return False
     return False
