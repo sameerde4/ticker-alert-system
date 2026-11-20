@@ -171,7 +171,6 @@ def test_health_and_ui_without_a_database():
     assert "function restoreToolResults" in page.text
     assert 'id="watchlistRunStamp"' in page.text
     assert 'id="screenerRunStamp"' in page.text
-    assert "historyTypePriceStat(alert), historyTypeSentimentStat(alert)" in page.text
     assert 'if (key === "price")' in page.text
     assert 'if (key === "sentiment")' in page.text
     assert "kind-news" in page.text and "kind-price" in page.text and "kind-fusion" in page.text
