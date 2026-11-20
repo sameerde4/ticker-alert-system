@@ -34,7 +34,7 @@ This repository runs:
 - Batch land of about one year of S&P daily prices into `data/lake/raw/` (automatic on first boot when the lake is empty; Settings **Land** / `batch_ingest/` as overrides) for **model training**
 - Incremental **Refresh lake + retrain** (automatic on a daily schedule; Settings / CLI as overrides) — per-symbol resume from the latest lake date (lookback capped ~14 calendar days); skips Yahoo + retrain when already current through the last completed session; header progress % while running
 - Curated session features + Isolation Forest registry (`batch_train/`) — used by **both** Live and Watchlist Scan today
-- Alert History with Origin, Company, Type, Price change, and Sentiment score; Mac/Chrome desktop notifications and a tab badge when new alerts arrive
+- Alert History with Origin, Company, Type, Price change, and Sentiment score (20 rows per page with First / Previous / Next / Last); Mac/Chrome desktop notifications and a tab badge when new alerts arrive
 
 This is the finished local system for the class demo. Near-term headlines are fetched and FinBERT-scored **after** a price or forest gate (or on Watchlist Scan today) — there is no separate Kafka news topic. **Historical headlines are not landed and are not training features.** There is no shared package with Vajra Astra Capital.
 
@@ -46,12 +46,14 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Home tab: **Live alerts** feed with All / Watchlist / Others scope switch; Clear alerts (hides until `updated_at` / `created_at` moves again); desktop notification controls |
 | Settings → **Live WebSocket**: up to 30 S&P names for Alpaca push (default mega-cap ten); rest of index via REST |
 | Settings → **Alert history** (Clear alerts controls): clear under a % floor, clear all, clear Watchlist only, clear Live only, or **Rebuild Watchlist history** (Watchlist wipe + rerun; Live stays) |
-| History tab: full list with Origin, Company, Alert type, Price shape, Direction, Price change, Sentiment score; click row for details; sortable + draggable columns; **When** = `updated_at` |
+| History tab: paged list (20 rows; First / Previous / Next / Last) with Origin, Company, Alert type, Price shape, Direction, Price change, Sentiment score; click row for details; sortable + draggable columns; **When** = `updated_at` |
 | Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares |
 | Price alert: open→last while the market is open; close versus prior close after the close. Volume spike note on the completed close |
 | News alert and news + price when the headline’s price slice clears the same percent |
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic); Summary citations render as clickable headline titles (bare URLs linked from the alert’s article list) |
+| Collapsed Live / Watchlist cards: one-line head — symbol, company, story pills (type / shape / direction), **When**; Price change and Sentiment score tiles only when the card is open (same tiles in the details popup) |
+| Details popup: same one-line identity + pills; **When** and × share the frozen header above an end-to-end rule; only the body scrolls |
 | Expanded alert metric tiles: Price change shows `$from → $to` plus a short span caption (`open → last`, `prior close → close`, …); Sentiment score shows FinBERT class counts (lead bucket, then the other two) |
 | Saved thresholds; admin rebuild of recent sessions for the watchlist |
 | Minute bars on Kafka from Alpaca `delayed_sip` (Settings → Live WebSocket picks ≤30 names for push; REST fills the rest with **cash-open + latest** backfill from 9:30 ET so open→last uses the real session open without flooding the live consumer) |
@@ -269,7 +271,7 @@ The lake batch path does **not** replace Watchlist. Lake Parquet trains the fore
 
 The **percent floor** opens a price-led day on its own. Isolation Forest can still mark a session anomalous under that floor, but a bare forest-only price card with **no news support** is dropped (noise). Forest + supporting headlines under the floor can still keep a news / news_price row.
 
-Cards and Alert History use three tag axes when relevant: **alert type** (`price-led` / `news-led` / `price + news`), **price shape** (`volatile` / `anomalous` / `volatile + anomalous`), and **direction** (`agrees` / `disagrees` / `mixed` / `no recent news` when no near-term headlines were found) when price and news can be compared. `price + news` means price was in play and headlines joined that slice (not a separate news-first join kind). **Sentiment is always the climate average of all near-term FinBERT scores** (not screamers only). A news side can join two ways: (1) **headline join** — at least one headline clears the full distance-from-50 gate and lines up with the move; (2) **climate join** — no single headline clears that gate, but the full climate average clears a softer half-distance bar (so a consistent mild lean can still upgrade; an average of in-range scores cannot clear the same bar as a screamer). Polarized sets (both above-50 and below-50 headlines) force Direction to **mixed** and show split counts. On a **price-led** day where neither join clears, the card still lists climate context.
+Cards and Alert History use three tag axes when relevant: **alert type** (`price-led` / `news-led` / `price + news`), **price shape** (`volatile` / `anomalous` / `volatile + anomalous`), and **direction** (`agrees` / `disagrees` / `mixed` / `no recent news` when no near-term headlines were found) when price and news can be compared. Those story pills sit on the collapsed card (and details header) beside the company name; the large Price change / Sentiment tiles stay in the open body so closed cards stay short. `price + news` means price was in play and headlines joined that slice (not a separate news-first join kind). **Sentiment is always the climate average of all near-term FinBERT scores** (not screamers only). A news side can join two ways: (1) **headline join** — at least one headline clears the full distance-from-50 gate and lines up with the move; (2) **climate join** — no single headline clears that gate, but the full climate average clears a softer half-distance bar (so a consistent mild lean can still upgrade; an average of in-range scores cannot clear the same bar as a screamer). Polarized sets (both above-50 and below-50 headlines) force Direction to **mixed** and show split counts. On a **price-led** day where neither join clears, the card still lists climate context.
 
 **What happened (Price noticed)** keeps percent and forest separate: the first bullet is only the percent floor — `(volatile)` or `(not volatile)` — then extra bullets name the loudest forest drivers in plain English (e.g. `gap −6.01% (big overnight drop vs prior close)`). Live and forest-anomalous doors always order the story **price → news**, even when the kind chip is news-led. Origin pills use teal for Live, peach for Watchlist, and soft purple for Both; a flat `+0.00%` price print uses gray (not gold).
 
@@ -543,13 +545,13 @@ flowchart LR
         REG --> LIVE["Live scorer loads the same model<br/>(Flink-role processor)"]
         REG --> SCAN["Watchlist Scan today<br/>(on-demand session check)"]
         CUR --> PG[("Alert tables<br/>(Postgres database)")]
-        PG --> UI["Alert History dashboard<br/>(web UI)"]
+        PG --> UI["Alert History table<br/>(20 rows / page + details popup)"]
     end
 ```
 
 ## Streaming ETL
 
-Minute bars are scored by the registered forest. **Product join is price-first on Live and Watchlist Scan today:** when the percent rule or forest marks a move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and grades how well the news explains the session — news or news+price when the same Eastern-day slice supports it, otherwise price-only with that grade. Under the percent floor, forest + supporting headlines can keep a news / news_price row (bare forest-only is dropped). Stale prior-day stories stay out. Postgres holds the alert with `origin`. Perplexity writes after news / news+price rows exist. The details popup shows the evidence story with a granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts). What happened always leads **price → news** on Live/forest doors, with percent vs anomaly bullets on Price noticed, then a tone-colored outcome chip for the grade.
+Minute bars are scored by the registered forest. **Product join is price-first on Live and Watchlist Scan today:** when the percent rule or forest marks a move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and grades how well the news explains the session — news or news+price when the same Eastern-day slice supports it, otherwise price-only with that grade. Under the percent floor, forest + supporting headlines can keep a news / news_price row (bare forest-only is dropped). Stale prior-day stories stay out. Postgres holds the alert with `origin`. Perplexity writes after news / news+price rows exist. The details popup freezes symbol / company / story pills / When / close above a full-width rule (same boundary as an open Live card) and scrolls only the evidence body. That body shows the evidence story with a granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts). What happened always leads **price → news** on Live/forest doors, with percent vs anomaly bullets on Price noticed, then a tone-colored outcome chip for the grade.
 
 ```mermaid
 flowchart LR
