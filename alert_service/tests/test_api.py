@@ -72,8 +72,10 @@ def test_health_and_ui_without_a_database():
     assert "detail-title-tags" in page.text
     assert "PRICE_SHAPE_LABELS" in page.text
     assert "if (company) primary.append(company)" in page.text
-    assert "function alertHeadMetrics" in page.text
-    assert "for (const bit of alertHeadMetrics(alert)) primary.append(bit)" in page.text
+    assert "appendStoryAndShapePills(tags, alert)" in page.text
+    assert "function alertHeadMetrics" not in page.text
+    assert "detail-title-primary" in page.text
+    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.12)" in page.text
     assert "function badgeClass" not in page.text
     worker = client.get("/ui/sw-notifications.js")
     assert worker.status_code == 200

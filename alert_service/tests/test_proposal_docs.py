@@ -269,7 +269,8 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "alert-head-primary" in ui
     assert "detail-title-primary" in ui
     assert "companyNameEl(alert.symbol)" in ui
-    assert "function alertHeadMetrics" in ui
+    assert "function historyTypePriceStat" in ui
+    assert "function alertHeadMetrics" not in ui
     assert '"type"' in ui and '"shape"' in ui and '"direction"' in ui
     assert 'label: "Alert type"' in ui
     assert 'label: "Price shape"' in ui
