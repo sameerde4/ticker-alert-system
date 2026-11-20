@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
+from .lake_s3 import ensure_local_lake, s3_configured, s3_has_lake, sync_lake_to_s3
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +95,24 @@ def lake_land_status() -> dict[str, Any]:
     status["has_raw_prices"] = lake_has_raw_prices()
     status["has_registry"] = lake_has_registry()
     status["auto_enabled"] = _auto_enabled()
+    status["s3_bucket"] = (settings.lake_s3_bucket or "").strip() or None
+    status["s3_prefix"] = (settings.lake_s3_prefix or "").strip() or None
+    status["s3_configured"] = s3_configured()
+    if "s3" not in status and s3_configured():
+        # Cheap flag for the UI / docs — full list is avoided on every poll.
+        status["s3_has_lake"] = None
     return status
+
+
+async def _sync_lake_to_s3_after_success() -> dict[str, Any] | None:
+    """Push the working lake to S3 after a successful land/train (AWS durable lake)."""
+    if not s3_configured() or not lake_has_raw_prices():
+        return None
+    result = await asyncio.to_thread(sync_lake_to_s3, _LAKE)
+    current = _read_status()
+    current["s3"] = result
+    _write_status(current)
+    return result
 
 
 def lake_has_raw_prices() -> bool:
@@ -325,6 +343,15 @@ async def start_lake_auto_scheduler() -> None:
 
     async def _loop() -> None:
         await asyncio.sleep(2)
+        if s3_configured():
+            try:
+                result = await asyncio.to_thread(ensure_local_lake, _LAKE)
+                if result:
+                    current = _read_status()
+                    current["s3"] = result
+                    _write_status(current)
+            except Exception:
+                log.exception("S3 lake ensure (hydrate/push) failed")
         while True:
             try:
                 reconcile_stale_lake_status()
@@ -523,6 +550,7 @@ async def _run_land(*, days: int, train_after: bool = False, job: str = "land") 
                     progress_pct=100.0,
                 )
             )
+            await _sync_lake_to_s3_after_success()
             log.info("Lake land finished: %s", summary["message"])
             return
 
@@ -592,6 +620,7 @@ async def _run_land(*, days: int, train_after: bool = False, job: str = "land") 
                 progress_pct=100.0,
             )
         )
+        await _sync_lake_to_s3_after_success()
         log.info("Lake bootstrap finished: %s", _read_status().get("message"))
     except Exception as exc:
         _write_status(
@@ -673,6 +702,9 @@ async def _run_refresh(*, days: int) -> None:
                     session_target=target,
                 )
             )
+            # Keep S3 durable even when Yahoo had nothing new (first push after enable).
+            if s3_configured() and not s3_has_lake(_LAKE):
+                await _sync_lake_to_s3_after_success()
             log.info("Lake refresh short-circuited: already current through %s", target)
             return
 
@@ -751,6 +783,7 @@ async def _run_refresh(*, days: int) -> None:
                 progress_pct=100.0,
             )
         )
+        await _sync_lake_to_s3_after_success()
         log.info("Lake refresh finished: %s", _read_status().get("message"))
     except Exception as exc:
         _write_status(

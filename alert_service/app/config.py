@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     live_heartbeat_stale_seconds: int = 15
     # Local lake root (registry + optional raw Parquet). Same path batch_train uses.
     lake_root: str = DEFAULT_LAKE_ROOT
+    # Optional durable lake on S3 (AWS demo). Empty bucket name = local-only.
+    lake_s3_bucket: str = ""
+    lake_s3_prefix: str = ""
+    lake_s3_region: str = "us-east-1"
     # Minimum seconds between live_feature_rows writes for one symbol (sink throttle).
     live_feature_min_interval_seconds: int = 60
     # When true, an Isolation Forest anomaly can open/enrich a price alert on live

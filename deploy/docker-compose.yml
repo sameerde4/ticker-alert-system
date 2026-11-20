@@ -71,6 +71,9 @@ services:
       TICKER_ALERT_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       TICKER_ALERT_LAKE_ROOT: /data/lake
       TICKER_ALERT_LAKE_AUTO_ENABLED: "true"
+      # Durable lake of record (IAM instance profile on the EC2 host).
+      TICKER_ALERT_LAKE_S3_BUCKET: market-radar-lake
+      TICKER_ALERT_LAKE_S3_REGION: us-east-1
       # Start disarmed on the demo host; click the Home cue to arm when presenting.
       TICKER_ALERT_LIVE_DISARM_ON_BOOT: "true"
     volumes:
@@ -97,6 +100,8 @@ services:
       TICKER_ALERT_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       TICKER_ALERT_LAKE_ROOT: /data/lake
       TICKER_ALERT_LAKE_AUTO_ENABLED: "false"
+      TICKER_ALERT_LAKE_S3_BUCKET: market-radar-lake
+      TICKER_ALERT_LAKE_S3_REGION: us-east-1
     volumes:
       - lake:/data/lake
       - hfcache:/data/hf
