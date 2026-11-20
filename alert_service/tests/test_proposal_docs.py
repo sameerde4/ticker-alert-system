@@ -212,6 +212,9 @@ def test_aws_deployment_doc_matches_as_built_demo():
     assert "market-radar-lake" in aws
     assert "TICKER_ALERT_LAKE_S3_BUCKET" in aws
     assert "Durable" in aws or "durable" in aws
+    assert "/market-radar/demo" in aws
+    assert "awslogs" in aws
+    assert "Elastic IP" in aws
     assert "[architecture.md](architecture.md)" in aws
 
 

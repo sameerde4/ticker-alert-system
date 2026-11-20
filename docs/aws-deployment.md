@@ -139,6 +139,8 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | Heartbeat cue | `armed` + fresh heartbeat → **Live alerts on**. Heartbeat runs on a background task so news scoring cannot flip the cue back to **starting…**. |
 | Lake header | Shows “Loading historical prices” only while a land/refresh is running (or before raw prices exist); hides when `ok` / `has_raw_prices`. `/ui` is served `Cache-Control: no-store`. |
 | Notifications | Chrome often blocks Notification permission on **http://** public IPs; HTTPS or localhost is required for OS popups. Alerts still appear in the Home feed. |
+| CloudWatch Logs | Docker Compose uses the **awslogs** driver → log group **`/market-radar/demo`** (7-day retention). Named streams: `api`, `live`, `producer`, `kafka`, `postgres`, `migrate`. |
+| Elastic IP (optional) | A **stable public IPv4** you allocate once and attach to the instance. Still looks like a normal AWS IP (not a pretty hostname); the win is it **does not change** when you stop/start the EC2. Free while attached to a running instance; idle unattached EIPs incur a small hourly charge. |
 
 ---
 
@@ -158,11 +160,13 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] Alpaca from Secrets Manager; one-shot migrations; UI + live arm/heartbeat smoke-tested
 - [x] Lake path + header hide; REST session backfill; background live heartbeat
 - [x] Durable lake sync to S3 `market-radar-lake` (hydrate on empty boot)
+- [x] CloudWatch log group `/market-radar/demo` + awslogs on Compose
 
 ### Still optional / later
 
-1. HTTPS in front of `:8010` if desktop notifications are required for the talk
-2. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
+1. Elastic IP if you stop/start the instance often and want a fixed demo URL (still an IP, not a domain)
+2. HTTPS in front of `:8010` if desktop notifications are required for the talk
+3. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
 
 ---
 
@@ -197,3 +201,4 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | 2026-11-20 | Secrets Manager for Alpaca; Postgres on EC2; Perplexity via UI; no login | |
 | 2026-11-20 | Live arm + REST-only + session backfill + migrator once | Demo stability on shared Alpaca Basic |
 | 2026-11-20 | Durable lake on S3 `market-radar-lake` | Working copy on EC2 volume; sync after land/train |
+| 2026-11-20 | CloudWatch `/market-radar/demo` | awslogs from Compose; 7-day retention |
