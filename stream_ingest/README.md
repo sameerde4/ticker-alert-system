@@ -5,11 +5,11 @@ Live / delayed minute bars for the streaming half of the class architecture.
 ## What it does
 
 1. Loads the S&P 500 list from `data/sp500_symbols.txt` (or a custom list).
-2. Opens Alpaca’s **`delayed_sip`** WebSocket and subscribes to **minute bars**.
+2. Opens Alpaca’s **`delayed_sip`** WebSocket for the **Settings → Live WebSocket** set (≤30 on Basic; from `/v1/live/status` when `LIVE_CONTROL_URL` is set).
 3. Publishes each bar to Kafka topic `prices.raw.bars`.
-4. On the free Basic plan, WebSocket subscriptions are capped at **30 symbols**. The remaining S&P names are covered by a **REST poller** of delayed SIP minute bars (same Kafka schema).
+4. Covers the remaining S&P names with a **REST poller** (60s; cash-open + latest backfill on arm). Env `ALPACA_WS_PRIORITY_SYMBOLS` is fallback if the API is down.
 
-The FastAPI live consumer (`python -m app.live` in `alert_service/`) reads this topic and writes open→last **price** alerts for the watchlist. Flink scores the same bar stream with the registered Isolation Forest on the class architecture.
+The FastAPI live consumer (`python -m app.live` in `alert_service/`) reads this topic for the **full S&P 500** stream and writes open→last percent-floor alerts (forest under the floor needs news support).
 
 ## Important limit
 

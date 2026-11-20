@@ -43,6 +43,8 @@ This is the finished local system for the class demo. Near-term headlines are fe
 |---|
 | Watchlist tab: S&P 500 focus set (search + chips), Scan today, Watchlist results separate from Home Live alerts |
 | Home tab: **Live alerts** feed with All / Watchlist / Others scope switch; Clear alerts (hides until `updated_at` / `created_at` moves again); desktop notification controls |
+| Settings → **Live WebSocket**: up to 30 S&P names for Alpaca push (default mega-cap ten); rest of index via REST |
+| Settings → **Clear alerts**: wipe all, or delete rows whose \|price change\| is under a chosen percent (news-only without price left alone) |
 | History tab: full list with Origin, Company, Type, Price change, Sentiment score; click row for details; sortable + draggable columns |
 | Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares |
@@ -51,7 +53,7 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic); Summary citations render as clickable headline titles (bare URLs linked from the alert’s article list) |
 | Expanded alert metric tiles: Price change shows `$from → $to` plus a short span caption (`open → last`, `prior close → close`, …); Sentiment score shows FinBERT class counts (lead bucket, then the other two) |
 | Saved thresholds; admin rebuild of recent sessions for the watchlist |
-| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest; REST-only demos backfill **cash-open + latest** bar per symbol from 9:30 ET so open→last uses the real session open without flooding the live consumer) |
+| Minute bars on Kafka from Alpaca `delayed_sip` (Settings → Live WebSocket picks ≤30 names for push; REST fills the rest with **cash-open + latest** backfill from 9:30 ET so open→last uses the real session open without flooding the live consumer) |
 | Live Kafka consumer over the **full S&P 500** stream (not limited to Watchlist chips): open→last price alerts (`python -m app.live`); Home clickable Live alerts arm; “on” when a fresh consumer heartbeat is present |
 | Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone (**training lake**, not the Watchlist UI) |
 | Auto first-boot lake land + train when `data/lake` is empty; header “Loading historical prices” cue + % progress while running, then hides when the lake is ready (`ok` / `has_raw_prices`) |
@@ -209,23 +211,24 @@ flowchart LR
 
 The lake batch path does **not** replace Watchlist. Lake Parquet trains the forest. Watchlist Scan today is the product pass over **this session’s** bars and headlines for names you care about.
 
-## Price gates (percent **or** forest)
+## Price gates (percent, with forest as enricher)
 
-Either gate can open a **price-led** day. They are not both required. What happened tags the case in brackets on the price step (`(percent only)`, `(percent + forest)`, `(forest only)`, `(neither gate)`).
+The **percent floor** opens a price-led day on its own. Isolation Forest can still mark a session anomalous under that floor, but a bare forest-only price card with **no news support** is dropped (noise). Forest + supporting headlines under the floor can still keep a news / news_price row. What happened tags the case in brackets on the price step (`(percent only)`, `(percent + forest)`, `(forest only)`, `(neither gate)`).
 
-| Percent | Forest | Price-led alert? | What happened tag |
-|---|---|---|---|
-| Clears (e.g. ≥ 3%) | Normal / absent | **Yes** — percent alone | `(percent only)` |
-| Clears | Anomalous | **Yes** — both | `(percent + forest)` |
-| Under threshold | Anomalous | **Yes** — forest alone | `(forest only)` |
-| Under threshold | Normal / absent | **No** price-led | `(neither gate)` — typical news-led Scan today case |
+| Percent | Forest | News support | Alert? | What happened tag |
+|---|---|---|---|---|
+| Clears (e.g. ≥ 3%) | Normal / absent | optional | **Yes** — percent alone | `(percent only)` |
+| Clears | Anomalous | optional | **Yes** — both | `(percent + forest)` |
+| Under threshold | Anomalous | **Yes** (news / news_price) | **Yes** — forest + news | `(forest only)` on the price step |
+| Under threshold | Anomalous | **No** | **No** — skipped | scored in `live_feature_rows` only |
+| Under threshold | Normal / absent | news-led possible | News-only on Scan today | `(neither gate)` |
 
 ## What can trigger a price-led alert
 
 | # | Trigger | Opens a price alert alone? | Notes |
 |---|---|---|---|
 | 1 | **Price move threshold** — open→last (RTH) or close vs prior (after close / Scan) ≥ Settings % (UI label: Price move threshold) | **Yes** | Live + Watchlist |
-| 2 | **Isolation Forest anomalous** — score ≤ registry cutoff on the four-feature vector | **Yes** (even if under %) | Live + Watchlist |
+| 2 | **Isolation Forest anomalous** — score ≤ registry cutoff on the four-feature vector | **No** under the % floor without news; **enriches** when percent or news already opens | Live + Watchlist |
 | 3 | **Gap return** (open vs prior close) | No — forest **feature** | Inside #2 |
 | 4 | **Session return** (open→last) | No — forest **feature** (and #1 if large enough) | Inside #1 / #2 |
 | 5 | **Close return** (last vs prior close) | No — forest **feature** | Inside #2 |
@@ -294,7 +297,7 @@ Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Ka
 
 Home’s Live alerts control is a clickable **arm switch**: `POST /v1/live/armed` sets `app_settings.live_alerts_armed`. `/v1/live/status` returns `armed` (user switch) and `enabled` (fresh `live_consumer_heartbeat_at`). The UI shows **off** / **starting…** / **on** from that pair. While armed, the consumer heartbeats on a **background task** so FinBERT / Perplexity work on a bar cannot starve the cue into a stuck “starting…” state. Disarm clears the heartbeat and idles both the consumer and the producer (producer polls the same status). Demo hosts may set `TICKER_ALERT_LIVE_DISARM_ON_BOOT=true` so a redeploy starts idle until you click Live alerts on.
 
-On Basic, WebSocket may be capped or set to REST-only (`ALPACA_WS_SYMBOL_LIMIT=0`). Latest-only REST polls start mid-session with a minute bar’s open ≈ last price, so open→last never clears the percent rule. The REST poller therefore **backfills the cash-open bar and the latest bar per symbol** from the 9:30 ET open once per producer session (still outside the free-plan ~15-minute SIP wall), then continues with latest-only polls. Publishing every minute of the day would flood FinBERT/news upgrades. The live consumer resets its session book each arm, applies every Kafka bar to the book, and runs the alert/news path once per symbol per batch (latest print). Home **Clear alerts** filters on `updated_at` (falling back to `created_at`) so a same-day live refresh can reappear after Clear. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
+On Basic, WebSocket covers up to **30** symbols chosen in Settings → **Live WebSocket** (default mega-cap ten); the producer reads that list from `/v1/live/status` and reconnects when it changes. The rest of the S&P uses REST (`ALPACA_WS_SYMBOL_LIMIT` env is the cap, not “fill with random names”). Latest-only REST polls start mid-session with a minute bar’s open ≈ last price, so open→last never clears the percent rule. The REST poller therefore **backfills the cash-open bar and the latest bar per symbol** from the 9:30 ET open once per producer session (still outside the free-plan ~15-minute SIP wall), then continues with latest-only polls. Publishing every minute of the day would flood FinBERT/news upgrades. The live consumer resets its session book each arm, applies every Kafka bar to the book, and runs the alert/news path once per symbol per batch (latest print). Home **Clear alerts** filters on `updated_at` (falling back to `created_at`) so a same-day live refresh can reappear after Clear. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
 
 ```mermaid
 flowchart LR

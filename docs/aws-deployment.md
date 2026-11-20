@@ -139,8 +139,10 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | Lake path | Compose mounts volume at `/data/lake`; API image also exposes `/app/data/lake` → `/data/lake` so land, status, and forest registry agree |
 | S3 lake | `TICKER_ALERT_LAKE_S3_BUCKET=market-radar-lake`. After successful land/train the API syncs `raw/` + `curated/` + `registry/` to S3. Empty local volume hydrates from S3 on boot; empty S3 gets a one-time push from the volume. |
 | Live arm | Home cue toggles `live_alerts_armed`. Boot starts **disarmed** on this host. Producer idles until armed. |
-| REST bars | Demo uses `ALPACA_WS_SYMBOL_LIMIT=0` (REST-only) so we do not fight another app for the Basic WebSocket slot. On arm, producer **backfills cash-open + latest** per symbol from 9:30 ET (not the full minute stream), then polls latest delayed bars. Live coalesces alert writes per Kafka batch. |
+| Bars feed | Settings → **Live WebSocket** picks up to **30** S&P names (seeded with the mega-cap 10). Those stream on Alpaca WebSocket; the rest of the index uses **REST** every 60s (open+last backfill on arm). Producer polls `/v1/live/status` for the list and reconnects when it changes. Env `ALPACA_WS_PRIORITY_SYMBOLS` is fallback only. One Basic WebSocket connection per Alpaca account. |
 | Home Clear | Hides Live cards until `updated_at` (or `created_at`) is newer than the clear mark — same-day live refreshes bump `updated_at` and show again. |
+| Forest under floor | Isolation Forest under the Settings percent floor without news support is dropped (noise). Percent ≥ floor still alerts without news; polarizing news can still open news-led rows. |
+| Settings Clear | **Clear alerts** panel: delete all, or delete rows with \|price change\| under a chosen percent (`POST /v1/admin/alerts/clear`). |
 | Chrome notifications | Plain `http://` Elastic IP is an insecure origin. For local demo machines only: `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → enable → add `http://98.94.232.101:8010` → relaunch → Allow notifications on Home. |
 | Heartbeat cue | `armed` + fresh heartbeat → **Live alerts on**. Heartbeat runs on a background task so news scoring cannot flip the cue back to **starting…**. |
 | Lake header | Shows “Loading historical prices” only while a land/refresh is running (or before raw prices exist); hides when `ok` / `has_raw_prices`. `/ui` is served `Cache-Control: no-store`. |
@@ -168,6 +170,8 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] Durable lake sync to S3 `market-radar-lake` (hydrate on empty boot)
 - [x] CloudWatch log group `/market-radar/demo` + awslogs on Compose
 - [x] Elastic IP associated for a stable demo URL (`http://98.94.232.101:8010/ui`)
+- [x] Settings → Live WebSocket (≤30) + producer reconnect; REST for the rest
+- [x] Forest-under-floor without news dropped; Settings → Clear alerts (all / under %)
 
 ### Still optional / later
 
@@ -208,8 +212,10 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | 2026-11-20 | `us-east-1`, prefix `market-radar-` | Account `038084590655` |
 | 2026-11-20 | Spark-role jobs on EC2; lake volume first, S3 bucket ready | No EMR |
 | 2026-11-20 | Secrets Manager for Alpaca; Postgres on EC2; Perplexity via UI; no login | |
-| 2026-11-20 | Live arm + REST-only + open+last backfill + migrator once | Demo stability on shared Alpaca Basic; avoid FinBERT flood |
+| 2026-11-20 | Live arm + open+last REST backfill + migrator once | Demo stability; avoid FinBERT flood on full-day bars |
 | 2026-11-20 | Home Clear on `updated_at`; live upgrade re-enter | Same-day live refreshes stay visible after Clear |
 | 2026-11-20 | Durable lake on S3 `market-radar-lake` | Working copy on EC2 volume; sync after land/train |
 | 2026-11-20 | CloudWatch `/market-radar/demo` | awslogs from Compose; 7-day retention |
 | 2026-11-20 | Elastic IP for demo URL | Release on teardown so idle EIP is not billed |
+| 2026-11-20 | Settings Live WebSocket ≤30 + REST long tail | Producer polls list; reconnects on change |
+| 2026-11-20 | Forest under % floor needs news; Clear alerts panel | Cut sub-threshold noise; flush under-% rows |
