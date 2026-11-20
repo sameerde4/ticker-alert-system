@@ -137,10 +137,12 @@
       padding: 16px 18px;
       margin: 0;
     }
-    #add-form .status { flex: 1 1 220px; }
+    #add-form .status,
+    #ws-add-form .status { flex: 1 1 220px; }
     form, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .symbol-suggest { position: relative; display: inline-flex; flex: 1 1 36ch; min-width: min(36ch, 100%); max-width: 100%; }
-    #add-form #symbol {
+    #add-form #symbol,
+    #ws-add-form #wsSymbol {
       width: 100%;
       min-width: 0;
       flex: 1 1 auto;
@@ -989,7 +991,7 @@
     <section id="homeTab" class="tab-panel">
     <p class="lede" id="homeLede">
       S&amp;P 500 Radar monitors the index for price movements and anomalies, with same-day headline checks that grade how well the news explains the session.
-      <strong>Live</strong> watches the Kafka price stream: a day opens when the move clears the Settings threshold <em>or</em> Isolation Forest marks the session anomalous, then near-term headlines are checked and graded.
+      <strong>Live</strong> watches the Kafka price stream: a day opens when the move clears the Settings threshold (Isolation Forest can enrich that day, or keep an under-threshold move only when headlines support it), then near-term headlines are checked and graded.
       <strong>Watchlist → Scan today</strong> runs those same gates on demand for your focus set.
     </p>
     <p class="rules" id="rules"><span id="rulesBefore">Loading rules…</span><button type="button" class="linkish" id="finbertExplain">FinBERT</button><span id="rulesMiddle"></span><button type="button" class="linkish" id="priceExplain">price move</button><span id="rulesAfter"></span></p>
@@ -1017,7 +1019,7 @@
       </div>
       <p class="status" id="homeStatus"></p>
       <div id="alerts"></div>
-      <p class="empty" id="empty">No live alerts yet. Live opens price days when the move clears the Settings threshold or Isolation Forest fires, then checks near-term news. Use Watchlist → Scan today for an on-demand pass over your focus set.</p>
+      <p class="empty" id="empty">No live alerts yet. Live opens price days when the move clears the Settings threshold (forest under that floor needs news support), then checks near-term headlines. Use Watchlist → Scan today for an on-demand pass over your focus set.</p>
     </section>
     </section>
     <section id="watchlistTab" class="tab-panel" hidden>
@@ -1128,12 +1130,12 @@
     <section id="settingsTab" class="tab-panel" hidden>
       <section class="card">
         <h2>Alert rules</h2>
-        <p class="hint">Live and Watchlist Scan today share the same gates. A <strong>price-led</strong> day opens when the move clears the threshold below <em>or</em> Isolation Forest (trained on the lake) marks the session anomalous — either is enough. Near-term headlines are then checked with FinBERT. News-only is still allowed on Scan today when FinBERT clears and price stays under both gates.</p>
+        <p class="hint">Live and Watchlist Scan today share the same gates. A <strong>price-led</strong> day opens when the move clears the threshold below. Isolation Forest (trained on the lake) can enrich that day, or keep an under-threshold session only when FinBERT finds supporting headlines — bare forest-only cards under the floor are dropped as noise. News-only is still allowed on Scan today when FinBERT clears and price stays under the percent floor.</p>
         <form id="settings-form" class="settings-form">
           <label class="field">
             <span>Price move threshold</span>
             <input id="pricePercent" type="number" min="0.1" max="100" step="0.1" inputmode="decimal" required />
-            <p class="hint">One of two price gates (the other is Isolation Forest from the lake registry — not set here). While the market is open, open→last must clear this percent; after the close, close vs prior close. Default is 3%. A headline can join a price move only when it was published in the same part of the day that moved.</p>
+            <p class="hint">Primary price floor (Isolation Forest from the lake registry can enrich above this, but not open a bare under-floor card without news). While the market is open, open→last must clear this percent; after the close, close vs prior close. Default is 3%. A headline can join a price move only when it was published in the same part of the day that moved.</p>
           </label>
           <label class="field">
             <span>FinBERT sentiment threshold</span>
@@ -1146,6 +1148,32 @@
             <p class="status" id="settingsStatus"></p>
           </div>
         </form>
+      </section>
+      <section class="card">
+        <div class="section-head">
+          <div class="heading-with-tip">
+            <h2>Live WebSocket</h2>
+            <button
+              type="button"
+              class="tip-btn"
+              title="Pick up to 30 S&amp;P 500 names for Alpaca WebSocket push (Basic plan cap). Everything else on the index uses 60-second delayed REST into the same Kafka topic. Changes apply on the next producer reconnect while Live is armed."
+              aria-label="About Live WebSocket: Pick up to 30 S&amp;P 500 names for Alpaca WebSocket push. Everything else uses 60-second delayed REST."
+            >?</button>
+          </div>
+          <p class="run-stamp" id="wsSlotStamp"></p>
+        </div>
+        <p class="hint">These tickers stream on WebSocket when Live alerts are armed. The rest of the S&amp;P 500 still arrives via REST every 60 seconds. Default set is the mega-cap demo ten; add or remove names here (max 30).</p>
+        <form id="ws-add-form">
+          <span class="symbol-suggest">
+            <input id="wsSymbol" name="wsSymbol" placeholder="S&amp;P 500 ticker or company name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="wsSymbolSuggestList" />
+            <div class="symbol-suggest-frame" hidden>
+              <div class="symbol-suggest-list" id="wsSymbolSuggestList" hidden></div>
+            </div>
+          </span>
+          <button type="submit">Add to WebSocket</button>
+          <p class="status" id="wsStatus"></p>
+        </form>
+        <div class="chips" id="wsSymbols"></div>
       </section>
       <section class="card">
         <h2>Perplexity</h2>
@@ -1182,6 +1210,27 @@
             </div>
           </div>
           <p class="hint" id="lakeDetail"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Clear alerts</h2>
+        <p class="hint">Flush saved alerts without rebuilding. Use this to drop noisy under-threshold cards from Home and History. News-only rows (no price change) are left alone when you clear by size.</p>
+        <form id="clear-below-form" class="settings-form">
+          <label class="field">
+            <span>Clear when |price change| is under</span>
+            <input id="clearBelowPercent" type="number" min="0.1" max="100" step="0.1" value="3" inputmode="decimal" required />
+            <p class="hint">Percent points (3 = drop alerts whose move is under 3%). Does not delete news-only cards with no price change.</p>
+          </label>
+          <div class="settings-actions">
+            <button type="submit" id="clearBelowAlerts">Clear under threshold</button>
+            <p class="status" id="clearBelowStatus"></p>
+          </div>
+        </form>
+        <form id="clear-all-form" class="settings-form">
+          <div class="settings-actions">
+            <button type="submit" id="clearAllAlerts" class="ghost">Clear all alerts</button>
+            <p class="status" id="clearAllStatus"></p>
+          </div>
         </form>
       </section>
       <section class="card">
@@ -1231,7 +1280,7 @@
       </div>
       <div class="modal-body">
         <h3 class="section">Two price gates</h3>
-        <p class="summary">A price-led day opens when either gate fires on Live or Watchlist Scan today. (1) Price move threshold in Settings — default 3%: open→last while the market is open, or close vs prior close after the close. (2) Isolation Forest from the lake registry — the same four features used in training (gap, session, close, volume z-score). Forest can fire even when the move is under the threshold. What happened tags the case: percent only, percent + forest, forest only, or neither gate.</p>
+        <p class="summary">A price-led day opens when the Settings percent floor clears on Live or Watchlist Scan today (default 3%: open→last while the market is open, or close vs prior close after the close). Isolation Forest (gap, session, close, volume z-score) can enrich that day, or keep an under-floor move only when headlines support it — bare forest-only under the floor is dropped. What happened tags the case: percent only, percent + forest, forest only, or neither gate.</p>
         <h3 class="section">The part of the day</h3>
         <p class="summary">A headline can explain only the price that was in progress when it was published, in US Eastern. Before 9:30 AM that is the overnight gap, from the prior close to the open. From 9:30 AM to 4:00 PM it is the regular session, from the open to the latest price, which becomes the 4:00 PM close after the market closes. After 4:00 PM, and a weekend story kept with Friday, it is the close versus the prior close.</p>
         <h3 class="section">A candidate reason</h3>
@@ -1316,6 +1365,8 @@
     const screenerRunStampEl = document.querySelector("#screenerRunStamp");
     let latestAlerts = [];
     let watchlistSymbols = [];
+    let liveWsSymbols = [];
+    let liveWsLimit = 30;
     let homeScope = loadHomeScope();
     let historySort = { key: "when", dir: "desc" };
 
@@ -1730,6 +1781,9 @@
       localStorage.setItem(LAST_CLOSED_KEY, new Date().toISOString());
     });
     const watchEl = document.querySelector("#watchlist");
+    const wsSymbolsEl = document.querySelector("#wsSymbols");
+    const wsStatusEl = document.querySelector("#wsStatus");
+    const wsSlotStampEl = document.querySelector("#wsSlotStamp");
 
     function setStatus(text, isError) {
       statusEl.textContent = text || "";
@@ -1776,6 +1830,46 @@
         });
         chip.append(button);
         watchEl.append(chip);
+      }
+    }
+
+    function setWsStatus(text, isError) {
+      if (!wsStatusEl) return;
+      wsStatusEl.textContent = text || "";
+      wsStatusEl.className = isError ? "status error" : "status";
+    }
+
+    function renderLiveWsSymbols(payload) {
+      const rows = Array.isArray(payload && payload.symbols) ? payload.symbols : [];
+      const limit = Math.max(1, Number(payload && payload.limit) || 30);
+      liveWsLimit = limit;
+      liveWsSymbols = rows
+        .map((row) => String(row.symbol || "").toUpperCase())
+        .filter(Boolean);
+      if (wsSlotStampEl) {
+        wsSlotStampEl.textContent = liveWsSymbols.length + " / " + limit + " WebSocket slots";
+      }
+      if (!wsSymbolsEl) return;
+      wsSymbolsEl.replaceChildren();
+      for (const row of rows) {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = row.symbol;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "×";
+        button.setAttribute("aria-label", "Remove " + row.symbol + " from WebSocket");
+        button.addEventListener("click", async () => {
+          try {
+            await readJson(await fetch("/v1/live/ws-symbols/" + encodeURIComponent(row.symbol), { method: "DELETE" }));
+            await refresh();
+            setWsStatus("Removed " + row.symbol + " from WebSocket. Producer reconnects while Live is armed.");
+          } catch (err) {
+            setWsStatus(err.message, true);
+          }
+        });
+        chip.append(button);
+        wsSymbolsEl.append(chip);
       }
     }
 
@@ -2903,16 +2997,18 @@
     }
 
     async function refresh() {
-      const [watch, alerts, rules] = await Promise.all([
+      const [watch, alerts, rules, wsFeed] = await Promise.all([
         readJson(await fetch("/v1/watchlist")),
         readJson(await fetch("/v1/alerts?limit=1000")),
         readJson(await fetch("/v1/settings")),
+        readJson(await fetch("/v1/live/ws-symbols")),
       ]);
       currentRules = rules;
       displayTimeZone = rules.display_timezone || displayTimeZone;
       latestAlerts = alerts.alerts;
       noticeNewAlerts(latestAlerts);
       renderWatchlist(watch.symbols);
+      renderLiveWsSymbols(wsFeed);
       syncHomeScopeControls();
       renderAlerts(alertsForHome(latestAlerts));
       renderWatchlistCheckAlerts(lastWatchlistCheckAlerts);
@@ -2925,7 +3021,7 @@
       const move = (Number(rules.price_move_threshold) * 100).toFixed(1);
       const sentiment = Math.round(Number(rules.sentiment_threshold));
       document.querySelector("#rulesBefore").textContent =
-        `One alert per symbol per day. Price: ${move}% move threshold (open→last in session, else prior close) or Isolation Forest. News: `;
+        `One alert per symbol per day. Price: ${move}% move threshold (open→last in session, else prior close); Isolation Forest enriches or needs news under that floor. News: `;
       document.querySelector("#rulesMiddle").textContent =
         ` ≥ ${sentiment} points from 50. Both when a headline matches the `;
       document.querySelector("#rulesAfter").textContent =
@@ -3147,6 +3243,8 @@
 
     const symbolInput = document.querySelector("#symbol");
     bindSymbolSuggestInput(symbolInput);
+    const wsSymbolInput = document.querySelector("#wsSymbol");
+    if (wsSymbolInput) bindSymbolSuggestInput(wsSymbolInput);
 
     document.querySelector("#add-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -3172,6 +3270,38 @@
         setStatus(err.message, true);
       }
     });
+
+    const wsAddForm = document.querySelector("#ws-add-form");
+    if (wsAddForm) {
+      wsAddForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const field = document.querySelector("#wsSymbol");
+        const raw = field ? field.value.trim() : "";
+        if (!raw) {
+          setWsStatus("Enter a ticker.", true);
+          return;
+        }
+        if (liveWsSymbols.length >= liveWsLimit && !liveWsSymbols.includes(raw.toUpperCase())) {
+          setWsStatus("WebSocket list is full (" + liveWsLimit + " symbols). Remove one first.", true);
+          return;
+        }
+        setWsStatus("Adding " + raw.toUpperCase() + "…");
+        try {
+          const saved = await readJson(await fetch("/v1/live/ws-symbols", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ symbol: raw }),
+          }));
+          if (field) field.value = "";
+          await refresh();
+          setWsStatus(saved.already
+            ? saved.symbol + " is already on the WebSocket list."
+            : "Added " + saved.symbol + " to WebSocket. Producer reconnects while Live is armed.");
+        } catch (err) {
+          setWsStatus(err.message, true);
+        }
+      });
+    }
 
     if (screenerForm) {
       screenerForm.addEventListener("submit", async (event) => {
@@ -3287,7 +3417,10 @@
 
     function fillSettingsForm(rules) {
       if (!rules) return;
-      document.querySelector("#pricePercent").value = (rules.price_move_threshold * 100).toFixed(1);
+      const movePct = (rules.price_move_threshold * 100).toFixed(1);
+      document.querySelector("#pricePercent").value = movePct;
+      const clearBelow = document.querySelector("#clearBelowPercent");
+      if (clearBelow && !clearBelow.dataset.touched) clearBelow.value = movePct;
       document.querySelector("#sentimentThreshold").value = Math.round(Number(rules.sentiment_threshold));
       document.querySelector("#perplexitySaved").textContent = rules.perplexity_key_saved
         ? "A key is saved. The next check uses Perplexity instead of the rule sentence."
@@ -3583,6 +3716,81 @@
         setLakeButtonsDisabled(false);
       }
     });
+
+    const clearBelowInput = document.querySelector("#clearBelowPercent");
+    if (clearBelowInput) {
+      clearBelowInput.addEventListener("input", () => {
+        clearBelowInput.dataset.touched = "1";
+      });
+    }
+
+    const clearBelowForm = document.querySelector("#clear-below-form");
+    if (clearBelowForm) {
+      clearBelowForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const pct = Number(document.querySelector("#clearBelowPercent").value);
+        const status = document.querySelector("#clearBelowStatus");
+        if (!Number.isFinite(pct) || pct <= 0) {
+          status.textContent = "Enter a percent greater than 0.";
+          status.className = "status error";
+          return;
+        }
+        const confirmed = window.confirm(
+          "Delete every alert whose |price change| is under " + pct + "%? News-only cards with no price stay."
+        );
+        if (!confirmed) {
+          status.textContent = "";
+          status.className = "status";
+          return;
+        }
+        status.textContent = "Clearing under " + pct + "%…";
+        status.className = "status";
+        try {
+          const result = await readJson(await fetch("/v1/admin/alerts/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ below_percent: pct }),
+          }));
+          status.textContent = "Cleared " + result.deleted + " alert(s) under " + pct + "%.";
+          status.className = "status";
+          await refresh();
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "status error";
+        }
+      });
+    }
+
+    const clearAllForm = document.querySelector("#clear-all-form");
+    if (clearAllForm) {
+      clearAllForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.querySelector("#clearAllStatus");
+        const confirmed = window.confirm(
+          "Delete every saved alert in History and Home? This does not rebuild."
+        );
+        if (!confirmed) {
+          status.textContent = "";
+          status.className = "status";
+          return;
+        }
+        status.textContent = "Clearing all alerts…";
+        status.className = "status";
+        try {
+          const result = await readJson(await fetch("/v1/admin/alerts/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clear_all: true }),
+          }));
+          status.textContent = "Cleared " + result.deleted + " alert(s).";
+          status.className = "status";
+          await refresh();
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "status error";
+        }
+      });
+    }
 
     document.querySelector("#rebuild-form").addEventListener("submit", async (event) => {
       event.preventDefault();

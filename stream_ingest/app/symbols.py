@@ -41,6 +41,45 @@ def load_symbols(*, symbols_csv: str = "", symbols_file: str = "") -> list[str]:
     return found
 
 
+def prioritize_symbols(priority: list[str], universe: list[str]) -> list[str]:
+    """Put priority tickers first (for WebSocket), then the rest of the universe."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in [*priority, *universe]:
+        symbol = normalize_symbol(raw)
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        found.append(symbol)
+    return found
+
+
+def split_ws_rest(
+    universe: list[str],
+    *,
+    ws_priority: list[str],
+    limit: int,
+    rest_enabled: bool = True,
+) -> tuple[list[str], list[str]]:
+    """WebSocket gets only the chosen priority symbols (capped); REST gets everyone else."""
+    cap = max(0, int(limit))
+    ws: list[str] = []
+    seen: set[str] = set()
+    for raw in ws_priority:
+        symbol = normalize_symbol(raw)
+        if not symbol or symbol in seen:
+            continue
+        if len(ws) >= cap:
+            break
+        seen.add(symbol)
+        ws.append(symbol)
+    if not rest_enabled:
+        return ws, []
+    rest = [symbol for symbol in universe if symbol not in seen]
+    # Priority names missing from the universe file still stream on WS only.
+    return ws, rest
+
+
 def shard_symbols(symbols: list[str], *, limit: int) -> list[list[str]]:
     """Split symbols into WebSocket batches. Free Basic allows 30 per account."""
     if limit < 1:

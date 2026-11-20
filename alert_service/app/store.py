@@ -223,6 +223,59 @@ async def remove_symbol(conn: asyncpg.Connection, symbol: str) -> bool:
     return result.endswith("1")
 
 
+async def list_live_ws_symbols(conn: asyncpg.Connection) -> list[dict[str, Any]]:
+    """Symbols that take Alpaca WebSocket slots (Settings → Live WebSocket)."""
+    rows = await conn.fetch(
+        "SELECT symbol, added_at FROM live_ws_symbols ORDER BY symbol"
+    )
+    return [
+        {"symbol": row["symbol"], "added_at": row["added_at"].isoformat()}
+        for row in rows
+    ]
+
+
+async def add_live_ws_symbol(
+    conn: asyncpg.Connection, symbol: str, *, limit: int | None = None
+) -> dict[str, Any]:
+    """Add a WebSocket priority symbol. Caps at Alpaca Basic's subscription limit."""
+    from .config import LIVE_WS_SYMBOL_LIMIT
+
+    cap = LIVE_WS_SYMBOL_LIMIT if limit is None else max(0, int(limit))
+    already = await conn.fetchval("SELECT 1 FROM live_ws_symbols WHERE symbol = $1", symbol)
+    if already:
+        row = await conn.fetchrow(
+            "SELECT symbol, added_at FROM live_ws_symbols WHERE symbol = $1", symbol
+        )
+        return {
+            "symbol": row["symbol"],
+            "added_at": row["added_at"].isoformat(),
+            "already": True,
+        }
+    count = int(await conn.fetchval("SELECT COUNT(*) FROM live_ws_symbols") or 0)
+    if count >= cap:
+        raise ValueError(
+            f"WebSocket list is full ({cap} symbols). Remove one before adding another."
+        )
+    row = await conn.fetchrow(
+        """
+        INSERT INTO live_ws_symbols (symbol)
+        VALUES ($1)
+        RETURNING symbol, added_at
+        """,
+        symbol,
+    )
+    return {
+        "symbol": row["symbol"],
+        "added_at": row["added_at"].isoformat(),
+        "already": False,
+    }
+
+
+async def remove_live_ws_symbol(conn: asyncpg.Connection, symbol: str) -> bool:
+    result = await conn.execute("DELETE FROM live_ws_symbols WHERE symbol = $1", symbol)
+    return result.endswith("1")
+
+
 async def upsert_bars(conn: asyncpg.Connection, symbol: str, bars: list[dict[str, Any]]) -> None:
     for bar in bars:
         await conn.execute(
@@ -373,6 +426,8 @@ async def live_consumer_status(
     conn: asyncpg.Connection, *, stale_after_seconds: int | None = None, now: datetime | None = None
 ) -> dict[str, Any]:
     """Live cue: armed (user switch) and enabled (fresh consumer heartbeat)."""
+    from .config import LIVE_WS_SYMBOL_LIMIT
+
     row = await conn.fetchrow(
         "SELECT live_consumer_heartbeat_at, live_alerts_armed FROM app_settings WHERE id"
     )
@@ -383,10 +438,18 @@ async def live_consumer_status(
     enabled = armed and heartbeat_is_fresh(
         heartbeat, now=now, stale_after_seconds=stale_after_seconds
     )
+    try:
+        ws_rows = await list_live_ws_symbols(conn)
+        ws_symbols = [row["symbol"] for row in ws_rows]
+    except Exception:
+        # Migration 017 not applied yet — producer falls back to env priority.
+        ws_symbols = []
     return {
         "armed": armed,
         "enabled": enabled,
         "heartbeat_at": heartbeat.isoformat() if heartbeat is not None else None,
+        "ws_symbols": ws_symbols,
+        "ws_limit": LIVE_WS_SYMBOL_LIMIT,
     }
 
 
@@ -602,8 +665,35 @@ async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str,
     return alert_record(row)
 
 
-async def delete_all_alerts(conn: asyncpg.Connection) -> None:
-    await conn.execute("DELETE FROM alerts")
+async def delete_all_alerts(conn: asyncpg.Connection) -> int:
+    """Delete every alert row. Returns how many were removed."""
+    result = await conn.execute("DELETE FROM alerts")
+    # asyncpg: "DELETE N"
+    try:
+        return int(str(result).rsplit(" ", 1)[-1])
+    except (TypeError, ValueError):
+        return 0
+
+
+async def delete_alerts_below_abs_change(conn: asyncpg.Connection, fraction: float) -> int:
+    """Delete alerts whose |price_change_pct| is under ``fraction`` (e.g. 0.03 = 3%).
+
+    Rows with a null price change are left alone (news-only cards).
+    """
+    if fraction != fraction or fraction < 0:
+        raise ValueError("Price clear threshold must be zero or greater.")
+    result = await conn.execute(
+        """
+        DELETE FROM alerts
+        WHERE price_change_pct IS NOT NULL
+          AND ABS(price_change_pct) < $1
+        """,
+        float(fraction),
+    )
+    try:
+        return int(str(result).rsplit(" ", 1)[-1])
+    except (TypeError, ValueError):
+        return 0
 
 
 def _qualified_alert_columns(alias: str = "alerts") -> str:

@@ -15,6 +15,9 @@ def test_health_and_ui_without_a_database():
     assert "Live alerts off" in page.text
     assert "Live alerts starting…" in page.text
     assert "/v1/live/armed" in page.text
+    assert "/v1/live/ws-symbols" in page.text
+    assert "Live WebSocket" in page.text
+    assert 'id="ws-add-form"' in page.text
     assert "toggleLiveArmed" in page.text
     assert 'aria-pressed="false"' in page.text
     assert "live-pulse" in page.text
@@ -180,6 +183,12 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     page = client.get("/ui")
     assert "Rebuild history" in page.text
     assert "Wipe and rebuild" in page.text
+    assert "Clear alerts" in page.text
+    assert 'id="clear-below-form"' in page.text
+    assert 'id="clearAllAlerts"' in page.text
+    assert "/v1/admin/alerts/clear" in page.text
+    clear_reject = client.post("/v1/admin/alerts/clear", json={})
+    assert clear_reject.status_code in (400, 503)
     assert "finbertExplain" in page.text
     rules = page.text.split('id="rules"', 1)[1].split("</p>", 1)[0]
     assert rules.index('id="rulesBefore"') < rules.index('id="finbertExplain"') < rules.index('id="priceExplain"') < rules.index('id="rulesAfter"')

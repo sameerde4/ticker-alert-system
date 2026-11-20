@@ -2,6 +2,7 @@ from app.symbols import (
     from_alpaca_symbol,
     load_symbols,
     normalize_symbol,
+    prioritize_symbols,
     shard_symbols,
     to_alpaca_symbol,
 )
@@ -38,3 +39,31 @@ def test_shard_symbols_handles_empty_and_small_lists():
 
 def test_load_symbols_dedupes_and_uppercases():
     assert load_symbols(symbols_csv="aapl,AAPL, msft ", symbols_file="") == ["AAPL", "MSFT"]
+
+
+def test_prioritize_symbols_pins_websocket_names_first():
+    universe = ["MSFT", "AAPL", "GOOGL", "XOM", "UNH"]
+    assert prioritize_symbols(["AAPL", "NVDA", "MSFT"], universe) == [
+        "AAPL",
+        "NVDA",
+        "MSFT",
+        "GOOGL",
+        "XOM",
+        "UNH",
+    ]
+
+
+def test_split_ws_rest_uses_only_chosen_symbols():
+    from app.symbols import split_ws_rest
+
+    universe = ["AAPL", "MSFT", "NVDA", "GOOGL", "XOM"]
+    ws, rest = split_ws_rest(
+        universe,
+        ws_priority=["NVDA", "AAPL", "ZZZZ"],
+        limit=30,
+        rest_enabled=True,
+    )
+    assert ws == ["NVDA", "AAPL", "ZZZZ"]
+    assert rest == ["MSFT", "GOOGL", "XOM"]
+    ws_capped, _ = split_ws_rest(universe, ws_priority=["AAPL", "MSFT", "NVDA"], limit=2)
+    assert ws_capped == ["AAPL", "MSFT"]

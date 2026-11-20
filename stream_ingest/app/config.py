@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     alpaca_api_secret_key: str = ""
     alpaca_feed: str = "delayed_sip"
     alpaca_ws_symbol_limit: int = 30
+    # Comma list pinned to the front of the universe so they take the WebSocket slots.
+    alpaca_ws_priority_symbols: str = ""
     alpaca_ws_url_template: str = "wss://stream.data.alpaca.markets/v2/{feed}"
     alpaca_data_url: str = "https://data.alpaca.markets"
 

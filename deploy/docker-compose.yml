@@ -163,10 +163,10 @@ services:
       - alpaca.env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      # Demo set — keep WebSocket slots at 0 so we don't fight Vajrastra for the
-      # Basic plan connection limit; REST delayed SIP still feeds Kafka.
-      SYMBOLS: ${DEMO_SYMBOLS:-AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,JPM,XOM,UNH}
-      ALPACA_WS_SYMBOL_LIMIT: "0"
+      # Full S&P from symbols file. Settings → Live WebSocket picks up to 30 names
+      # (polled via LIVE_CONTROL_URL). Env priority is fallback if the API is down.
+      ALPACA_WS_PRIORITY_SYMBOLS: ${DEMO_SYMBOLS:-AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,JPM,XOM,UNH}
+      ALPACA_WS_SYMBOL_LIMIT: "30"
       REST_POLL_ENABLED: "true"
       REST_POLL_SECONDS: "60"
       LIVE_CONTROL_URL: http://api:8010/v1/live/status

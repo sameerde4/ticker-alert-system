@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_PRICE_MOVE_THRESHOLD = 0.03
 DEFAULT_SENTIMENT_THRESHOLD = 25.0
+# Alpaca Basic WebSocket subscription cap (one connection per account).
+LIVE_WS_SYMBOL_LIMIT = 30
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LAKE_ROOT = str(_REPO_ROOT / "data" / "lake")
 

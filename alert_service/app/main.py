@@ -17,6 +17,7 @@ from .screener import DEFAULT_SCREENER_LIMIT, run_screener
 from .config import (
     DEFAULT_PRICE_MOVE_THRESHOLD,
     DEFAULT_SENTIMENT_THRESHOLD,
+    LIVE_WS_SYMBOL_LIMIT,
     price_fraction_from_percent,
     sentiment_threshold_value,
     settings,
@@ -25,13 +26,18 @@ from .db import db
 from .sectors import ensure_symbol_sectors
 from .perplexity_catalog import known_model, model_groups
 from .store import (
+    add_live_ws_symbol,
     add_symbol,
+    delete_alerts_below_abs_change,
+    delete_all_alerts,
     get_alert_rules,
     list_alerts,
+    list_live_ws_symbols,
     list_watchlist,
     live_consumer_status,
     perplexity_api_key,
     perplexity_model,
+    remove_live_ws_symbol,
     remove_symbol,
     save_alert_rules,
     save_perplexity_api_key,
@@ -81,6 +87,13 @@ class WatchlistIn(BaseModel):
 
 class RebuildIn(BaseModel):
     days: int
+
+
+class ClearAlertsIn(BaseModel):
+    """Wipe saved alerts. ``clear_all`` or delete rows under ``below_percent`` (e.g. 3 = 3%)."""
+
+    clear_all: bool = False
+    below_percent: float | None = None
 
 
 class ScreenerIn(BaseModel):
@@ -248,6 +261,49 @@ async def delete_watchlist(symbol: str) -> dict[str, bool]:
     return {"removed": removed}
 
 
+@app.get("/v1/live/ws-symbols")
+async def get_live_ws_symbols() -> dict[str, object]:
+    """Symbols that stream on Alpaca WebSocket; the rest of the S&P uses REST."""
+    async with _pool().acquire() as conn:
+        try:
+            symbols = await list_live_ws_symbols(conn)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Live WebSocket list is unavailable. Apply migration 017_live_ws_symbols.",
+            ) from exc
+    return {"symbols": symbols, "limit": LIVE_WS_SYMBOL_LIMIT}
+
+
+@app.post("/v1/live/ws-symbols")
+async def post_live_ws_symbol(body: WatchlistIn) -> dict:
+    try:
+        symbol = normalize_symbol(body.symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not known_universe_symbol(symbol):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{symbol} is not an S&P 500 constituent.",
+        )
+    async with _pool().acquire() as conn:
+        try:
+            return await add_live_ws_symbol(conn, symbol)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/v1/live/ws-symbols/{symbol}")
+async def delete_live_ws_symbol(symbol: str) -> dict[str, bool]:
+    try:
+        normalized = normalize_symbol(symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    async with _pool().acquire() as conn:
+        removed = await remove_live_ws_symbol(conn, normalized)
+    return {"removed": removed}
+
+
 @app.get("/v1/alerts")
 async def get_alerts(limit: int = 100) -> dict[str, list]:
     capped = min(max(limit, 1), 1000)
@@ -322,6 +378,31 @@ async def post_rebuild(body: RebuildIn) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await rebuild_history(_pool(), days=body.days)
+
+
+@app.post("/v1/admin/alerts/clear")
+async def post_clear_alerts(body: ClearAlertsIn) -> dict[str, object]:
+    """Delete all alerts, or only those whose |price change| is under a percent floor."""
+    if body.clear_all:
+        async with _pool().acquire() as conn:
+            deleted = await delete_all_alerts(conn)
+        return {"deleted": deleted, "mode": "all"}
+    if body.below_percent is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Set clear_all, or below_percent (for example 3 to drop moves under 3%).",
+        )
+    try:
+        fraction = price_fraction_from_percent(body.below_percent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    async with _pool().acquire() as conn:
+        deleted = await delete_alerts_below_abs_change(conn, fraction)
+    return {
+        "deleted": deleted,
+        "mode": "below_percent",
+        "below_percent": body.below_percent,
+    }
 
 
 @app.get("/v1/admin/lake/status")

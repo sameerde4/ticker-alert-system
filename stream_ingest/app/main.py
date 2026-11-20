@@ -6,18 +6,22 @@ import argparse
 import asyncio
 import logging
 import signal
+from typing import Any
 
 from .alpaca_rest import AlpacaRestBarPoller, probe_latest_bars
 from .alpaca_ws import AlpacaBarStream
 from .config import settings
 from .publisher import KafkaBarPublisher, StdoutPublisher
-from .symbols import load_symbols, shard_symbols
+from .symbols import load_symbols, prioritize_symbols, shard_symbols, split_ws_rest
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("stream_ingest")
+
+# Soft cap aligned with Alpaca Basic; API also enforces this.
+_WS_HARD_CAP = 30
 
 
 def parse_args() -> argparse.Namespace:
@@ -34,11 +38,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def _live_is_armed() -> bool:
-    """True when Live alerts are armed (or control URL is unset)."""
+async def _fetch_live_control() -> dict[str, Any]:
+    """Poll Live status (armed + optional ws_symbols from Settings)."""
     url = (settings.live_control_url or "").strip()
     if not url:
-        return True
+        return {"armed": True, "ws_symbols": None, "ws_limit": None}
     import httpx
 
     try:
@@ -46,12 +50,75 @@ async def _live_is_armed() -> bool:
             response = await client.get(url)
             response.raise_for_status()
             payload = response.json()
-        if "armed" in payload:
-            return bool(payload["armed"])
-        return bool(payload.get("enabled"))
+        if not isinstance(payload, dict):
+            return {"armed": True, "ws_symbols": None, "ws_limit": None}
+        armed = bool(payload["armed"]) if "armed" in payload else bool(payload.get("enabled"))
+        ws_raw = payload.get("ws_symbols")
+        ws_symbols = (
+            [str(item).strip().upper() for item in ws_raw if str(item).strip()]
+            if isinstance(ws_raw, list)
+            else None
+        )
+        limit_raw = payload.get("ws_limit")
+        try:
+            ws_limit = int(limit_raw) if limit_raw is not None else None
+        except (TypeError, ValueError):
+            ws_limit = None
+        return {"armed": armed, "ws_symbols": ws_symbols, "ws_limit": ws_limit}
     except Exception as exc:
-        log.warning("Live control poll failed (%s); treating as armed.", exc)
-        return True
+        log.warning("Live control poll failed (%s); treating as armed with env defaults.", exc)
+        return {"armed": True, "ws_symbols": None, "ws_limit": None}
+
+
+async def _live_is_armed() -> bool:
+    """True when Live alerts are armed (or control URL is unset)."""
+    payload = await _fetch_live_control()
+    return bool(payload.get("armed"))
+
+
+def _env_ws_priority() -> list[str]:
+    return load_symbols(symbols_csv=settings.alpaca_ws_priority_symbols, symbols_file="")
+
+
+def _resolve_feed(
+    universe: list[str],
+    control: dict[str, Any],
+    *,
+    rest_only: bool,
+    ws_only: bool,
+) -> tuple[list[str], list[str], int, str]:
+    """Return (ws_symbols, rest_symbols, limit, fingerprint)."""
+    limit = control.get("ws_limit")
+    if limit is None:
+        limit = settings.alpaca_ws_symbol_limit
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = settings.alpaca_ws_symbol_limit
+    limit = max(0, min(_WS_HARD_CAP, limit))
+
+    api_ws = control.get("ws_symbols")
+    if isinstance(api_ws, list) and api_ws:
+        priority = [str(item).strip().upper() for item in api_ws if str(item).strip()]
+    else:
+        priority = _env_ws_priority()
+        if not priority:
+            # Legacy: first N of the universe when no Settings list / env priority.
+            priority = list(universe)
+
+    if rest_only or limit == 0:
+        ws_symbols: list[str] = []
+        rest_symbols = list(universe) if settings.rest_poll_enabled and not ws_only else []
+    else:
+        ws_symbols, rest_symbols = split_ws_rest(
+            universe,
+            ws_priority=priority,
+            limit=limit,
+            rest_enabled=settings.rest_poll_enabled and not ws_only,
+        )
+
+    fingerprint = f"{limit}|{','.join(ws_symbols)}"
+    return ws_symbols, rest_symbols, limit, fingerprint
 
 
 async def run(args: argparse.Namespace) -> None:
@@ -65,6 +132,9 @@ async def run(args: argparse.Namespace) -> None:
         symbols_csv=args.symbols or settings.symbols,
         symbols_file="" if (args.symbols or settings.symbols) else settings.symbols_file,
     )
+    env_priority = _env_ws_priority()
+    if env_priority and not (args.symbols or settings.symbols):
+        symbols = prioritize_symbols(env_priority, symbols)
     if not symbols:
         raise SystemExit("No symbols loaded. Check SYMBOLS, SYMBOLS_FILE, or data/sp500_symbols.txt.")
 
@@ -84,36 +154,49 @@ async def run(args: argparse.Namespace) -> None:
         except NotImplementedError:
             pass
 
-    control = (settings.live_control_url or "").strip()
-    if control:
-        log.info("Producer follows Live arm switch at %s", control)
+    control_url = (settings.live_control_url or "").strip()
+    if control_url:
+        log.info("Producer follows Live arm switch + WebSocket list at %s", control_url)
 
     while not stop.is_set():
-        if control and not await _live_is_armed():
+        control = await _fetch_live_control()
+        if control_url and not control.get("armed"):
             log.info("Live alerts disarmed — producer idle.")
             try:
                 await asyncio.wait_for(stop.wait(), timeout=max(1.0, settings.live_control_poll_seconds))
             except asyncio.TimeoutError:
                 continue
-            break
-        await _run_publish_session(args, symbols, stop=stop)
+            continue
+
+        ws_symbols, rest_symbols, _limit, fingerprint = _resolve_feed(
+            symbols,
+            control,
+            rest_only=args.rest_only,
+            ws_only=args.ws_only,
+        )
+        await _run_publish_session(
+            args,
+            universe=symbols,
+            ws_symbols=ws_symbols,
+            rest_symbols=rest_symbols,
+            fingerprint=fingerprint,
+            stop=stop,
+        )
         if stop.is_set():
             break
-        if not control:
+        if not control_url:
             break
 
 
 async def _run_publish_session(
-    args: argparse.Namespace, symbols: list[str], *, stop: asyncio.Event
+    args: argparse.Namespace,
+    *,
+    universe: list[str],
+    ws_symbols: list[str],
+    rest_symbols: list[str],
+    fingerprint: str,
+    stop: asyncio.Event,
 ) -> None:
-    # 0 = REST-only (useful when another app already holds the WebSocket slot).
-    limit = max(0, settings.alpaca_ws_symbol_limit)
-    ws_symbols = symbols[:limit]
-    rest_symbols = symbols[limit:] if settings.rest_poll_enabled and not args.ws_only else []
-    if args.rest_only:
-        ws_symbols = []
-        rest_symbols = symbols if settings.rest_poll_enabled else []
-
     dry_run = args.dry_run or settings.dry_run
     publisher = StdoutPublisher() if dry_run else KafkaBarPublisher(
         bootstrap=settings.kafka_bootstrap_servers,
@@ -122,31 +205,27 @@ async def _run_publish_session(
 
     log.info(
         "Universe=%s feed=%s websocket=%s rest=%s dry_run=%s topic=%s",
-        len(symbols),
+        len(universe),
         settings.alpaca_feed,
         len(ws_symbols),
         len(rest_symbols),
         dry_run,
         settings.kafka_topic_bars,
     )
-    if len(symbols) > limit and not rest_symbols and not args.rest_only:
-        log.warning(
-            "Alpaca Basic WebSocket cap is %s symbols. Only the first %s will stream. "
-            "Enable REST_POLL_ENABLED=1 to cover the rest of the S&P 500 on free.",
-            limit,
-            limit,
-        )
+    if ws_symbols:
+        log.info("WebSocket symbols: %s", ",".join(ws_symbols))
 
     await publisher.start()
     tasks: list[asyncio.Task] = []
     streams: list[AlpacaBarStream] = []
     poller: AlpacaRestBarPoller | None = None
-    control = (settings.live_control_url or "").strip()
+    control_url = (settings.live_control_url or "").strip()
 
     try:
         if ws_symbols and not args.rest_only:
             # One shard only on free Basic. Extra shards are usually rejected.
-            for shard in shard_symbols(ws_symbols, limit=limit)[:1]:
+            shard_limit = max(1, len(ws_symbols))
+            for shard in shard_symbols(ws_symbols, limit=shard_limit)[:1]:
                 stream = AlpacaBarStream(
                     url=settings.ws_url,
                     key_id=settings.alpaca_api_key_id,
@@ -174,13 +253,23 @@ async def _run_publish_session(
         if not tasks:
             raise SystemExit("Nothing to run. Check --ws-only / --rest-only and symbol lists.")
 
-        async def _watch_disarm() -> None:
-            if not control:
+        async def _watch_control() -> None:
+            if not control_url:
                 await stop.wait()
                 return
             while not stop.is_set():
-                if not await _live_is_armed():
+                control = await _fetch_live_control()
+                if not control.get("armed"):
                     log.info("Live alerts disarmed — stopping producer session.")
+                    return
+                _, _, _, next_fp = _resolve_feed(
+                    universe,
+                    control,
+                    rest_only=args.rest_only,
+                    ws_only=args.ws_only,
+                )
+                if next_fp != fingerprint:
+                    log.info("WebSocket symbol list changed — restarting producer session.")
                     return
                 try:
                     await asyncio.wait_for(
@@ -189,7 +278,7 @@ async def _run_publish_session(
                 except asyncio.TimeoutError:
                     continue
 
-        watcher = asyncio.create_task(_watch_disarm(), name="live-arm-watch")
+        watcher = asyncio.create_task(_watch_control(), name="live-control-watch")
         done, pending = await asyncio.wait(
             [*tasks, watcher],
             return_when=asyncio.FIRST_COMPLETED,
@@ -199,43 +288,39 @@ async def _run_publish_session(
         for task in tasks:
             task.cancel()
         for stream in streams:
-            stream.request_stop()
+            stream.stop()
         if poller is not None:
-            poller.request_stop()
+            poller.stop()
         watcher.cancel()
         await asyncio.gather(*tasks, watcher, return_exceptions=True)
-        for task in pending:
-            task.cancel()
     finally:
         await publisher.stop()
 
 
 async def run_probe(symbols: list[str], *, dry_run: bool) -> None:
     """One-shot REST check so a closed market does not look like a broken stream."""
-    if not dry_run:
-        log.info("Probe prints to stdout. Use a normal run (no --probe) once Kafka is up.")
-    publisher = StdoutPublisher()
+    rows = await probe_latest_bars(
+        data_url=settings.alpaca_data_url,
+        key_id=settings.alpaca_api_key_id,
+        secret_key=settings.alpaca_api_secret_key,
+        feed=settings.alpaca_feed,
+        symbols=symbols,
+    )
+    publisher = StdoutPublisher() if dry_run else KafkaBarPublisher(
+        bootstrap=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_topic_bars,
+    )
     await publisher.start()
     try:
-        bars = await probe_latest_bars(
-            data_url=settings.alpaca_data_url,
-            key_id=settings.alpaca_api_key_id,
-            secret_key=settings.alpaca_api_secret_key,
-            feed=settings.alpaca_feed,
-            symbols=symbols,
-        )
-        if not bars:
-            log.warning("No delayed bars in the lookback window. Check symbols and Alpaca keys.")
-        for bar in bars:
+        for bar in rows:
             await publisher.publish(bar)
-        log.info("Probe published %s bar(s).", len(bars))
+        log.info("Probe published %s bar(s).", len(rows))
     finally:
         await publisher.stop()
 
 
 def main() -> None:
-    args = parse_args()
-    asyncio.run(run(args))
+    asyncio.run(run(parse_args()))
 
 
 if __name__ == "__main__":
