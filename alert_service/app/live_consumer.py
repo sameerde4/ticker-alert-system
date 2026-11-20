@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
 class LiveBarConsumer:
     """Consume ``prices.raw.bars`` for the S&P 500: percent + forest, then news upgrade.
 
-    Home Recent (S&P 500 scope) is fed by this path. Watchlist is only the focus set
+    Home Live alerts (S&P 500 scope) is fed by this path. Watchlist is only the focus set
     for Scan today — not a filter on which Kafka bars become live alerts.
     """
 

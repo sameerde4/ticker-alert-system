@@ -965,27 +965,27 @@
     <section class="card">
       <div class="section-head">
         <div class="heading-with-tip">
-          <h2>Recent alerts</h2>
+          <h2>Live alerts</h2>
           <button
             type="button"
             class="tip-btn"
             id="recentTip"
-            title="Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist. Full list is always on Alert History."
-            aria-label="About Recent alerts: Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist. Full list is always on Alert History."
+            title="Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist symbols. Watchlist Scan today stays on that tab; Alert History has the full list."
+            aria-label="About Live alerts: Alerts from the live Kafka stream. They stay here across refresh until you clear. Use the scope switch for the full S&amp;P 500 feed or only your watchlist symbols. Watchlist Scan today stays on that tab; Alert History has the full list."
           >?</button>
         </div>
         <div class="section-head-actions">
           <button type="button" class="ghost" id="enableNotify">Enable desktop notifications</button>
-          <div class="scope-toggle" role="group" aria-label="Recent alerts scope">
-            <button type="button" class="scope-opt active" data-scope="sp500" id="homeScopeSp500" title="Show recent alerts for the full S&amp;P 500 feed">S&amp;P 500</button>
-            <button type="button" class="scope-opt" data-scope="watchlist" id="homeScopeWatchlist" title="Show only alerts for symbols on your watchlist">Watchlist</button>
+          <div class="scope-toggle" role="group" aria-label="Live alerts scope">
+            <button type="button" class="scope-opt active" data-scope="sp500" id="homeScopeSp500" title="Show live alerts for the full S&amp;P 500 feed">S&amp;P 500</button>
+            <button type="button" class="scope-opt" data-scope="watchlist" id="homeScopeWatchlist" title="Show only live alerts for symbols on your watchlist">Watchlist</button>
           </div>
           <button type="button" class="ghost" id="clearRecent">Clear alerts</button>
         </div>
       </div>
       <p class="status" id="homeStatus"></p>
       <div id="alerts"></div>
-      <p class="empty" id="empty">No recent alerts yet. Live opens price days when the move clears the Settings threshold or Isolation Forest fires, then checks near-term news. Use Watchlist → Scan today for an on-demand pass over your focus set.</p>
+      <p class="empty" id="empty">No live alerts yet. Live opens price days when the move clears the Settings threshold or Isolation Forest fires, then checks near-term news. Use Watchlist → Scan today for an on-demand pass over your focus set.</p>
     </section>
     </section>
     <section id="watchlistTab" class="tab-panel" hidden>
@@ -996,8 +996,8 @@
           <button
             type="button"
             class="tip-btn"
-            title="Choose S&amp;P 500 constituents, then Scan today. Before the open (and on weekends) that pass covers the last completed session; during/after the cash session it covers today. Same price move threshold and Isolation Forest registry as live, plus FinBERT. Home keeps the live Recent feed separate."
-            aria-label="About Watchlist: Choose S&amp;P 500 constituents, then Scan today. Before the open (and on weekends) that pass covers the last completed session; during/after the cash session it covers today. Same price move threshold and Isolation Forest registry as live, plus FinBERT. Home keeps the live Recent feed separate."
+            title="Choose S&amp;P 500 constituents, then Scan today. Before the open (and on weekends) that pass covers the last completed session; during/after the cash session it covers today. Same price move threshold and Isolation Forest registry as live, plus FinBERT. Home keeps the Live alerts feed separate."
+            aria-label="About Watchlist: Choose S&amp;P 500 constituents, then Scan today. Before the open (and on weekends) that pass covers the last completed session; during/after the cash session it covers today. Same price move threshold and Isolation Forest registry as live, plus FinBERT. Home keeps the Live alerts feed separate."
           >?</button>
         </div>
       </div>
@@ -1021,7 +1021,7 @@
           <button
             type="button"
             class="tip-btn"
-            title="Shows what the last Scan today wrote for your watchlist (percent threshold, Isolation Forest, and FinBERT). Home Recent stays on the live Kafka feed. Last results are kept in this browser across refresh."
+            title="Shows what the last Scan today wrote for your watchlist (percent threshold, Isolation Forest, and FinBERT). Home Live alerts stay on the live Kafka feed. Last results are kept in this browser across refresh."
             aria-label="About Watchlist results: Shows what the last Scan today wrote for your watchlist. Last results are kept in this browser across refresh."
           >?</button>
         </div>
@@ -1059,7 +1059,7 @@
           <button
             type="button"
             class="tip-btn"
-            title="Cards from the last screener run. Not written to History or Home Recent. Kept in this browser across refresh."
+            title="Cards from the last screener run. Not written to History or Home Live alerts. Kept in this browser across refresh."
             aria-label="About Screener results: Cards from the last screener run. Not written to History. Kept in this browser across refresh."
           >?</button>
         </div>
@@ -1249,7 +1249,7 @@
     const finbertModal = document.querySelector("#finbertModal");
     const priceModal = document.querySelector("#priceModal");
     const clearRecentBtn = document.querySelector("#clearRecent");
-    // Recent alerts persist across refresh until the user clears them (History still has everything).
+    // Live alerts persist across refresh until the user clears them (History still has everything).
     const HOME_CLEARED_KEY = "tickerAlertHomeClearedAt";
     const HOME_SCOPE_KEY = "tickerAlertHomeScope";
     const LAST_CLOSED_KEY = "tickerAlertLastClosedAt";
@@ -1350,8 +1350,9 @@
     const recentTipBtn = document.querySelector("#recentTip");
     const enableNotifyBtn = document.querySelector("#enableNotify");
     const RECENT_TIP_BASE =
-      "Incoming alerts stay here across refresh until you clear. Use the scope switch for the full S&P 500 feed "
-      + "or only your watchlist. Full list is always on Alert History.";
+      "Alerts from the live Kafka stream. They stay here across refresh until you clear. "
+      + "Use the scope switch for the full S&P 500 feed or only your watchlist symbols. "
+      + "Watchlist Scan today stays on that tab; Alert History has the full list.";
     let knownAlertIds = new Set();
     let alertsBootstrapped = false;
     let unreadAlertCount = 0;
@@ -1367,7 +1368,7 @@
     function setRecentTip() {
       if (!recentTipBtn) return;
       recentTipBtn.title = RECENT_TIP_BASE;
-      recentTipBtn.setAttribute("aria-label", "About Recent alerts: " + RECENT_TIP_BASE);
+      recentTipBtn.setAttribute("aria-label", "About Live alerts: " + RECENT_TIP_BASE);
     }
 
     function updateNotifyHint(permission) {
@@ -1576,12 +1577,12 @@
           return "Watchlist scope is on, but your watchlist is empty. Add symbols on the Watchlist tab, or switch back to S&P 500.";
         }
         return latestAlerts.length > 0
-          ? "No recent alerts for your watchlist symbols. Switch to S&P 500 to see the broader feed, or Scan today on Watchlist."
-          : "No recent alerts for your watchlist yet. Live alerts for those symbols show up here.";
+          ? "No live alerts for your watchlist symbols. Switch to S&P 500 to see the broader feed, or Scan today on Watchlist."
+          : "No live alerts for your watchlist yet. Live Kafka alerts for those symbols show up here.";
       }
       return latestAlerts.length > 0
-        ? "No recent alerts on Home. Live alerts appear here; Watchlist Scan today stays on that tab. History has the full list."
-        : "No recent alerts yet. Live alerts show up here; use Watchlist to Scan today for specific tickers.";
+        ? "No live alerts on Home for this scope. Watchlist Scan today stays on that tab. History has the full list."
+        : "No live alerts yet. The Kafka stream shows up here; use Watchlist to Scan today for specific tickers.";
     }
 
     function clearRecentAlerts() {
@@ -1591,7 +1592,7 @@
       lastHomeAlertFingerprint = "";
       clearUnreadBadge();
       renderAlerts(alertsForHome(latestAlerts), { force: true });
-      setHomeStatus("Recent alerts cleared. New ones will still appear here; History is unchanged.");
+      setHomeStatus("Live alerts cleared. New ones will still appear here; History is unchanged.");
     }
 
     function setHomeScope(scope) {
@@ -1601,8 +1602,8 @@
       renderAlerts(alertsForHome(latestAlerts), { force: true });
       setHomeStatus(
         homeScope === "watchlist"
-          ? "Showing recent alerts for your watchlist only."
-          : "Showing recent alerts for the full S&P 500 feed.",
+          ? "Showing live alerts for your watchlist only."
+          : "Showing live alerts for the full S&P 500 feed.",
       );
     }
 
@@ -3188,7 +3189,7 @@
         }
         setStatus(
           "Scan finished. " + checkAlerts.length + " alert row(s) written."
-            + " Watchlist results stay on this tab; Home Recent alerts stay on the live feed."
+            + " Watchlist results stay on this tab; Home Live alerts stay on the live feed."
             + note + reasoningNote(result) + notifyNote,
           Boolean(notifyNote) && permission !== "granted",
         );

@@ -4,7 +4,7 @@ CISC 525 deck and PDF, 30 August 2026. *Real-Time Equity Anomaly & Sentiment Fus
 
 This note is the **planned → landed** story for the presentation. The finished system itself is documented in detail in [architecture.md](architecture.md) (system overview, Live / Watchlist, lake, lambda, batch ELT, streaming ETL, end-to-end sequence). Vendor and gate tables are in [data-sources.md](data-sources.md).
 
-**S&P 500 Radar** is what we built: one alert per symbol per day for the **S&P 500**, with Live (Kafka session feed → Home Recent) and Watchlist (focus set + Scan today → Watchlist results), Isolation Forest trained on a local price lake, FinBERT on near-term headlines, and optional Perplexity wording after the decision. The course still gets a big-data shape — lake, batch train, log, stream apply, AI after the fact — runnable on one machine.
+**S&P 500 Radar** is what we built: one alert per symbol per day for the **S&P 500**, with Live (Kafka session feed → Home Live alerts) and Watchlist (focus set + Scan today → Watchlist results), Isolation Forest trained on a local price lake, FinBERT on near-term headlines, and optional Perplexity wording after the decision. The course still gets a big-data shape — lake, batch train, log, stream apply, AI after the fact — runnable on one machine.
 
 ## How to use this document in the presentation
 
@@ -54,7 +54,7 @@ Keep batch and streaming as two engines. Give them one **price/volume** feature 
 |---|---|
 | Two engines, one feature list | `batch_train` fits the forest on price history. The live scorer (and Watchlist) scores the same features. |
 | Lake plus log | `data/lake` holds training prices. Docker Kafka holds live bars. |
-| Live plus Watchlist | Live → Home Recent. Scan today → Watchlist results. Same `alerts` table; Origin separates them. |
+| Live plus Watchlist | Live → Home Live alerts. Scan today → Watchlist results. Same `alerts` table; Origin separates them. |
 | Local demo, not AWS prod | Same architecture boxes; S3/Aurora/Dataproc are optional slide aliases. |
 | Three outcomes | News, price, or both. Forest does not require a headline. |
 | AI after the decision | Perplexity explains news / news+price rows. It does not create the alert. |
@@ -104,7 +104,7 @@ Deterministic sentence from alert fields stays as the fallback (and as the only 
 | Anomaly detection | **Keep → landed** | Registered forest on live (and Watchlist) price/volume vector. |
 | Correlation | **Keep → landed** | Price first, then headline grade on symbol + slice. Allow price-only and news-only. |
 | Perplexity summary | **Keep → landed** | Richer news / news+price after the decision; deterministic fallback. |
-| API and dashboard | **Keep → landed** | Home Recent, Watchlist results, History with Origin. |
+| API and dashboard | **Keep → landed** | Home Live alerts, Watchlist results, History with Origin. |
 | Notification | **Keep → landed** | Desktop + tab badge (not Slack/email). |
 | AWS production deploy | **Drop for demo** | Local stack proves the architecture; cloud names remain slide aliases. |
 
@@ -177,7 +177,7 @@ A reviewer should point at [architecture.md](architecture.md) and name the batch
 
 - **Batch:** `data/lake` raw prices, `batch_train` (Spark role), curated Parquet, Isolation Forest, registry — **training only**. Auto first-boot land+train; daily **Refresh lake + retrain** (skip when current through last completed session); Settings overrides.
 - **Watchlist Scan today:** focus session = last completed weekday before the open / weekends; today during RTH or after the close.
-- **Streaming:** Docker Kafka, `python -m app.live` percent-rule + Isolation Forest, live **price → same-day headline grade**, `live_feature_rows`, Home Recent, desktop notifications.
+- **Streaming:** Docker Kafka, `python -m app.live` percent-rule + Isolation Forest, live **price → same-day headline grade**, `live_feature_rows`, Home Live alerts, desktop notifications.
 - **Watchlist product path:** focus set, same **percent or forest** gate + headline grade, Watchlist results, `alerts.origin`, rebuild.
 - **News join:** pull near-term Yahoo headlines after a price/forest hit (or on Scan today); no Kafka news topic.
 - **Handoff:** live (and Watchlist) score with the model `batch_train` fitted on price history.

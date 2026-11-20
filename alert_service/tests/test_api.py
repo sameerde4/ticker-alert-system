@@ -210,7 +210,9 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     assert "wrote Together." not in page.text
     assert "The percent still applies" not in page.text
     assert "<h2>Watchlist</h2>" in page.text
-    assert "<h2>Recent alerts</h2>" in page.text
+    assert "<h2>Live alerts</h2>" in page.text
+    assert "About Live alerts:" in page.text
+    assert "live Kafka stream" in page.text
     assert 'id="clearRecent"' in page.text
     assert "Clear alerts" in page.text
     assert "tip-btn" in page.text

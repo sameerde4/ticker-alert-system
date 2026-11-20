@@ -44,7 +44,7 @@ def test_the_audit_keeps_batch_streaming_a_model_and_perplexity():
     assert "Live plus Watchlist" in audit
     assert "training only" in audit.lower()
     assert "no Kafka news topic" in audit.lower() or "Kafka news topic" in audit
-    assert "Home Recent" in audit
+    assert "Home Live alerts" in audit or "Home Recent" in audit
     assert "Watchlist results" in audit
     assert "Screener" not in audit
     assert "/v1/screener/run" not in audit
@@ -71,9 +71,10 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "## Watchlist Scan today" in architecture
     assert "Watchlist results" in architecture
     assert "Screener" not in architecture
-    assert "Recent alerts" in architecture
+    assert "Live alerts" in architecture
+    assert "<h2>Recent alerts</h2>" not in architecture
     assert "S&P 500 / Watchlist" in architecture or "scope: full S&P 500 or Watchlist" in architecture
-    assert "Home Recent" in architecture
+    assert "Home Live alerts" in architecture
     assert "alerts.origin" in architecture
     assert "training lake" in architecture.lower() or "training only" in architecture.lower()
     assert "Spark-role curated feature table" in architecture
@@ -245,8 +246,11 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "renderWatchlistCheckAlerts" in ui
     assert "watchlistTab" in ui
     assert "tip-btn" in ui
-    assert "<h2>Recent alerts</h2>" in ui
-    assert "Incoming alerts stay here across refresh until you clear" in ui
+    assert "<h2>Live alerts</h2>" in ui
+    assert "About Live alerts:" in ui
+    assert "live Kafka stream" in ui
+    assert "Alerts from the live Kafka stream" in ui
+    assert "stay here across refresh until you clear" in ui
     assert "Full list is always on Alert History." in ui
     assert "When new live alerts arrive, this tab gets a count badge" not in ui
     assert "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive." not in ui
@@ -318,7 +322,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "demo stack is **local**" in sources or "demo stack is local" in sources.lower()
     assert "BTC-USD" not in sources
     assert "Watchlist Scan today" in sources
-    assert "Home Recent" in sources
+    assert "Home Live alerts" in sources or "Home Recent" in sources
     assert "training only" in sources.lower() or "Isolation Forest training" in sources
     assert "Origin" in sources
     assert "Screener" not in sources
