@@ -5,13 +5,13 @@
 | Input | Source | Stored as |
 |---|---|---|
 | Daily OHLCV (Watchlist Scan today / rebuild) | Yahoo Finance through `yfinance` | `daily_bars` — focus-session product pass (today during/after RTH; last completed session pre-open / weekend) for the focus set (not the training lake) |
-| Live / delayed minute bars | Alpaca `delayed_sip` via [`stream_ingest/`](../stream_ingest/) onto Kafka (`prices.raw.bars`). Settings → **Live WebSocket** picks ≤30 names for push (Basic cap); REST fills the rest every 60s with **cash-open + latest** backfill from 9:30 ET on arm | Consumed by `python -m app.live` for the **full S&P 500** (not Watchlist-only): open→last **percent** floor; forest under that floor needs news support; same-day headline grade; `origin=live`; `live_feature_rows`; Home Live alerts (arm switch + heartbeat; Clear uses `updated_at`); Settings → **Clear alerts** can wipe all or under a % |
+| Live / delayed minute bars | Alpaca `delayed_sip` via [`stream_ingest/`](../stream_ingest/) onto Kafka (`prices.raw.bars`). Settings → **Live WebSocket** picks ≤30 names for push (Basic cap); REST fills the rest every 60s with **cash-open + latest** backfill from 9:30 ET on arm | Consumed by `python -m app.live` for the **full S&P 500** (not Watchlist-only): open→last **percent** floor; forest under that floor needs news support; same-day headline grade; `origin=live`; `live_feature_rows`; Home Live alerts (arm switch + heartbeat; Clear uses `updated_at`); Settings → **Alert history** can clear under a %, clear all, clear Live only, clear Watchlist only, or rebuild Watchlist |
 | Historical daily OHLCV (S&P 500, ~1 year) | Yahoo Finance via automatic first-boot land, [`batch_ingest/`](../batch_ingest/), or Settings → **Land** | Lake Parquet for **Isolation Forest training**: `data/lake/raw/prices/daily/symbol=TICKER/` |
 | Incremental lake refresh | Per-symbol resume from latest lake `dt` (lookback capped ~14 calendar days) + `batch_train` when new rows land; skips Yahoo + retrain when already current through the last completed session (pre-open aware — before 4:00 PM Eastern “today” is not required; Kafka bars do not write the lake). Daily auto schedule; Settings → **Refresh lake + retrain** (finished stamp in US Eastern); CLI `--days 14 --merge` | Updated raw lake + new Isolation Forest registry when needed; live reloads on next rules refresh |
 | Near-term headlines | Yahoo quote news, then Yahoo Search when quote news is empty | `headlines` |
 | Sentiment | Local FinBERT. Score is 0–100 (50 neutral). Confidence is the winning class probability | `headlines.sentiment_score`, plus confidence and class shares on the alert |
 
-FinBERT is the ProsusAI/finbert model, loaded locally with PyTorch. The first use downloads the weights. Later scoring does not call a hosted analysis API. The model returns positive, negative, and neutral probabilities. The score shown in the app is 0 to 100: 50 plus 50 times positive minus negative. Confidence is the winning class probability. A headline joins a news alert when that score is at least 25 points from 50. The alert score is the average of the headlines that clear that gate.
+FinBERT is the ProsusAI/finbert model, loaded locally with PyTorch. The first use downloads the weights. Later scoring does not call a hosted analysis API. The model returns positive, negative, and neutral probabilities. The score shown in the app is 0 to 100: 50 plus 50 times positive minus negative. Confidence is the winning class probability. **Sentiment on the card is the climate average of all near-term headlines.** A news side joins when at least one headline is ≥25 points from 50 (default) and lines up with the move, **or** when that full climate average clears half that distance (soft climate join; default ~12.5 from 50 — needed because an average of below-gate scores cannot clear the full headline gate). Polarized coverage (headlines on both sides of 50) marks Direction as mixed. On a price-led day where neither join clears, scored headlines are still listed as climate context.
 
 A headline is stored when its title names the ticker or the company's first distinctive name word (Yahoo `shortName`, so `AAPL` also matches "Apple"). Yahoo often tags unrelated market stories with the symbol. Those are not alerts. Class-share tickers are stored in Yahoo form: `BRK.B` becomes `BRK-B`.
 
@@ -22,18 +22,18 @@ A headline is stored when its title names the ticker or the company's first dist
 | Alert | Rule | Default |
 |---|---|---|
 | Price | While the market is open, one alert when open→last clears the Settings **percent floor**. Isolation Forest (gap, session, close, volume z-score) enriches that day, or may keep an under-floor session only when headlines support it — bare forest-under without news is dropped. Live and **Watchlist Scan today** share that policy, then grade how well same-day news explains the move. Before the open (and on weekends), Scan today uses the **last completed session**. A volume spike note (≥2× average) alone does not open an alert | 3% floor / registry cutoff (forest enricher) |
-| News | One alert for that trading day when a headline's 0–100 FinBERT score is at least 25 points from 50. Each headline keeps its score, confidence, breakdown, and link. The alert score is the average | 25 points from 50 |
+| News | One alert for that trading day when a headline clears the FinBERT distance-from-50 gate, or when the full near-term climate average clears half that distance. Each headline keeps its score, confidence, breakdown, and link. The card Sentiment is always the climate average | 25 points from 50 (climate join ≈ 12.5) |
 | News + price | One alert when a headline's slice clears the same percent rule. Before 9:30 AM Eastern the slice is the overnight gap. From 9:30 AM to 4:00 PM it is the open-to-latest move, which is the open-to-close move after the market closes. After 4:00 PM it is the close versus the prior close. The words "candidate reason" are used only on this card. A headline whose slice is flat stays news, with the price left blank. A close that moved with no headline in that slice stays a price card — the headline check grades that the news does not explain the move | same rules |
 
 ### Percent floor + forest enricher (price gate cases)
 
-| Percent | Forest | News support | Alert? | Card tag |
-|---|---|---|---|---|
-| Clears | Normal / absent | optional | **Yes** — percent alone | `(percent only)` |
-| Clears | Anomalous | optional | **Yes** — both | `(percent + forest)` |
-| Under | Anomalous | **Yes** | **Yes** — forest + news | `(forest only)` on the price step |
-| Under | Anomalous | **No** | **No** — dropped as noise | scored only |
-| Under | Normal / absent | news-led possible | News-only on Scan today | `(neither gate)` |
+| Percent | Forest | News support | Alert? | Story | Price shape |
+|---|---|---|---|---|---|
+| Clears | Normal / absent | optional | **Yes** | price-led / price + news | `volatile` |
+| Clears | Anomalous | optional | **Yes** | price-led / price + news | `volatile + anomalous` |
+| Under | Anomalous | **Yes** | **Yes** | news-led / price + news | `anomalous` |
+| Under | Anomalous | **No** | **No** | — | scored only |
+| Under | Normal / absent | news-led possible | News-only on Scan today | news-led | *(omit)* |
 
 ### Price-trigger cases (what can fire a price-led row)
 
@@ -47,15 +47,15 @@ A headline is stored when its title names the ticker or the company's first dist
 | 6 | Volume z-score | No — forest feature | Unusual volume via the model |
 | 7 | Volume spike note (~2× average) | **No** — note only | Annotation on some daily percent cards |
 
-What happened shows both the gate tag and a trigger note such as `[triggers: #1 percent]` or `[triggers: #2 forest (#6 volume z, #3 gap)]`. See [architecture.md](architecture.md) for the same tables next to the Live / Watchlist diagram.
+What happened lists Price noticed as bullets: the percent floor as `(volatile)` / `(not volatile)`, then plain-English forest drivers when anomalous. Live/forest doors always keep the story order **price → news**. See [architecture.md](architecture.md) for the same tables next to the Live / Watchlist diagram.
 
-A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound drops anything older than that. Settings → **Clear alerts** can delete all rows or only those whose |price change| is under a percent you choose (news-only rows with no price are left alone on a size clear). The admin **Rebuild history** tool deletes saved alerts and reruns these rules for each session in the last 1–40 calendar days. For that pass, Yahoo quote news is paged until a story is on or before the first day, or the list runs out. Each past session is judged as of 8:00 PM Eastern, so a headline published that day is scored for that day.
+A normal check judges the current Eastern trading day only. Headlines from another day are not pulled in, even if they are newer than 72 hours. The 72-hour bound drops anything older than that. Settings → **Alert history** can clear under a percent (any origin; news-only without price stay), clear all, clear Watchlist only, clear Live only, or **Rebuild Watchlist history** (clears Watchlist / demotes `both` → live, then reruns rules for the last 1–40 calendar days). Live cannot be rebuilt from Settings. For a Watchlist rebuild, Yahoo quote news is paged until a story is on or before the first day, or the list runs out. Each past session is judged as of 8:00 PM Eastern, so a headline published that day is scored for that day.
 
 A headline and a price share a card only when the headline's slice clears the same percent rule. That card calls the headline a candidate reason. A strong headline on a flat slice stays a news card, and the price change is left off. A close that moved, with no headline in the slice that moved, stays a price card — the same-day check still ran; it grades that the news does not explain the move. Sharing an Eastern day is not that claim.
 
-Alert History shows **Origin** (`live` / `watchlist` / `both`), **Company**, **Type**, **Price change**, and **Sentiment score** (sortable). **Both** means Live and Watchlist Scan today each wrote that symbol on the same `bar_date` (one row; origins merge). Expanded cards show Price change with `$from → $to` and a short span caption, and Sentiment score with FinBERT positive / negative / neutral headline counts.
+Alert History shows **Origin** (`live` / `watchlist` / `both`), **Company**, **Alert type**, **Price shape**, **Direction**, **Price change**, and **Sentiment score** (sortable). **When** is last updated (`updated_at`). **Both** means Live and Watchlist Scan today each wrote that symbol on the same `bar_date` (one row; origins merge). Origin pills use teal (Live), peach (Watchlist), and soft purple (Both). Expanded cards show Price change with `$from → $to` and a short span caption (flat `+0.00%` is gray, not gold), and Sentiment score with FinBERT positive / negative / neutral headline counts.
 
-The card time is when the condition was met, in US Eastern. During market hours a stock price move uses the time of the check and the change from the open. After 4:00 PM it uses the close. News uses the earliest qualifying headline from that trading day. When both fire, the time is the later of those two. The details title shows the symbol, the alert type, and that time on one line. The symbol on a card, in the history table, and in the details title links to `https://finance.yahoo.com/quote/{symbol}`.
+The card / History clock is last updated so a same-day refresh floats up. Details → **Rule & history** keeps first triggered, created, and the update log. Condition-known time (`triggered_at`) is preserved on first fire. The details title shows the symbol, story tags, and that When stamp. The symbol on a card, in the history table, and in the details title links to `https://finance.yahoo.com/quote/{symbol}`.
 
 ## Class sources and lake
 

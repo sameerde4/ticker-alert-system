@@ -153,7 +153,7 @@ Deterministic sentence from alert fields stays as the fallback (and as the only 
 
 **Planned:** Stream → features → anomaly → correlate with news → LLM.
 
-**Landed:** Happy path **price noticed → headlines checked → grade how well the news explains the session** ([architecture.md](architecture.md) *End-to-end alert sequence*). Gate tags: `percent only` / `percent + forest` / `forest only` / `neither gate`. Price-trigger cases #1–#7 in architecture and data-sources.
+**Landed:** Happy path **price noticed → headlines checked → grade how well the news explains the session** ([architecture.md](architecture.md) *End-to-end alert sequence*). Alert type: `price-led` / `news-led` / `price + news`. Price shape: `volatile` / `anomalous` / `volatile + anomalous`. Direction: `agrees` / `disagrees` / `mixed`. History columns include those three. Price-trigger cases #1–#7 in architecture and data-sources.
 
 | Step | Verdict | Why |
 |---|---|---|

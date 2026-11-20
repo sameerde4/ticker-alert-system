@@ -110,6 +110,10 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "cash-open" in architecture.lower() or "open+last" in architecture.lower()
     assert "Live WebSocket" in architecture
     assert "Clear alerts" in architecture
+    assert "Alert history" in architecture
+    assert "Rebuild Watchlist history" in architecture
+    assert "price → news" in architecture or "price then news" in architecture
+    assert "not volatile" in architecture
     assert "updated_at" in architecture
     assert "re-enter" in architecture.lower() or "reenter" in architecture.lower()
     assert "schema_migrations" in architecture
@@ -135,9 +139,14 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Watchlist Scan today / rebuild uses the same Isolation Forest" in architecture
     assert "Price gates (percent" in architecture
     assert "no news support" in architecture.lower() or "without news" in architecture.lower()
-    assert "(percent only)" in architecture
-    assert "(forest only)" in architecture
-    assert "(neither gate)" in architecture
+    assert "volatile" in architecture and "anomalous" in architecture
+    assert "price-led" in architecture and "news-led" in architecture
+    assert "price + news" in architecture and "agrees" in architecture and "disagrees" in architecture
+    assert "climate average" in architecture.lower()
+    assert "climate join" in architecture.lower()
+    assert "polarized" in architecture.lower()
+    assert "volatile + anomalous" in architecture or "volatile_anomalous" in architecture
+    assert "(neither gate)" in architecture or "omit shape" in architecture.lower() or "omit" in architecture
     assert "What can trigger a price-led alert" in architecture
     assert "#1" in architecture and "Price move threshold" in architecture
     assert "Volume z-score" in architecture
@@ -252,17 +261,22 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Enable desktop notifications" in ui
     assert "Mac notification" in ui
     assert "function alertMetrics" in ui
-    assert "head.append(kindPill(alert.kind), symbol)" in ui
+    assert "appendStoryAndShapePills(head, alert)" in ui
     assert "companyNameEl(alert.symbol)" in ui
     assert "function alertHeadMetrics" in ui
-    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"]' in ui
+    assert '"type"' in ui and '"shape"' in ui and '"direction"' in ui
+    assert 'label: "Alert type"' in ui
+    assert 'label: "Price shape"' in ui
+    assert 'label: "Direction"' in ui
+    assert "DEFAULT_HISTORY_COLS" in ui
     assert "renderEvidenceStory" in ui
     assert "renderEvidenceOutcome" in ui
     assert "evidence-outcome-chip" in ui
     assert "alignment-emphasis" in ui
     assert "What happened" in ui
     assert '"Summary"' in ui
-    assert 'appendPlain("Forest"' in ui
+    assert "appendForestUnderPrice" in ui
+    assert 'appendPlain("Price"' in ui
     assert "Refresh lake + retrain" in ui
     assert 'id="refreshLake"' in ui
     assert 'id="lakeHeaderStatus"' in ui
@@ -292,12 +306,32 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "addCollapsibleSection" in ui
     assert 'price: "price-led"' in ui
     assert 'news: "news-led"' in ui
-    assert 'news_price: "aligned"' in ui
-    assert "kindPill(alert.kind)" in ui
+    assert 'news_price: "price + news"' in ui
+    assert "Climate sentiment" in ui
+    assert "climate join" in ui
+    assert "polarized" in ui
+    assert "Rule & history" in ui
+    assert "function alertWhenStamp" in ui
+    assert "function buildAlertTimeline" in ui
+    assert "update_history" in ui
+    assert 'no_news: "no recent news"' in ui
+    assert "kindPill(alert.kind, alert)" in ui
+    assert "PRICE_SHAPE_LABELS" in ui
+    assert "priceShapePill" in ui
+    assert "AGREEMENT_LABELS" in ui
+    assert "agreementPill" in ui
+    assert "appendStoryAndShapePills" in ui
     assert "function badgeClass" not in ui
     assert 'appendPlain("Together"' not in ui
     assert 'id="clearRecent"' in ui
     assert "Clear alerts" in ui
+    assert "Alert history" in ui
+    assert "Rebuild Watchlist history" in ui
+    assert "Clear Watchlist history" in ui
+    assert "Clear Live history" in ui
+    assert "evidence-bullets" in ui
+    assert 'return "flat"' in ui
+    assert "#5eead4" in ui and "#ffb070" in ui
     assert "tickerAlertHomeClearedAt" in ui
     assert "alert.updated_at || alert.created_at" in ui
     assert "clearRecentAlerts" in ui
@@ -369,6 +403,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "last completed session" in sources
     assert "focus-session" in sources or "Focus session" in sources or "focus session" in sources.lower()
     assert "Percent floor + forest enricher" in sources or "forest enricher" in sources
+    assert "Alert history" in sources
+    assert "Rebuild Watchlist history" in sources
+    assert "climate join" in sources.lower() or "climate average" in sources.lower()
+    assert "not volatile" in sources or "Price noticed" in sources
     assert "Price-trigger cases" in sources
     assert "Isolation Forest anomalous" in sources
     assert "without news" in sources.lower() or "No** under" in sources
@@ -422,6 +460,7 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "updated_at" in readme
     assert "Live WebSocket" in readme
     assert "Clear alerts" in readme
+    assert "Alert history" in readme or "Rebuild Watchlist history" in readme
     assert "Finished-system diagrams" in readme
     assert "planned → landed" in readme.lower() or "keep / change / drop" in readme.lower()
     assert "As-built vs local final" not in readme
