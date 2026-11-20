@@ -52,7 +52,8 @@ async def run(args: argparse.Namespace) -> None:
         await run_probe(symbols, dry_run=args.dry_run or settings.dry_run)
         return
 
-    limit = max(1, settings.alpaca_ws_symbol_limit)
+    # 0 = REST-only (useful when another app already holds the WebSocket slot).
+    limit = max(0, settings.alpaca_ws_symbol_limit)
     ws_symbols = symbols[:limit]
     rest_symbols = symbols[limit:] if settings.rest_poll_enabled and not args.ws_only else []
     if args.rest_only:

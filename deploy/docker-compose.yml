@@ -1,0 +1,125 @@
+# Market Radar demo stack for the EC2 host.
+# From /opt/market-radar: docker compose -f deploy/docker-compose.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ticker_alert_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticker_alert_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.9.1
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+      start_period: 20s
+
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../db/migrations:/migrations:ro
+      - ./migrate.sh:/migrate.sh:ro
+    entrypoint: ["/bin/sh", "/migrate.sh"]
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "8010:8010"
+    environment:
+      TICKER_ALERT_APP_ENV: aws-demo
+      TICKER_ALERT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ticker_alert_db
+      TICKER_ALERT_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TICKER_ALERT_LAKE_ROOT: /data/lake
+      TICKER_ALERT_LAKE_AUTO_ENABLED: "true"
+    volumes:
+      - lake:/data/lake
+      - hfcache:/data/hf
+
+  live:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    environment:
+      TICKER_ALERT_APP_ENV: aws-demo
+      TICKER_ALERT_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ticker_alert_db
+      TICKER_ALERT_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      TICKER_ALERT_LAKE_ROOT: /data/lake
+      TICKER_ALERT_LAKE_AUTO_ENABLED: "false"
+    volumes:
+      - lake:/data/lake
+      - hfcache:/data/hf
+    command: ["python", "-m", "app.live"]
+
+  producer:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.ingest
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    env_file:
+      - alpaca.env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Demo set — keep WebSocket slots at 0 so we don't fight Vajrastra for the
+      # Basic plan connection limit; REST delayed SIP still feeds Kafka.
+      SYMBOLS: ${DEMO_SYMBOLS:-AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,JPM,XOM,UNH}
+      ALPACA_WS_SYMBOL_LIMIT: "0"
+      REST_POLL_ENABLED: "true"
+      REST_POLL_SECONDS: "60"
+
+volumes:
+  pgdata:
+  lake:
+  hfcache:

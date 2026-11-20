@@ -15,9 +15,17 @@ output "alpaca_secret_name" {
   value = var.alpaca_secret_name
 }
 
+data "aws_instance" "demo" {
+  instance_id = var.ec2_instance_id
+}
+
 output "app_url_hint" {
   description = "Open this after Docker Compose is up on the instance."
-  value       = "http://34.229.198.252:${var.app_port}/ui"
+  value       = "http://${data.aws_instance.demo.public_ip}:${var.app_port}/ui"
+}
+
+output "ec2_public_ip" {
+  value = data.aws_instance.demo.public_ip
 }
 
 output "rds_endpoint" {

@@ -134,14 +134,22 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] Explore EC2 activity completed (**$20** credit); keep instance `market-radar` (`i-0e437ba8984153370`); explore clone terminated
 - [x] Secrets Manager `market-radar/alpaca` created
 - [x] Terraform scaffold under `infra/` (S3 lake, IAM instance profile, UI port SG rule; RDS optional/off)
+- [x] `terraform apply` — S3 `market-radar-lake`, IAM on EC2, port 8010
+- [x] EC2 resized to **t3.medium** / **30 GB** disk for Docker + FinBERT
+- [x] `deploy/` Docker Compose stack on EC2 (Kafka, Postgres, API/UI, live, producer)
+- [x] Alpaca pulled from Secrets Manager; migrations applied; UI + live heartbeat smoke-tested
 
-### Next (implementation)
+### Demo URL
 
-1. **`terraform apply`** in `infra/` (S3 + IAM attach to EC2 + open port 8010)
-2. **App packaging** — Dockerfiles / compose on EC2 (Kafka + Postgres + API + live + stream_ingest)
-3. **Wire config** — lake → S3, Alpaca from Secrets Manager, DB on-box
-4. **Smoke** — migrations, land/train, Live, Scan today, History
-5. **Presentation + teardown**
+**http://35.175.194.107:8010/ui** (IP can change after stop/start — re-check EC2 public IPv4)
+
+Re-deploy from laptop: `./deploy/sync-and-deploy.sh`
+
+### Still optional / later
+
+1. Point lake writes at S3 (today: lake volume on EC2; bucket exists for the architecture story / sync)
+2. Watchlist Scan today + History smoke in the browser; Perplexity key in Settings
+3. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
 
 ---
 
