@@ -24,13 +24,19 @@ data "aws_instance" "demo" {
   instance_id = var.ec2_instance_id
 }
 
+output "elastic_ip" {
+  description = "Stable public IPv4 (Elastic IP). Release with terraform destroy / aws ec2 release-address when the demo is idle."
+  value       = aws_eip.demo.public_ip
+}
+
 output "app_url_hint" {
   description = "Open this after Docker Compose is up on the instance."
-  value       = "http://${data.aws_instance.demo.public_ip}:${var.app_port}/ui"
+  value       = "http://${aws_eip.demo.public_ip}:${var.app_port}/ui"
 }
 
 output "ec2_public_ip" {
-  value = data.aws_instance.demo.public_ip
+  description = "Prefer elastic_ip for bookmarks; this tracks the instance association."
+  value       = aws_eip.demo.public_ip
 }
 
 output "rds_endpoint" {

@@ -215,6 +215,8 @@ def test_aws_deployment_doc_matches_as_built_demo():
     assert "/market-radar/demo" in aws
     assert "awslogs" in aws
     assert "Elastic IP" in aws
+    assert "release" in aws.lower()
+    assert "infra/eip.tf" in aws or "aws_eip" in aws or "elastic_ip" in aws
     assert "[architecture.md](architecture.md)" in aws
 
 

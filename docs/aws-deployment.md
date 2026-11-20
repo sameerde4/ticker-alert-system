@@ -129,7 +129,7 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 
 | Topic | Behavior |
 |---|---|
-| Demo URL | **http://35.175.194.107:8010/ui** (IP can change after stop/start — re-check EC2 public IPv4) |
+| Demo URL | **http://98.94.232.101:8010/ui** (Elastic IP — stable across stop/start; confirm with `terraform output app_url_hint`) |
 | Re-deploy | `./deploy/sync-and-deploy.sh` from the laptop |
 | Migrations | `deploy/migrate.sh` applies each `db/migrations/*.sql` **once**, tracked in `schema_migrations` (re-running older scripts would `DELETE FROM alerts`) |
 | Lake path | Compose mounts volume at `/data/lake`; API image also exposes `/app/data/lake` → `/data/lake` so land, status, and forest registry agree |
@@ -140,7 +140,7 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | Lake header | Shows “Loading historical prices” only while a land/refresh is running (or before raw prices exist); hides when `ok` / `has_raw_prices`. `/ui` is served `Cache-Control: no-store`. |
 | Notifications | Chrome often blocks Notification permission on **http://** public IPs; HTTPS or localhost is required for OS popups. Alerts still appear in the Home feed. |
 | CloudWatch Logs | Docker Compose uses the **awslogs** driver → log group **`/market-radar/demo`** (7-day retention). Named streams: `api`, `live`, `producer`, `kafka`, `postgres`, `migrate`. |
-| Elastic IP (optional) | A **stable public IPv4** you allocate once and attach to the instance. Still looks like a normal AWS IP (not a pretty hostname); the win is it **does not change** when you stop/start the EC2. Free while attached to a running instance; idle unattached EIPs incur a small hourly charge. |
+| Elastic IP | Allocated + associated via Terraform (`infra/eip.tf`). Stable public IPv4 for the demo URL (not a hostname). **Free while attached to a running instance.** When you stop/tear down the EC2, **release the EIP** (`terraform destroy` on this stack, or disassociate + `aws ec2 release-address`) — an idle/unattached EIP is billed hourly. |
 
 ---
 
@@ -161,12 +161,12 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] Lake path + header hide; REST session backfill; background live heartbeat
 - [x] Durable lake sync to S3 `market-radar-lake` (hydrate on empty boot)
 - [x] CloudWatch log group `/market-radar/demo` + awslogs on Compose
+- [x] Elastic IP associated for a stable demo URL
 
 ### Still optional / later
 
-1. Elastic IP if you stop/start the instance often and want a fixed demo URL (still an IP, not a domain)
-2. HTTPS in front of `:8010` if desktop notifications are required for the talk
-3. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
+1. HTTPS in front of `:8010` if desktop notifications are required for the talk
+2. Presentation diagram freeze + full teardown when the class is done
 
 ---
 
@@ -183,8 +183,11 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 
 ## Cost & teardown
 
-- One small EC2 + S3 + Kafka on-box (no MSK/EKS/RDS by default)
-- Stop or destroy after the presentation
+- One small EC2 + S3 + Kafka on-box + Elastic IP + CloudWatch (no MSK/EKS/RDS by default)
+- **When you stop or destroy the EC2 for the night / after the talk:**
+  1. `docker compose down` on the host (optional but clean)
+  2. Stop or terminate the EC2 instance
+  3. **Release the Elastic IP** — do not leave it allocated. Easiest: `cd infra && terraform destroy` for the demo stack (or at least destroy `aws_eip.demo` / run `aws ec2 release-address --allocation-id …`). An EIP that is unattached (or attached to a stopped instance in some cases) **incurs hourly charges**.
 - Watch the monthly budget already on the account
 
 ---
@@ -202,3 +205,4 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | 2026-11-20 | Live arm + REST-only + session backfill + migrator once | Demo stability on shared Alpaca Basic |
 | 2026-11-20 | Durable lake on S3 `market-radar-lake` | Working copy on EC2 volume; sync after land/train |
 | 2026-11-20 | CloudWatch `/market-radar/demo` | awslogs from Compose; 7-day retention |
+| 2026-11-20 | Elastic IP for demo URL | Release on teardown so idle EIP is not billed |
