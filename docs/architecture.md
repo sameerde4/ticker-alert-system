@@ -4,7 +4,7 @@
 
 Two product paths sit side by side:
 
-- **Live** — continuous Kafka minute bars → Home **Recent** (monitor the session while it is open).
+- **Live** — continuous Kafka minute bars → Home **Live alerts** (monitor the session while it is open).
 - **Watchlist** — a focus set of index constituents plus on-demand **Scan today** → **Watchlist results** (session / day review under current rules, including after the close).
 
 Both write the same Postgres `alerts` table. History shows **Origin**, **Company**, **Type**, **Price change**, and **Sentiment score** (sortable columns); click a row for the full write-up. The **batch lake** (`batch_ingest` + `batch_train`) trains Isolation Forest on historical prices; it is not the Watchlist UI. Watchlist Scan today is the useful product pass over the **focus session** (today during/after RTH; the last completed session before the open or on weekends) plus near-term headlines.
@@ -16,11 +16,12 @@ The class design (CISC 525) is a **local lambda architecture** in the classic se
 **How to read the diagrams below.** They are one finished system at increasing grain — not two generations of the design. Keep all of them for the presentation. Flowcharts are laid out **left → right** in numbered stage columns (slide-friendly landscape); sequence diagrams stay top → bottom in time order. Each box names the **job in plain language**, then the **technical role** in parentheses (data lake, Kafka topic, Flink-role processor, Postgres table, and so on).
 
 1. **System overview** — lake train, Live, Watchlist, serving  
-2. **Watchlist Scan today** / **Live price stream** / **Batch lake** / **Curated features + Isolation Forest** — path-level detail  
-3. **High-level lambda architecture** — batch + speed layers (the *pattern*, not AWS Lambda) with local stand-ins  
-4. **Batch historical ELT** — land → curate → train → registry  
-5. **Streaming ETL** — Kafka → live scorer → headline grade → alerts  
-6. **End-to-end alert sequence** — bar → gate → headlines → Perplexity → UI
+2. **System overview with ML + AI** — same map with FinBERT grade + optional Perplexity wording called out  
+3. **Watchlist Scan today** / **Live price stream** / **Batch lake** / **Curated features + Isolation Forest** — path-level detail  
+4. **High-level lambda architecture** — batch + speed layers (the *pattern*, not AWS Lambda) with local stand-ins  
+5. **Batch historical ELT** — land → curate → train → registry  
+6. **Streaming ETL** — Kafka → live scorer → headline grade → alerts  
+7. **End-to-end alert sequence** — bar → gate → headlines → Perplexity → UI
 
 This repository runs:
 
@@ -139,6 +140,57 @@ flowchart LR
     REG --> RUN
     LIVE -->|percent or forest then headline grade| PG
     RUN -->|percent or forest then headline grade| PG
+    HOME --> API
+    CHECK --> API
+```
+
+## System overview with ML + AI
+
+Same machine and the same four lanes, with one more grain of detail for the class requirements. **Streaming** and **batch** still feed the system; **Isolation Forest** is the machine-learning path (trained on the lake, applied on Live and Watchlist); **FinBERT** scores near-term headlines after a price/forest hit; **Perplexity** is the LLM AI step — optional richer wording for news / news+price after the alert decision, before the dashboard. Price-only rows stay on the deterministic rule text.
+
+```mermaid
+flowchart LR
+    subgraph batch [1 Batch lake + ML train]
+        direction TB
+        YF["Yahoo daily OHLCV<br/>(market data API)"] --> LAND["Land / Refresh<br/>(batch ingest job)"]
+        LAND --> RAW[("Raw daily prices<br/>(local data lake)")]
+        RAW --> BT["batch_train<br/>(Spark-role trainer)"]
+        BT --> REG[("Isolation Forest registry<br/>(ML model store)")]
+    end
+
+    subgraph stream [2 Live stream]
+        direction TB
+        ALP["Alpaca delayed_sip<br/>(broker market feed)"] --> KAFKA[("Minute bars topic<br/>(Docker Kafka)")]
+        KAFKA --> LIVE["Live consumer app.live<br/>(Flink-role stream processor)"]
+        LIVE --> GATE1["Percent or forest gate<br/>(price / anomaly check)"]
+        GATE1 --> FB1["FinBERT headline grade<br/>(local NLP scorer)"]
+        LIVE --> FEAT[("Session feature rows<br/>(Postgres table)")]
+        LIVE --> HOME["Home Live alerts<br/>(live alert feed UI)"]
+    end
+
+    subgraph watch [3 Watchlist on-demand]
+        direction TB
+        WL["Focus set<br/>(Postgres watchlist)"] --> RUN["Scan today<br/>(on-demand check)"]
+        RUN --> FOCUS["Focus session<br/>(today or last completed)"]
+        FOCUS --> YB["Yahoo bars + headlines<br/>(vendor pull)"]
+        YB --> GATE2["Percent or forest gate<br/>(price / anomaly check)"]
+        GATE2 --> FB2["FinBERT headline grade<br/>(local NLP scorer)"]
+        RUN --> CHECK["Watchlist results<br/>(session review UI)"]
+    end
+
+    subgraph serve [4 Alerts, AI wording, serving]
+        direction TB
+        PG[("Alerts table<br/>(Postgres database)")] --> PPLX["Perplexity<br/>(LLM wording API)"]
+        PPLX --> API["FastAPI + UI<br/>(HTTP API / dashboard)"]
+        PG --> API
+        API --> HIST["History<br/>(full alert list UI)"]
+        API --> NOTE["Desktop notification<br/>(browser / OS popup)"]
+    end
+
+    REG --> LIVE
+    REG --> RUN
+    FB1 -->|decision row| PG
+    FB2 -->|decision row| PG
     HOME --> API
     CHECK --> API
 ```

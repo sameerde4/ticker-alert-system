@@ -64,7 +64,7 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Streaming ETL" in architecture
     assert "End-to-end alert sequence" in architecture
     assert "High-level lambda architecture" in architecture
-    assert architecture.count("```mermaid") >= 10
+    assert architecture.count("```mermaid") >= 11
     assert "Perplexity richer news / news+price reasoning" in architecture
     assert "focus set" in architecture
     assert "## Live and Watchlist side by side" in architecture
@@ -81,6 +81,10 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Live scorer Flink role" in architecture or "Flink role" in architecture
     assert "Cassandra" in architecture and "Out of scope" in architecture
     assert "## System overview" in architecture
+    assert "## System overview with ML + AI" in architecture
+    assert "System overview with ML + AI" in architecture
+    assert "FinBERT headline grade" in architecture
+    assert "LLM wording API" in architecture
     assert "## High-level lambda architecture" in architecture
     assert "## Batch historical ELT" in architecture
     assert "## Streaming ETL" in architecture
