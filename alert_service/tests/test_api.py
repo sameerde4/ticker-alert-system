@@ -1,6 +1,78 @@
+import math
+
 from fastapi.testclient import TestClient
 
 from app.main import app
+
+
+def test_history_page_math_matches_ui_contract():
+    """Mirror of historyPageCount / slice bounds in ui/index.html (HISTORY_PAGE_SIZE = 20)."""
+    page_size = 20
+
+    def page_count(total: int) -> int:
+        return max(1, math.ceil(max(0, total) / page_size))
+
+    assert page_count(0) == 1
+    assert page_count(1) == 1
+    assert page_count(20) == 1
+    assert page_count(21) == 2
+    assert page_count(40) == 2
+    assert page_count(41) == 3
+
+    total = 45
+    pages = page_count(total)
+    assert pages == 3
+    for page in range(pages):
+        start = page * page_size
+        end = min(total, start + page_size)
+        assert end - start == (20 if page < 2 else 5)
+        assert start < total
+    last = pages - 1
+    assert last * page_size == 40
+    assert min(total, last * page_size + page_size) == 45
+
+
+def test_history_pagination_and_detail_header_contract():
+    client = TestClient(app)
+    page = client.get("/ui")
+    assert page.status_code == 200
+    text = page.text
+    assert "HISTORY_PAGE_SIZE = 20" in text
+    assert "function historyPageCount" in text
+    assert "function setHistoryPage" in text
+    assert 'id="historyPager"' in text
+    assert 'id="historyFirst"' in text
+    assert 'id="historyPrev"' in text
+    assert 'id="historyNext"' in text
+    assert 'id="historyLast"' in text
+    assert 'id="historyPageStatus"' in text
+    assert "Twenty rows per page" in text
+    assert 'historyFirstBtn.addEventListener("click", () => setHistoryPage(0))' in text
+    assert "setHistoryPage(historyPage - 1)" in text
+    assert "setHistoryPage(historyPage + 1)" in text
+    assert "historyPageCount((latestAlerts || []).length) - 1" in text
+    assert "historyPage = 0" in text
+    assert 'historyPageStatus.textContent = total === 0' in text or "Page " in text
+    assert "Page \" + (historyPage + 1) + \" of \"" in text
+    assert "appendStoryAndShapePills(primary, alert)" in text
+    assert "function alertHeadMetrics" not in text
+    assert "for (const bit of alertHeadMetrics(alert)) primary.append(bit)" not in text
+    assert "header.insertBefore(when, closeBtn)" in text
+    assert "width: min(960px, 100%)" in text
+    header_css = text.split(".modal-header {", 1)[1].split("}", 1)[0]
+    assert "flex: 0 0 auto" in header_css
+    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.08)" in header_css
+    assert "padding: 16px 16px 14px" in header_css
+    body_css = text.split(".modal-body {", 1)[1].split("}", 1)[0]
+    assert "flex: 1 1 auto" in body_css
+    assert "min-height: 0" in body_css
+    assert "overflow: auto" in body_css
+    assert "padding: 0 16px 14px" in body_css
+    when_css = text.split(".modal-header > .when {", 1)[1].split("}", 1)[0]
+    assert "font-family: ui-sans-serif, system-ui, sans-serif" in when_css
+    assert ".alert-card-body" in text
+    card_body = text.split(".alert-card-body {", 1)[1].split("}", 1)[0]
+    assert "border-top: 1px solid rgba(243, 239, 228, 0.08)" in card_body
 
 
 def test_health_and_ui_without_a_database():
@@ -65,17 +137,18 @@ def test_health_and_ui_without_a_database():
     assert "function alertMetrics" in page.text
     assert "alert-metric-value" in page.text
     assert "Price change" in page.text
-    assert "appendStoryAndShapePills(tags, alert)" in page.text
+    assert "appendStoryAndShapePills(primary, alert)" in page.text
     assert "alert-head-primary" in page.text
-    assert "alert-head-tags" in page.text
     assert "detail-title-primary" in page.text
-    assert "detail-title-tags" in page.text
     assert "PRICE_SHAPE_LABELS" in page.text
     assert "if (company) primary.append(company)" in page.text
-    assert "appendStoryAndShapePills(tags, alert)" in page.text
     assert "function alertHeadMetrics" not in page.text
-    assert "detail-title-primary" in page.text
-    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.12)" in page.text
+    assert "header.insertBefore(when, closeBtn)" in page.text
+    assert "width: min(960px, 100%)" in page.text
+    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.08)" in page.text
+    assert ".modal-body" in page.text
+    assert "flex: 1 1 auto" in page.text
+    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.12)" not in page.text
     assert "function badgeClass" not in page.text
     worker = client.get("/ui/sw-notifications.js")
     assert worker.status_code == 200
@@ -114,6 +187,11 @@ def test_health_and_ui_without_a_database():
     assert "function selectTab" in page.text
     assert "DEFAULT_HISTORY_COLS" in page.text
     assert 'id="historyHead"' in page.text
+    assert 'id="historyPager"' in page.text
+    assert "HISTORY_PAGE_SIZE = 20" in page.text
+    assert "function setHistoryPage" in page.text
+    assert 'historyFirstBtn.addEventListener("click"' in page.text
+    assert 'historyLastBtn.addEventListener("click"' in page.text
     assert "function buildHistoryHeaders" in page.text
     assert "function originLabel" in page.text
     assert "tickerAlertHistoryColumns" in page.text
@@ -154,6 +232,7 @@ def test_health_and_ui_without_a_database():
     assert 'label: "Origin"' in page.text
     assert "history-row" in page.text
     assert "Click a row for the full write-up" in page.text
+    assert "Twenty rows per page" in page.text
     assert "Click a column heading to sort" in page.text
     assert "Combined news sentiment " not in page.text
     assert 'label.textContent = "Sentiment"' in page.text

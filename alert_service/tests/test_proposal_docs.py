@@ -171,6 +171,13 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Watchlist Scan today focus session" in architecture
     assert "Price change" in architecture and "Sentiment score" in architecture
     assert "Origin" in architecture and "Company" in architecture and "Type" in architecture
+    assert "20 rows" in architecture or "20 rows per page" in architecture
+    assert "First / Previous / Next / Last" in architecture
+    assert "Collapsed Live / Watchlist cards" in architecture
+    assert "one-line head" in architecture
+    assert "Details popup" in architecture and "frozen header" in architecture
+    assert "Alert History table" in architecture and "20 rows / page" in architecture
+    assert "story pills sit on the collapsed card" in architecture
     assert "REG --> SCAN" in architecture
     assert "Watchlist Scan today" in architecture and "percent or forest" in architecture
     assert "finished local system" in architecture.lower() or "finished-system" in architecture.lower() or "finished** local" in architecture
@@ -265,9 +272,16 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "Enable desktop notifications" in ui
     assert "Mac notification" in ui
     assert "function alertMetrics" in ui
-    assert "appendStoryAndShapePills(tags, alert)" in ui
+    assert "appendStoryAndShapePills(primary, alert)" in ui
     assert "alert-head-primary" in ui
     assert "detail-title-primary" in ui
+    assert "HISTORY_PAGE_SIZE = 20" in ui
+    assert 'id="historyPager"' in ui
+    assert "function setHistoryPage" in ui
+    assert "header.insertBefore(when, closeBtn)" in ui
+    assert "width: min(960px, 100%)" in ui
+    assert "border-bottom: 1px solid rgba(243, 239, 228, 0.08)" in ui
+    assert "Twenty rows per page" in ui
     assert "companyNameEl(alert.symbol)" in ui
     assert "function historyTypePriceStat" in ui
     assert "function alertHeadMetrics" not in ui
@@ -412,6 +426,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "Percent floor + forest enricher" in sources or "forest enricher" in sources
     assert "Alert history" in sources
     assert "Rebuild Watchlist history" in sources
+    assert "20 rows" in sources
+    assert "First / Previous / Next / Last" in sources
+    assert "one-line head" in sources
+    assert "frozen strip" in sources or "end-to-end rule" in sources
     assert "climate join" in sources.lower() or "climate average" in sources.lower()
     assert "not volatile" in sources or "Price noticed" in sources
     assert "Price-trigger cases" in sources
@@ -472,6 +490,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "planned → landed" in readme.lower() or "keep / change / drop" in readme.lower()
     assert "As-built vs local final" not in readme
     assert "Home" in readme and "Watchlist" in readme and "History" in readme
+    assert "20-row" in readme or "20 rows" in readme
+    assert "First / Previous / Next / Last" in readme
+    assert "story pills" in readme
+    assert "full-width rule" in readme
     assert "Origin" in readme
     assert "Watchlist results" in readme
     assert "Scan today" in readme
