@@ -108,6 +108,8 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Background heartbeat" in architecture or "background task" in architecture
     assert "backfill" in architecture.lower() and "9:30" in architecture
     assert "cash-open" in architecture.lower() or "open+last" in architecture.lower()
+    assert "Live WebSocket" in architecture
+    assert "Clear alerts" in architecture
     assert "updated_at" in architecture
     assert "re-enter" in architecture.lower() or "reenter" in architecture.lower()
     assert "schema_migrations" in architecture
@@ -129,9 +131,10 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Perplexity richer reasoning" in architecture
     assert "price-only stays deterministic" in architecture
     assert "forest-aware price-only wording" in architecture
-    assert "percent **or** forest" in architecture or "percent or forest" in architecture.lower()
+    assert "percent floor" in architecture.lower() or "forest as enricher" in architecture.lower()
     assert "Watchlist Scan today / rebuild uses the same Isolation Forest" in architecture
-    assert "Price gates (percent **or** forest)" in architecture
+    assert "Price gates (percent" in architecture
+    assert "no news support" in architecture.lower() or "without news" in architecture.lower()
     assert "(percent only)" in architecture
     assert "(forest only)" in architecture
     assert "(neither gate)" in architecture
@@ -210,7 +213,10 @@ def test_aws_deployment_doc_matches_as_built_demo():
     assert "backfill" in aws.lower()
     assert "cash-open + latest" in aws.lower() or "open+last" in aws.lower()
     assert "updated_at" in aws
-    assert "ALPACA_WS_SYMBOL_LIMIT" in aws
+    assert "ALPACA_WS_SYMBOL_LIMIT" in aws or "Live WebSocket" in aws
+    assert "WebSocket" in aws
+    assert "Forest under floor" in aws or "without news" in aws.lower()
+    assert "Clear alerts" in aws or "/v1/admin/alerts/clear" in aws
     assert "Cache-Control" in aws or "no-store" in aws
     assert "Postgres container" in aws
     assert "not EKS" in aws
@@ -362,9 +368,10 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "skips Yahoo + retrain" in sources or "skip Yahoo" in sources.lower()
     assert "last completed session" in sources
     assert "focus-session" in sources or "Focus session" in sources or "focus session" in sources.lower()
-    assert "Percent **or** forest (price gate cases)" in sources
+    assert "Percent floor + forest enricher" in sources or "forest enricher" in sources
     assert "Price-trigger cases" in sources
     assert "Isolation Forest anomalous" in sources
+    assert "without news" in sources.lower() or "No** under" in sources
     assert "Volume z-score" in sources
     assert "deterministic sentence" in sources
     assert "Rule stays under Rule" in sources
@@ -413,6 +420,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "AWS production deploy is not required" in readme
     assert "aws-deployment.md" in readme
     assert "updated_at" in readme
+    assert "Live WebSocket" in readme
+    assert "Clear alerts" in readme
     assert "Finished-system diagrams" in readme
     assert "planned → landed" in readme.lower() or "keep / change / drop" in readme.lower()
     assert "As-built vs local final" not in readme
