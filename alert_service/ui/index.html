@@ -17,6 +17,7 @@
       --line: rgba(212, 175, 55, 0.28);
       --up: #3ddc97;
       --down: #ff6b6b;
+      --flat: #c4c0b6;
       --news: #7eb6ff;
       --fusion: #d4af37;
     }
@@ -239,7 +240,31 @@
     .badge.kind-price { background: rgba(94, 200, 197, 0.18); color: #7ee0dc; }
     .badge.kind-news { background: rgba(126, 182, 255, 0.2); color: #9ec4ff; }
     .badge.kind-fusion { background: rgba(192, 132, 252, 0.2); color: #d2b0ff; }
+    .badge.shape-volatile { background: rgba(255, 176, 96, 0.18); color: #ffc078; }
+    .badge.shape-anomalous { background: rgba(255, 140, 160, 0.18); color: #ff9aac; }
+    .badge.shape-both { background: rgba(255, 200, 120, 0.2); color: #ffd090; }
+    .badge.agree-agrees { background: rgba(61, 220, 151, 0.16); color: #7ee0b0; }
+    .badge.agree-disagrees { background: rgba(255, 107, 107, 0.16); color: #ff9a9a; }
+    .badge.agree-mixed { background: rgba(180, 180, 190, 0.18); color: #c8c8d0; }
+    .badge.agree-no_news { background: rgba(140, 140, 150, 0.14); color: var(--muted); }
     h3.section { margin: 12px 0 4px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); font-family: ui-sans-serif, system-ui, sans-serif; }
+    h3.subsection,
+    h4.subsection {
+      margin: 12px 0 4px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-weight: 600;
+    }
+    hr.settings-rule {
+      border: 0;
+      border-top: 1px solid var(--line);
+      margin: 18px 0 12px;
+    }
+    .history-stamp { margin: 4px 0; }
+    .history-log { margin-top: 8px; }
     .alert-card {
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -404,7 +429,8 @@
     }
     .alert-metric-value.up { color: var(--up); }
     .alert-metric-value.down { color: var(--down); }
-    .alert-metric-value.mixed { color: var(--gold); }
+    .alert-metric-value.flat,
+    .alert-metric-value.mixed { color: var(--flat); }
     .alert-metric-detail {
       display: flex;
       flex-direction: column;
@@ -429,7 +455,8 @@
     }
     .alert-metric-detail .up { color: var(--up); }
     .alert-metric-detail .down { color: var(--down); }
-    .alert-metric-detail .mixed { color: var(--gold); }
+    .alert-metric-detail .flat,
+    .alert-metric-detail .mixed { color: var(--flat); }
     .alert-metric-levels,
     .alert-metric-lead {
       font-size: 12px;
@@ -542,11 +569,28 @@
       box-shadow: 0 0 0 3px rgba(220, 100, 100, 0.22);
     }
     .evidence-story .detail { color: var(--text); margin-top: 2px; }
+    .evidence-story .evidence-bullets {
+      margin: 4px 0 0;
+      padding: 0 0 0 1.1em;
+      list-style: disc;
+    }
+    .evidence-story .evidence-bullets li {
+      display: list-item;
+      margin: 0 0 4px;
+      padding: 0;
+      gap: 0;
+      align-items: start;
+      color: var(--text);
+      font-size: inherit;
+      line-height: 1.4;
+    }
+    .evidence-story .evidence-bullets li:last-child { margin-bottom: 0; }
     .evidence-headline { color: var(--muted); font-size: 13px; margin: 0 0 8px; font-family: ui-sans-serif, system-ui, sans-serif; }
     .combined { margin: 0 0 8px; font-weight: 700; }
     .combined.up, .score.up, td.up { color: var(--up); }
     .combined.down, .score.down, td.down { color: var(--down); }
-    .combined.mixed, .score.mixed { color: var(--gold); }
+    .combined.flat, .score.flat, td.flat,
+    .combined.mixed, .score.mixed, td.mixed { color: var(--flat); }
     .articles { list-style: none; margin: 0; padding: 0; }
     .articles li { margin: 8px 0; }
     .articles a { color: var(--gold); }
@@ -777,8 +821,9 @@
     table.history th[draggable="true"] { cursor: grab; }
     table.history th.drag-over { box-shadow: inset 0 -2px 0 var(--gold); }
     table.history th.is-dragging { opacity: 0.55; }
-    .badge.origin-live { background: rgba(80, 160, 220, 0.18); color: #9fd0f0; }
-    .badge.origin-watchlist { background: rgba(212, 175, 55, 0.16); color: var(--gold); }
+    /* Live = stream/signal (teal); Watchlist = curated list (peach); Both = blend. */
+    .badge.origin-live { background: rgba(45, 212, 191, 0.16); color: #5eead4; }
+    .badge.origin-watchlist { background: rgba(255, 160, 80, 0.16); color: #ffb070; }
     .badge.origin-both { background: rgba(180, 140, 220, 0.18); color: #d2b8f0; }
     .alert-bit { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
     .type-stat {
@@ -1140,7 +1185,7 @@
           <label class="field">
             <span>FinBERT sentiment threshold</span>
             <input id="sentimentThreshold" type="number" min="1" max="50" step="1" inputmode="numeric" required />
-            <p class="hint">FinBERT scores run from 0 to 100 (50 = neutral). A headline opens or joins a news side when it is at least this many points from 50. Default is 25 (so ≤25 or ≥75 qualify). Isolation Forest is separate — it scores price/volume, not headlines.</p>
+            <p class="hint">FinBERT scores run from 0 to 100 (50 = neutral). Sentiment is the average of all near-term headlines. A news side joins when at least one headline is this far from 50 (default 25 → ≤25 or ≥75), or when that full climate average clears half this distance (soft climate join). Price-led cards still list below-join climate context. Isolation Forest scores price/volume, not headlines.</p>
           </label>
           <div class="settings-actions">
             <button type="submit" id="saveSettings">Save</button>
@@ -1177,7 +1222,7 @@
       </section>
       <section class="card">
         <h2>Perplexity</h2>
-        <p class="hint">Every alert checks both price and near-term news. A saved key rewrites Summary when there is a news side (aligned, news-led, or price-led with headlines reviewed). Bare price-only rows stay on the deterministic sentence — including richer Isolation Forest wording when the model fired. Dots mean a key is saved; the key stays hidden.</p>
+        <p class="hint">Every alert checks both price and near-term news. A saved key rewrites Summary when there is a news side (both, news-led, or price-led with headlines reviewed). Bare price-only rows stay on the deterministic sentence — including richer Isolation Forest wording when the model fired. Dots mean a key is saved; the key stays hidden.</p>
         <form id="perplexity-form" class="settings-form">
           <label class="field">
             <span>Model</span>
@@ -1213,13 +1258,13 @@
         </form>
       </section>
       <section class="card">
-        <h2>Clear alerts</h2>
-        <p class="hint">Flush saved alerts without rebuilding. Use this to drop noisy under-threshold cards from Home and History. News-only rows (no price change) are left alone when you clear by size.</p>
+        <h2>Alert history</h2>
+        <p class="hint">Manage saved cards on Home and History. Live and Watchlist are separate: clearing or rebuilding Watchlist leaves Live alone, and clearing Live leaves Watchlist alone. Rows tagged both are demoted to the side you did not clear.</p>
         <form id="clear-below-form" class="settings-form">
           <label class="field">
             <span>Clear when |price change| is under</span>
             <input id="clearBelowPercent" type="number" min="0.1" max="100" step="0.1" value="3" inputmode="decimal" required />
-            <p class="hint">Percent points (3 = drop alerts whose move is under 3%). Does not delete news-only cards with no price change.</p>
+            <p class="hint">Percent points (3 = drop alerts whose move is under 3%), any origin. News-only cards with no price change stay.</p>
           </label>
           <div class="settings-actions">
             <button type="submit" id="clearBelowAlerts">Clear under threshold</button>
@@ -1232,10 +1277,15 @@
             <p class="status" id="clearAllStatus"></p>
           </div>
         </form>
-      </section>
-      <section class="card">
-        <h2>Rebuild history</h2>
-        <p class="hint">Admin test tool. Deletes every saved alert, then reruns current rules (price move threshold, Isolation Forest when the registry is present, and FinBERT) for each watchlist symbol over the last X calendar days, including today. Past days use each session’s close; today can use open→last while the market is open. Headlines are scored for the trading day they were published.</p>
+        <hr class="settings-rule" />
+        <h3 class="subsection">Watchlist</h3>
+        <p class="hint">Scan today / rebuild only write Watchlist rows. Rebuild clears Watchlist history first, then reruns current rules for each watchlist symbol over the last X calendar days (Live stays).</p>
+        <form id="clear-watchlist-form" class="settings-form">
+          <div class="settings-actions">
+            <button type="submit" id="clearWatchlistAlerts" class="ghost">Clear Watchlist history</button>
+            <p class="status" id="clearWatchlistStatus"></p>
+          </div>
+        </form>
         <form id="rebuild-form" class="settings-form">
           <label class="field">
             <span>Days to rebuild</span>
@@ -1243,8 +1293,17 @@
             <p class="hint">1 is today only. 40 is the furthest this check can reach.</p>
           </label>
           <div class="settings-actions">
-            <button type="submit" id="rebuildHistory">Wipe and rebuild</button>
+            <button type="submit" id="rebuildHistory">Rebuild Watchlist history</button>
             <p class="status" id="rebuildStatus"></p>
+          </div>
+        </form>
+        <hr class="settings-rule" />
+        <h3 class="subsection">Live</h3>
+        <p class="hint">Flush Kafka/Live cards without touching Watchlist Scan today results. Live cannot be rebuilt from Settings — turn Live alerts on again to refill from the stream.</p>
+        <form id="clear-live-form" class="settings-form">
+          <div class="settings-actions">
+            <button type="submit" id="clearLiveAlerts" class="ghost">Clear Live history</button>
+            <p class="status" id="clearLiveStatus"></p>
           </div>
         </form>
       </section>
@@ -1280,7 +1339,7 @@
       </div>
       <div class="modal-body">
         <h3 class="section">Two price gates</h3>
-        <p class="summary">A price-led day opens when the Settings percent floor clears on Live or Watchlist Scan today (default 3%: open→last while the market is open, or close vs prior close after the close). Isolation Forest (gap, session, close, volume z-score) can enrich that day, or keep an under-floor move only when headlines support it — bare forest-only under the floor is dropped. What happened tags the case: percent only, percent + forest, forest only, or neither gate.</p>
+        <p class="summary">A price-led day opens when the Settings percent floor clears on Live or Watchlist Scan today (default 3%: open→last while the market is open, or close vs prior close after the close). Isolation Forest (gap, session, close, volume z-score) can enrich that day, or keep an under-floor move only when headlines support it — bare forest-only under the floor is dropped. Cards and History use three tag axes when relevant: alert type (price-led / news-led / price + news), price shape (volatile / anomalous / volatile + anomalous), and direction (agrees / disagrees / mixed / no recent news when no near-term headlines were found).</p>
         <h3 class="section">The part of the day</h3>
         <p class="summary">A headline can explain only the price that was in progress when it was published, in US Eastern. Before 9:30 AM that is the overnight gap, from the prior close to the open. From 9:30 AM to 4:00 PM it is the regular session, from the open to the latest price, which becomes the 4:00 PM close after the market closes. After 4:00 PM, and a weekend story kept with Friday, it is the close versus the prior close.</p>
         <h3 class="section">A candidate reason</h3>
@@ -1303,14 +1362,25 @@
         <h3 class="section">How the score is made</h3>
         <p class="summary">The first check downloads the model weights. After that, PyTorch runs the model on this computer. It is not a hosted analysis API, so there is no daily request cap. Each headline is cut off at 512 tokens. The model returns three probabilities. The score shown in the app is out of 100: 0 is strongly negative, 50 is neutral, and 100 is strongly positive. It is 50 plus 50 times the positive probability minus the negative probability. Confidence is the winning probability. The line under each headline also lists positive, negative, and neutral as percentages.</p>
         <h3 class="section">How a check uses it</h3>
-        <p class="summary">Every headline is scored with FinBERT. A headline joins that day’s news alert only when its score is at least the FinBERT sentiment threshold away from 50 (Settings). The default is 25, so a score of 75 or 25 qualifies and a score of 60 does not. The alert’s combined score is the average of those headlines. Isolation Forest is the separate price/volume model trained on the lake — it does not score headlines.</p>
+        <p class="summary">Every near-term headline is scored with FinBERT. Sentiment on the card is always the climate average of all those scores (not only the screamers). A news side can join two ways: (1) at least one headline clears the Settings distance-from-50 gate and lines up with the move, or (2) no single headline clears, but that full climate average clears half the Settings distance (soft climate join — an average of mild scores cannot clear the full screamer gate). If headlines lean both ways, Direction reads mixed and the split counts are shown — a calm mid-50 average is not treated as quiet agreement. On price-led days where neither join clears, the card still lists the headlines with climate context. Isolation Forest scores price/volume, not headlines.</p>
         <h3 class="section">Why the default threshold is 25</h3>
         <p class="summary">25 points from 50 is the same gate as a 0.50 gap between the positive and negative probabilities. A slight lean, such as 60 out of 100, stays out. The older 0.34 cutoff belonged to a word list, where one mild word topped out near 0.33. That number is not a FinBERT confidence level.</p>
       </div>
     </div>
   </div>
   <script>
-    const KIND_LABELS = { price: "price-led", news: "news-led", news_price: "aligned" };
+    const KIND_LABELS = { price: "price-led", news: "news-led", news_price: "price + news" };
+    const PRICE_SHAPE_LABELS = {
+      volatile: "volatile",
+      anomalous: "anomalous",
+      volatile_anomalous: "volatile + anomalous",
+    };
+    const AGREEMENT_LABELS = {
+      agrees: "agrees",
+      disagrees: "disagrees",
+      mixed: "mixed",
+      no_news: "no recent news",
+    };
     let displayTimeZone = "America/New_York";
     let currentRules = null;
     const statusEl = document.querySelector("#status");
@@ -1338,13 +1408,25 @@
     const WATCHLIST_RESULTS_KEY = "tickerAlertWatchlistResults";
     const SCREENER_RESULTS_KEY = "tickerAlertScreenerResults";
     const SCREENER_ENABLED_KEY = "tickerAlertScreenerEnabled";
-    const DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"];
+    const DEFAULT_HISTORY_COLS = [
+      "symbol",
+      "company",
+      "origin",
+      "when",
+      "type",
+      "shape",
+      "direction",
+      "price",
+      "sentiment",
+    ];
     const HISTORY_COL_META = {
       symbol: { label: "Symbol" },
       company: { label: "Company" },
       origin: { label: "Origin" },
-      when: { label: "When", numeric: true },
-      type: { label: "Type" },
+      when: { label: "When", numeric: true }, // last updated (updated_at)
+      type: { label: "Alert type" },
+      shape: { label: "Price shape" },
+      direction: { label: "Direction" },
       price: { label: "Price change", numeric: true, className: "num" },
       sentiment: { label: "Sentiment score", numeric: true, className: "num" },
     };
@@ -1881,7 +1963,9 @@
 
     function priceClass(value) {
       const number = Number(value);
-      if (value == null || Number.isNaN(number) || number === 0) return "mixed";
+      if (value == null || Number.isNaN(number)) return "flat";
+      // +0.00% / -0.00% in the UI — flat gray, not gold (gold is for attention chrome).
+      if (Math.abs(number) < 0.00005) return "flat";
       return number > 0 ? "up" : "down";
     }
 
@@ -2095,19 +2179,31 @@
       return "";
     }
 
+    function alertPriceLevels(alert) {
+      let from = alert.prior_close;
+      let to = alert.latest_close;
+      const forest = (alert.sections || {}).forest;
+      if (forest && typeof forest === "object") {
+        if (from == null && forest.session_open != null) from = forest.session_open;
+        if (to == null && forest.session_last != null) to = forest.session_last;
+      }
+      return { from, to };
+    }
+
     function priceBreakdownDetail(alert) {
-      const from = formatMoney(alert.prior_close);
-      const to = formatMoney(alert.latest_close);
+      const levels = alertPriceLevels(alert);
+      const from = formatMoney(levels.from);
+      const to = formatMoney(levels.to);
       const caption = priceSpanCaption(alert);
       if (!from && !to && !caption) return null;
       const detail = document.createElement("div");
       detail.className = "alert-metric-detail is-stacked";
       detail.title = "Prices used for the percent change, and which part of the day they cover";
       if (from && to) {
-        const levels = document.createElement("span");
-        levels.className = "alert-metric-levels";
-        levels.textContent = from + " → " + to;
-        detail.append(levels);
+        const line = document.createElement("span");
+        line.className = "alert-metric-levels";
+        line.textContent = from + " → " + to;
+        detail.append(line);
       }
       if (caption) {
         const span = document.createElement("span");
@@ -2204,12 +2300,13 @@
     function alertMetrics(alert) {
       const row = document.createElement("div");
       row.className = "alert-metrics";
-      // News-led: sentiment only at the top. Price-led / aligned: price + sentiment when present.
-      if (alert.kind !== "news" && alert.price_change_pct != null) {
+      // Price change + sentiment as quick-look numbers. Anomaly "why" lives in What happened.
+      const change = alertDisplayPriceChange(alert);
+      if (change != null) {
         row.append(metricBlock(
           "Price change",
-          formatMove(alert.price_change_pct),
-          priceClass(alert.price_change_pct),
+          formatMove(change),
+          priceClass(change),
           priceBreakdownDetail(alert),
           "below",
         ));
@@ -2324,7 +2421,21 @@
         label.textContent = step.label || step.id || "";
         const detail = document.createElement("div");
         detail.className = "detail";
-        detail.textContent = step.detail || "";
+        const bullets = Array.isArray(step.details)
+          ? step.details.map((line) => String(line || "").trim()).filter(Boolean)
+          : [];
+        if (bullets.length > 1) {
+          const ul = document.createElement("ul");
+          ul.className = "evidence-bullets";
+          for (const line of bullets) {
+            const bullet = document.createElement("li");
+            bullet.textContent = line;
+            ul.append(bullet);
+          }
+          detail.append(ul);
+        } else {
+          detail.textContent = bullets[0] || step.detail || "";
+        }
         copy.append(label, detail);
         item.append(mark, copy);
         list.append(item);
@@ -2348,9 +2459,8 @@
         "What happened": true,
         "Summary": true,
         "Price": false,
-        "Forest": false,
         "News": false,
-        "Rule": false,
+        "Rule & history": false,
       };
 
       const sectionKeys = opts.sectionKeys || openHomeSectionKeys;
@@ -2391,41 +2501,16 @@
       });
 
       appendPlain("Price", (body) => {
-        if (!sections.price) return false;
-        const p = document.createElement("p");
-        p.className = "summary";
-        p.textContent = sections.price;
-        body.append(p);
-        return true;
-      });
-
-      appendPlain("Forest", (body) => {
         const forest = sections.forest;
-        if (!forest || typeof forest !== "object" || !forest.anomalous) return false;
-        const lines = [];
-        const model = forest.model_id || "isolation_forest";
-        const score = Number(forest.forest_score);
-        const cutoff = Number(forest.score_cutoff);
-        let forestLine = "Isolation Forest " + model + " marked this session anomalous";
-        const scoreBits = [];
-        if (Number.isFinite(score)) scoreBits.push("score " + score.toFixed(4));
-        if (Number.isFinite(cutoff)) scoreBits.push("cutoff " + cutoff.toFixed(4));
-        if (scoreBits.length) forestLine += " (" + scoreBits.join(", ") + ")";
-        lines.push(forestLine + ".");
-        const features = forest.features || {};
-        const bits = [];
-        if (features.gap_return != null) bits.push("gap " + formatMove(features.gap_return));
-        if (features.session_return != null) bits.push("open→last " + formatMove(features.session_return));
-        if (features.close_return != null) bits.push("close vs prior " + formatMove(features.close_return));
-        if (features.volume_zscore != null) {
-          const z = Number(features.volume_zscore);
-          bits.push("volume z " + (Number.isFinite(z) ? (z >= 0 ? "+" : "") + z.toFixed(2) : String(features.volume_zscore)));
+        const hasForest = forest && typeof forest === "object" && forest.anomalous;
+        if (!sections.price && !hasForest) return false;
+        if (sections.price) {
+          const p = document.createElement("p");
+          p.className = "summary";
+          p.textContent = sections.price;
+          body.append(p);
         }
-        if (bits.length) lines.push("Session features: " + bits.join(", ") + ".");
-        const p = document.createElement("p");
-        p.className = "summary";
-        p.textContent = lines.join(" ");
-        body.append(p);
+        if (hasForest) appendForestUnderPrice(body, forest);
         return true;
       });
 
@@ -2440,22 +2525,200 @@
         if (alert.sentiment_score != null) {
           const score = document.createElement("p");
           score.className = "combined " + scoreClass(alert.sentiment_score);
-          score.textContent = "Combined sentiment " + formatScore(alert.sentiment_score) + "/100";
+          const joinPath = sections.news_join_path;
+          const belowJoin = !joinPath && sections.news_gate_cleared === false && (alert.articles || []).length;
+          const polarized = Boolean(sections.sentiment_split && sections.sentiment_split.polarized);
+          let label = "Climate sentiment " + formatScore(alert.sentiment_score) + "/100";
+          if (joinPath === "climate") label += " (climate join)";
+          else if (belowJoin) label += " (below join gate)";
+          if (polarized) label += " · polarized";
+          score.textContent = label;
+          score.title = polarized
+            ? "Average of all near-term FinBERT scores; headlines lean both ways — Direction reads mixed."
+            : belowJoin
+              ? "Average of all near-term FinBERT scores — context only; neither a single headline nor this average cleared the join gate."
+              : "Average of all near-term FinBERT scores (full climate, not screamers only).";
           body.append(score);
         }
         if ((alert.articles || []).length) body.append(articleList(alert.articles));
         return true;
       });
 
-      appendPlain("Rule", (body) => {
+      appendPlain("Rule & history", (body) => {
         const rule = sections.rules;
-        if (!rule || rule === sections.synthesis || rule === alert.summary) return false;
-        const p = document.createElement("p");
-        p.className = "summary";
-        p.textContent = rule;
-        body.append(p);
+        const hasRule = rule && rule !== sections.synthesis && rule !== alert.summary;
+        const timeline = buildAlertTimeline(alert);
+        if (!hasRule && !timeline.length) return false;
+        if (hasRule) {
+          const p = document.createElement("p");
+          p.className = "summary";
+          p.textContent = rule;
+          body.append(p);
+        }
+        if (timeline.length) {
+          const list = document.createElement("ul");
+          list.className = "articles history-log";
+          timeline.forEach((entry) => {
+            const li = document.createElement("li");
+            li.textContent = entry.when + " — " + entry.details.join("; ");
+            list.append(li);
+          });
+          body.append(list);
+        }
         return true;
       });
+    }
+
+    function historyBucketKey(iso) {
+      const time = new Date(iso || 0).getTime();
+      if (Number.isNaN(time)) return "";
+      // Bucket to the minute so first-triggered / created / opened at the same clock don't duplicate.
+      return String(Math.floor(time / 60000));
+    }
+
+    function pushTimelineDetail(bucket, detail) {
+      const text = String(detail || "").trim();
+      if (!text) return;
+      if (!bucket.details.includes(text)) bucket.details.push(text);
+    }
+
+    function kindHistoryLabel(kind) {
+      return KIND_LABELS[kind] || kind || "alert";
+    }
+
+    function humanizeHistoryNote(note, kind) {
+      let text = String(note || "").trim();
+      if (!text) return "";
+      const label = kindHistoryLabel(kind);
+      // Older cryptic notes → product wording.
+      text = text.replace(/\bopened as news_price\b/gi, "Alert created as price + news");
+      text = text.replace(/\bopened as news\b/gi, "Alert created as news-led");
+      text = text.replace(/\bopened as price\b/gi, "Alert created as price-led");
+      text = text.replace(/\bopened as ([a-z_+]+)\b/gi, (_, raw) => "Alert created as " + kindHistoryLabel(raw));
+      text = text.replace(/\bkind ([a-z_+]+) → ([a-z_+]+)\b/gi, (_, from, to) => {
+        return "Alert type changed to " + kindHistoryLabel(to) + " (was " + kindHistoryLabel(from) + ")";
+      });
+      text = text.replace(/\brefreshed \(([^)]+)\)\b/gi, (_, raw) => "Refreshed " + kindHistoryLabel(raw) + " alert");
+      text = text.replace(/\bclimate (\d+(?:\.\d+)?)→\1(?:\/100)?\b/gi, ""); // unchanged score: drop
+      text = text.replace(
+        /\bclimate (\d+(?:\.\d+)?)→(\d+(?:\.\d+)?)(?:\/100)?\b/gi,
+        "climate sentiment $1→$2/100",
+      );
+      text = text.replace(/\bclimate (\d+(?:\.\d+)?)(?:\/100)?\b/gi, "climate sentiment $1/100");
+      text = text.replace(/\bheadlines (\d+)→(\d+)\b/gi, "headlines listed $1→$2");
+      text = text.replace(/\bjoin=headline\b/gi, "news joined via a strong headline");
+      text = text.replace(/\bjoin=climate\b/gi, "news joined via the climate average");
+      text = text.replace(/\s*;\s*;/g, "; ").replace(/^;\s*|\s*;\s*$/g, "").replace(/\s{2,}/g, " ").trim();
+      if (!text && label) return "Refreshed " + label + " alert";
+      return text;
+    }
+
+    function buildAlertTimeline(alert) {
+      const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
+      const history = Array.isArray(sections.update_history) ? sections.update_history : [];
+      const buckets = new Map();
+
+      function ensureBucket(iso) {
+        if (!iso) return null;
+        const key = historyBucketKey(iso);
+        if (!key) return null;
+        let bucket = buckets.get(key);
+        if (!bucket) {
+          bucket = { at: iso, sort: new Date(iso).getTime(), details: [] };
+          buckets.set(key, bucket);
+        } else if (new Date(iso).getTime() < bucket.sort) {
+          // Prefer the earliest ISO inside the minute for display.
+          bucket.at = iso;
+          bucket.sort = new Date(iso).getTime();
+        }
+        return bucket;
+      }
+
+      const firstTriggered = sections.first_triggered_at || alert.triggered_at;
+      const firstBucket = ensureBucket(firstTriggered);
+      if (firstBucket) {
+        pushTimelineDetail(
+          firstBucket,
+          "Condition first met (when the move or headline became true in the data)",
+        );
+      }
+
+      history.forEach((item) => {
+        if (!item || !item.at) return;
+        const bucket = ensureBucket(item.at);
+        if (!bucket) return;
+        const event = item.event ? String(item.event) : "";
+        const kind = item.kind ? String(item.kind) : alert.kind;
+        const note = humanizeHistoryNote(item.note, kind);
+        if (event === "opened") {
+          pushTimelineDetail(bucket, note || ("Alert created as " + kindHistoryLabel(kind)));
+        } else if (event === "updated") {
+          pushTimelineDetail(bucket, note || ("Refreshed " + kindHistoryLabel(kind) + " alert"));
+        } else if (note) {
+          pushTimelineDetail(bucket, note);
+        }
+      });
+
+      const createdBucket = ensureBucket(alert.created_at);
+      if (createdBucket) {
+        const alreadyCreated = createdBucket.details.some((d) => /alert created/i.test(d));
+        if (!alreadyCreated) {
+          pushTimelineDetail(createdBucket, "Alert created as " + kindHistoryLabel(alert.kind));
+        }
+      }
+
+      const updatedBucket = ensureBucket(alert.updated_at);
+      if (updatedBucket) {
+        const hasActivity = updatedBucket.details.some((d) =>
+          /refresh|created|climate|joined|changed/i.test(d),
+        );
+        if (!hasActivity) {
+          pushTimelineDetail(updatedBucket, "Last updated");
+        }
+      }
+
+      return Array.from(buckets.values())
+        .filter((bucket) => bucket.details.length)
+        .sort((a, b) => a.sort - b.sort)
+        .map((bucket) => ({
+          when: formatWhen(bucket.at),
+          details: bucket.details,
+        }));
+    }
+
+    function appendForestUnderPrice(parent, forest) {
+      const sub = document.createElement("h4");
+      sub.className = "subsection";
+      sub.textContent = "Forest";
+      parent.append(sub);
+      const lines = [];
+      const model = forest.model_id || "isolation_forest";
+      const score = Number(forest.forest_score);
+      const cutoff = Number(forest.score_cutoff);
+      let forestLine = "Isolation Forest " + model + " marked this session anomalous";
+      const scoreBits = [];
+      if (Number.isFinite(score)) scoreBits.push("score " + score.toFixed(4));
+      if (Number.isFinite(cutoff)) scoreBits.push("cutoff " + cutoff.toFixed(4));
+      if (scoreBits.length) forestLine += " (" + scoreBits.join(", ") + ")";
+      lines.push(forestLine + ".");
+      const features = forest.features || {};
+      const bits = [];
+      if (features.gap_return != null) bits.push("gap " + formatMove(features.gap_return));
+      if (features.session_return != null) bits.push("open→last " + formatMove(features.session_return));
+      if (features.close_return != null) bits.push("close vs prior " + formatMove(features.close_return));
+      if (features.volume_zscore != null) {
+        const z = Number(features.volume_zscore);
+        bits.push("volume z " + (Number.isFinite(z) ? (z >= 0 ? "+" : "") + z.toFixed(2) : String(features.volume_zscore)));
+      }
+      if (bits.length) lines.push("Session features: " + bits.join(", ") + ".");
+      const p = document.createElement("p");
+      p.className = "summary";
+      p.textContent = lines.join(" ");
+      parent.append(p);
+    }
+
+    function alertWhenStamp(alert) {
+      return alert && (alert.updated_at || alert.triggered_at || alert.created_at);
     }
 
     function yahooQuoteUrl(symbol) {
@@ -2611,9 +2874,10 @@
         const company = companyNameEl(alert.symbol);
         const when = document.createElement("span");
         when.className = "when";
-        when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
-        when.title = "When the condition was met";
-        head.append(kindPill(alert.kind), symbol);
+        when.textContent = formatWhen(alertWhenStamp(alert));
+        when.title = "Last updated (same symbol-day row can refresh during the session)";
+        appendStoryAndShapePills(head, alert);
+        head.append(symbol);
         if (company) head.append(company);
         for (const bit of alertHeadMetrics(alert)) head.append(bit);
         head.append(when);
@@ -2711,12 +2975,118 @@
       }
     }
 
-    function kindPill(kind) {
+    function kindPill(kind, alert) {
       const pill = document.createElement("span");
       const tone = kind === "news_price" ? "fusion" : (kind === "price" ? "price" : "news");
+      const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
       pill.className = "badge kind-" + tone;
       pill.textContent = KIND_LABELS[kind] || kind || "";
+      if (sections.news_join_path === "climate") {
+        pill.title = "Alert type with climate join: full FinBERT average cleared the gate (no single screamer)";
+      } else {
+        pill.title = "Alert type: price-led / news-led / price + news (headline join and/or climate join)";
+      }
       return pill;
+    }
+
+    function alertPriceShape(alert) {
+      const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
+      const fromSection = sections.price_shape || (sections.evidence && sections.evidence.price_shape);
+      if (fromSection && PRICE_SHAPE_LABELS[fromSection]) return fromSection;
+      // Fallback for older rows: derive from forest + |price change| vs threshold on the card.
+      const forest = sections.forest;
+      const anomalous = !!(forest && typeof forest === "object" && forest.anomalous);
+      const threshold = Number(alert && alert.price_move_threshold);
+      const change = alertDisplayPriceChange(alert);
+      let volatile = false;
+      if (change != null && Number.isFinite(threshold) && threshold > 0) {
+        volatile = Math.abs(Number(change)) >= threshold;
+      }
+      if (volatile && anomalous) return "volatile_anomalous";
+      if (volatile) return "volatile";
+      if (anomalous) return "anomalous";
+      return "";
+    }
+
+    function priceShapePill(alert) {
+      const key = alertPriceShape(alert);
+      if (!key) return null;
+      const pill = document.createElement("span");
+      const tone = key === "volatile_anomalous" ? "both" : key;
+      pill.className = "badge shape-" + tone;
+      pill.textContent = PRICE_SHAPE_LABELS[key] || key;
+      pill.title = "Price shape: cleared the % floor (volatile) and/or Isolation Forest (anomalous)";
+      return pill;
+    }
+
+    function alertAgreement(alert) {
+      const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
+      const fromSection = sections.agreement || (sections.evidence && sections.evidence.agreement);
+      if (fromSection && AGREEMENT_LABELS[fromSection]) return fromSection;
+      const articles = alert.articles || [];
+      const score = alert.sentiment_score;
+      const hasNews = (score != null && score === score) || articles.length > 0;
+      const change = alertDisplayPriceChange(alert);
+      const hasPrice =
+        (change != null && change === change) ||
+        alert.kind === "price" ||
+        alert.kind === "news_price" ||
+        Boolean(sections.forest && sections.forest.anomalous);
+      if (hasPrice && !hasNews) return "no_news";
+      const split = sections.sentiment_split;
+      if (split && split.polarized) return "mixed";
+      if (articles.length) {
+        let pos = 0;
+        let neg = 0;
+        for (const article of articles) {
+          const s = Number(article && article.sentiment_score);
+          if (!(s === s)) continue;
+          if (s > 50) pos += 1;
+          else if (s < 50) neg += 1;
+        }
+        if (pos > 0 && neg > 0) return "mixed";
+      }
+      // Fallback: compare FinBERT climate to session move.
+      if (!hasNews || change == null || change !== change) return "";
+      const newsUp = Number(score) > 50;
+      const newsDown = Number(score) < 50;
+      const priceUp = Number(change) > 0;
+      const priceDown = Number(change) < 0;
+      if ((newsUp && priceUp) || (newsDown && priceDown)) return "agrees";
+      if ((newsUp && priceDown) || (newsDown && priceUp)) return "disagrees";
+      return "mixed";
+    }
+
+    function agreementPill(alert) {
+      const key = alertAgreement(alert);
+      if (!key) return null;
+      const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
+      const joinPath = sections.news_join_path;
+      const belowJoin = !joinPath && sections.news_gate_cleared === false && (alert.articles || []).length;
+      const polarized = Boolean(sections.sentiment_split && sections.sentiment_split.polarized) || key === "mixed";
+      const pill = document.createElement("span");
+      pill.className = "badge agree-" + key;
+      pill.textContent = AGREEMENT_LABELS[key] || key;
+      if (key === "no_news") {
+        pill.title = "No near-term headlines were found for this session — news may not have caught up yet.";
+      } else if (polarized && sections.sentiment_split && sections.sentiment_split.polarized) {
+        pill.title = "Direction is mixed because near-term headlines lean both ways (polarized climate).";
+      } else if (joinPath === "climate") {
+        pill.title = "Direction from climate FinBERT average (soft join — no single headline cleared the gate)";
+      } else if (belowJoin) {
+        pill.title = "Direction from climate FinBERT lean (below join gate — context only)";
+      } else {
+        pill.title = "Direction: do price move and news climate agree, disagree, or look mixed?";
+      }
+      return pill;
+    }
+
+    function appendStoryAndShapePills(parent, alert) {
+      parent.append(kindPill(alert.kind, alert));
+      const shape = priceShapePill(alert);
+      if (shape) parent.append(shape);
+      const agree = agreementPill(alert);
+      if (agree) parent.append(agree);
     }
 
     function historyValue(alert, key) {
@@ -2724,8 +3094,16 @@
       if (key === "company") return companyNameForSymbol(alert.symbol);
       if (key === "origin") return originLabel(alert.origin);
       if (key === "type") return KIND_LABELS[alert.kind] || alert.kind || "";
+      if (key === "shape") {
+        const shape = alertPriceShape(alert);
+        return shape ? (PRICE_SHAPE_LABELS[shape] || shape) : "";
+      }
+      if (key === "direction") {
+        const agree = alertAgreement(alert);
+        return agree ? (AGREEMENT_LABELS[agree] || agree) : "";
+      }
       if (key === "when") {
-        const time = new Date(alert.triggered_at || alert.updated_at || 0).getTime();
+        const time = new Date(alertWhenStamp(alert) || 0).getTime();
         return Number.isNaN(time) ? null : time;
       }
       if (key === "price") {
@@ -2867,13 +3245,34 @@
       }
       if (key === "when") {
         const cell = document.createElement("td");
-        cell.textContent = formatWhen(alert.triggered_at || alert.updated_at);
-        cell.title = "When the condition was met";
+        cell.textContent = formatWhen(alertWhenStamp(alert));
+        cell.title = "Last updated — opens Details for first triggered / update history";
         return cell;
       }
       if (key === "type") {
         const cell = document.createElement("td");
-        cell.append(kindPill(alert.kind));
+        cell.append(kindPill(alert.kind, alert));
+        return cell;
+      }
+      if (key === "shape") {
+        const cell = document.createElement("td");
+        const shape = priceShapePill(alert);
+        if (shape) cell.append(shape);
+        else {
+          cell.textContent = "—";
+          cell.classList.add("type-stat-empty");
+        }
+        return cell;
+      }
+      if (key === "direction") {
+        const cell = document.createElement("td");
+        const agree = agreementPill(alert);
+        if (agree) cell.append(agree);
+        else {
+          cell.textContent = "—";
+          cell.classList.add("type-stat-empty");
+          cell.title = "No direction reading for this row";
+        }
         return cell;
       }
       if (key === "price") {
@@ -2895,7 +3294,11 @@
       if (key === "sentiment") {
         const cell = document.createElement("td");
         cell.className = "num";
-        cell.title = "FinBERT sentiment score (0–100)";
+        const sections = alert && alert.sections && typeof alert.sections === "object" ? alert.sections : {};
+        const belowGate = sections.news_gate_cleared === false && (alert.articles || []).length;
+        cell.title = belowGate
+          ? "Soft FinBERT average (below gate) — context only"
+          : "FinBERT sentiment score (0–100)";
         if (alert.sentiment_score == null || alert.sentiment_score !== alert.sentiment_score) {
           cell.textContent = "—";
           cell.classList.add("type-stat-empty");
@@ -2968,9 +3371,13 @@
       const title = document.querySelector("#detailTitle");
       const when = document.createElement("span");
       when.className = "when";
-      when.textContent = formatWhen(alert.triggered_at || alert.updated_at);
-      when.title = "When the condition was met";
-      const detailParts = [kindPill(alert.kind), symbolLink(alert.symbol)];
+      when.textContent = formatWhen(alertWhenStamp(alert));
+      when.title = "Last updated";
+      const detailParts = [kindPill(alert.kind, alert)];      const detailShape = priceShapePill(alert);
+      if (detailShape) detailParts.push(detailShape);
+      const detailAgree = agreementPill(alert);
+      if (detailAgree) detailParts.push(detailAgree);
+      detailParts.push(symbolLink(alert.symbol));
       const company = companyNameEl(alert.symbol);
       if (company) detailParts.push(company);
       detailParts.push(when);
@@ -3767,7 +4174,7 @@
         event.preventDefault();
         const status = document.querySelector("#clearAllStatus");
         const confirmed = window.confirm(
-          "Delete every saved alert in History and Home? This does not rebuild."
+          "Delete every saved alert in History and Home (Live and Watchlist)? This does not rebuild."
         );
         if (!confirmed) {
           status.textContent = "";
@@ -3792,19 +4199,55 @@
       });
     }
 
+    function wireOriginClear(formId, statusId, origin, label) {
+      const form = document.querySelector(formId);
+      if (!form) return;
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.querySelector(statusId);
+        const confirmed = window.confirm(
+          "Clear " + label + " history only? The other origin stays."
+        );
+        if (!confirmed) {
+          status.textContent = "";
+          status.className = "status";
+          return;
+        }
+        status.textContent = "Clearing " + label + " history…";
+        status.className = "status";
+        try {
+          const result = await readJson(await fetch("/v1/admin/alerts/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ origin }),
+          }));
+          const demoted = result.demoted_to_live || result.demoted_to_watchlist || 0;
+          const extra = demoted ? " Demoted " + demoted + " both-tagged row(s)." : "";
+          status.textContent = "Cleared " + (result.deleted || 0) + " " + label + " alert(s)." + extra;
+          status.className = "status";
+          await refresh();
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "status error";
+        }
+      });
+    }
+    wireOriginClear("#clear-watchlist-form", "#clearWatchlistStatus", "watchlist", "Watchlist");
+    wireOriginClear("#clear-live-form", "#clearLiveStatus", "live", "Live");
+
     document.querySelector("#rebuild-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const days = Number(document.querySelector("#rebuildDays").value);
       const status = document.querySelector("#rebuildStatus");
       const confirmed = window.confirm(
-        "This deletes every saved alert and rebuilds the last " + days + " day(s) for the watchlist."
+        "Clear Watchlist history only, then rebuild the last " + days + " day(s) for the watchlist? Live alerts stay."
       );
       if (!confirmed) {
         status.textContent = "";
         status.className = "status";
         return;
       }
-      status.textContent = "Wiping alerts and rebuilding…";
+      status.textContent = "Clearing Watchlist and rebuilding…";
       status.className = "status";
       try {
         const result = await readJson(await fetch("/v1/admin/rebuild", {
@@ -3815,7 +4258,7 @@
         const problems = result.errors && result.errors.length
           ? " " + result.errors.length + " symbol error(s)."
           : "";
-        status.textContent = "Rebuilt " + result.alerts.length + " alert(s) from " + result.start + "." + problems + reasoningNote(result);
+        status.textContent = "Rebuilt " + result.alerts.length + " Watchlist alert(s) from " + result.start + "." + problems + reasoningNote(result);
         status.className = "status";
         await refresh();
       } catch (err) {

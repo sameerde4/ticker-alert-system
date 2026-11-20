@@ -65,7 +65,8 @@ def test_health_and_ui_without_a_database():
     assert "function alertMetrics" in page.text
     assert "alert-metric-value" in page.text
     assert "Price change" in page.text
-    assert "head.append(kindPill(alert.kind), symbol)" in page.text
+    assert "appendStoryAndShapePills(head, alert)" in page.text
+    assert "PRICE_SHAPE_LABELS" in page.text
     assert "if (company) head.append(company)" in page.text
     assert "function alertHeadMetrics" in page.text
     assert "for (const bit of alertHeadMetrics(alert)) head.append(bit)" in page.text
@@ -121,9 +122,19 @@ def test_health_and_ui_without_a_database():
     assert "requestSubmit" not in page.text
     for column in ("symbol", "company", "origin", "type", "when"):
         assert f'"{column}"' in page.text
-    assert 'DEFAULT_HISTORY_COLS = ["symbol", "company", "origin", "when", "type", "price", "sentiment"]' in page.text
+    assert "DEFAULT_HISTORY_COLS" in page.text
+    assert 'label: "Alert type"' in page.text
+    assert 'label: "Price shape"' in page.text
+    assert 'label: "Direction"' in page.text
+    assert 'news_price: "price + news"' in page.text
     assert 'label: "Price change"' in page.text
     assert 'label: "Sentiment score"' in page.text
+    assert "function alertDisplayPriceChange" in page.text
+    assert "Anomaly \"why\" lives in What happened" in page.text or "alertDisplayPriceChange(alert)" in page.text
+    assert 'return "flat"' in page.text
+    assert ".badge.origin-live" in page.text
+    assert "#5eead4" in page.text
+    assert "#ffb070" in page.text
     assert "function countArticleSentiments" in page.text
     assert "function sentimentBreakdownDetail" in page.text
     assert "function priceBreakdownDetail" in page.text
@@ -132,7 +143,7 @@ def test_health_and_ui_without_a_database():
     assert "alert-metric-span" in page.text
     assert 'label: "Company"' in page.text
     assert 'label: "Sector"' not in page.text
-    assert 'label: "Type"' in page.text
+    assert 'label: "Alert type"' in page.text
     assert 'label: "Alert details"' not in page.text
     assert 'label: "Origin"' in page.text
     assert "history-row" in page.text
@@ -181,11 +192,17 @@ def test_rebuild_rejects_a_bad_day_count_before_the_database():
     response = client.post("/v1/admin/rebuild", json={"days": 0})
     assert response.status_code == 400
     page = client.get("/ui")
-    assert "Rebuild history" in page.text
-    assert "Wipe and rebuild" in page.text
-    assert "Clear alerts" in page.text
+    assert "Alert history" in page.text
+    assert "Rebuild Watchlist history" in page.text
+    assert "Clear Watchlist history" in page.text
+    assert "Clear Live history" in page.text
+    assert "Wipe and rebuild" not in page.text
+    assert "evidence-bullets" in page.text
+    assert "(not volatile)" in page.text or "not volatile" in page.text or 'return "flat"' in page.text
     assert 'id="clear-below-form"' in page.text
     assert 'id="clearAllAlerts"' in page.text
+    assert 'id="clearWatchlistAlerts"' in page.text
+    assert 'id="clearLiveAlerts"' in page.text
     assert "/v1/admin/alerts/clear" in page.text
     clear_reject = client.post("/v1/admin/alerts/clear", json={})
     assert clear_reject.status_code in (400, 503)
