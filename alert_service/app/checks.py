@@ -28,7 +28,7 @@ from .perplexity_catalog import known_model
 from .watchlist_forest import apply_forest_to_drafts, load_watchlist_forest_scorer
 from .store import (
     clear_symbol_day,
-    delete_all_alerts,
+    clear_watchlist_alerts,
     get_alert_rules,
     list_alert_days,
     list_watchlist,
@@ -293,12 +293,13 @@ def rebuild_start(today: date, days: int) -> date:
 
 
 async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None = None) -> dict[str, Any]:
-    """Delete every saved alert, then rerun the current rules over the last ``days`` calendar days.
+    """Clear Watchlist history only, then rerun rules over the last ``days`` calendar days.
 
-    Each watchlist symbol is checked once per trading session in that window. Yahoo's
-    quote news is paged back through the first day of the window, and each story is
-    scored for the trading day it was published. A past day is judged as of 8:00 PM
-    Eastern, so that day's headlines fall inside the news lookback.
+    Live rows are left alone (``both`` is demoted to live first). Each watchlist symbol
+    is checked once per trading session in that window. Yahoo's quote news is paged
+    back through the first day of the window, and each story is scored for the trading
+    day it was published. A past day is judged as of 8:00 PM Eastern, so that day's
+    headlines fall inside the news lookback.
     """
     moment = now or datetime.now(UTC)
     today = eastern_date(moment)
@@ -306,7 +307,7 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
     async with pool.acquire() as conn:
         rules = await get_alert_rules(conn)
         symbols = [row["symbol"] for row in await list_watchlist(conn)]
-        await delete_all_alerts(conn)
+        cleared = await clear_watchlist_alerts(conn)
         await ensure_symbol_sectors(conn, symbols)
 
     errors: list[dict[str, str]] = []
@@ -380,6 +381,7 @@ async def rebuild_history(pool: asyncpg.Pool, *, days: int, now: datetime | None
         "days": days,
         "start": start.isoformat(),
         "checked": symbols,
+        "cleared": cleared,
         "errors": errors,
         "alerts": saved,
         "reasoning": reasoning,

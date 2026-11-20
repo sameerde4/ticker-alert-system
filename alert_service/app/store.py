@@ -602,10 +602,161 @@ async def clear_symbol_day(conn: asyncpg.Connection, symbol: str, bar_date) -> N
     )
 
 
+def _sections_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str) and value:
+        try:
+            loaded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return dict(loaded) if isinstance(loaded, dict) else {}
+    return {}
+
+
+def _iso_stamp(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value if value.tzinfo else value.replace(tzinfo=UTC)
+        return moment.astimezone(UTC).isoformat()
+    text = str(value).strip()
+    return text or None
+
+
+_KIND_HISTORY_LABELS = {
+    "price": "price-led",
+    "news": "news-led",
+    "news_price": "price + news",
+}
+
+
+def _kind_history_label(kind: Any) -> str:
+    key = str(kind or "").strip()
+    return _KIND_HISTORY_LABELS.get(key, key or "alert")
+
+
+def _join_history_phrase(join: Any) -> str | None:
+    if join == "headline":
+        return "news joined via a strong headline"
+    if join == "climate":
+        return "news joined via the climate average"
+    return None
+
+
+def _history_note(draft: AlertDraft, previous: dict[str, Any] | None) -> str:
+    """Human timeline note using the same alert-type labels as the UI chips."""
+    kind_label = _kind_history_label(draft.kind)
+    bits: list[str] = []
+    if previous is None:
+        return f"Alert created as {kind_label}"
+    prev_kind = previous.get("kind")
+    if prev_kind and prev_kind != draft.kind:
+        bits.append(
+            f"Alert type changed to {kind_label} (was {_kind_history_label(prev_kind)})"
+        )
+    else:
+        bits.append(f"Refreshed {kind_label} alert")
+    prev_score = previous.get("sentiment_score")
+    if draft.sentiment_score is not None and prev_score != draft.sentiment_score:
+        try:
+            if prev_score is not None:
+                bits.append(
+                    "climate sentiment "
+                    f"{float(prev_score):.0f}→{float(draft.sentiment_score):.0f}/100"
+                )
+            else:
+                bits.append(f"climate sentiment {float(draft.sentiment_score):.0f}/100")
+        except (TypeError, ValueError):
+            bits.append("climate sentiment changed")
+    prev_n = len(previous.get("articles") or [])
+    next_n = len(draft.articles or ())
+    if next_n != prev_n:
+        bits.append(f"headlines listed {prev_n}→{next_n}")
+    sections = draft.sections if isinstance(draft.sections, dict) else {}
+    join_bit = _join_history_phrase(sections.get("news_join_path"))
+    if join_bit:
+        bits.append(join_bit)
+    return "; ".join(bits)
+
+
+def merge_alert_update_history(
+    draft: AlertDraft,
+    *,
+    existing: dict[str, Any] | None,
+    written_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Keep a capped timeline of opens/updates inside ``sections.update_history``."""
+    sections = _sections_dict(draft.sections)
+    stamp = _iso_stamp(written_at or datetime.now(UTC)) or datetime.now(UTC).isoformat()
+    history: list[dict[str, Any]] = []
+    if existing:
+        prev_sections = _sections_dict(existing.get("sections"))
+        raw = prev_sections.get("update_history")
+        if isinstance(raw, list):
+            history = [dict(item) for item in raw if isinstance(item, dict)]
+        if not history:
+            opened_at = (
+                _iso_stamp(existing.get("created_at"))
+                or _iso_stamp(existing.get("triggered_at"))
+                or stamp
+            )
+            seed_kind = existing.get("kind") or draft.kind
+            history.append(
+                {
+                    "at": opened_at,
+                    "event": "opened",
+                    "kind": seed_kind,
+                    "note": f"Alert created as {_kind_history_label(seed_kind)}",
+                }
+            )
+        history.append(
+            {
+                "at": stamp,
+                "event": "updated",
+                "kind": draft.kind,
+                "note": _history_note(draft, existing),
+            }
+        )
+        if prev_sections.get("first_triggered_at"):
+            sections["first_triggered_at"] = prev_sections["first_triggered_at"]
+        else:
+            sections["first_triggered_at"] = (
+                _iso_stamp(existing.get("triggered_at"))
+                or _iso_stamp(draft.triggered_at)
+                or stamp
+            )
+    else:
+        history.append(
+            {
+                "at": stamp,
+                "event": "opened",
+                "kind": draft.kind,
+                "note": _history_note(draft, None),
+            }
+        )
+        sections["first_triggered_at"] = _iso_stamp(draft.triggered_at) or stamp
+    # Cap so sections stay small across a busy session.
+    sections["update_history"] = history[-24:]
+    return sections
+
+
 async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str, Any]:
     if draft.bar_date is None:
         raise ValueError("An alert needs a bar date so a symbol has one row per day.")
     origin = normalize_alert_origin(getattr(draft, "origin", None))
+    existing_row = await conn.fetchrow(
+        f"""
+        SELECT {_ALERT_COLUMNS}
+        FROM alerts
+        WHERE symbol = $1 AND bar_date = $2
+        """,
+        draft.symbol,
+        draft.bar_date,
+    )
+    existing = alert_record(existing_row) if existing_row else None
+    written_at = datetime.now(UTC)
+    sections = merge_alert_update_history(draft, existing=existing, written_at=written_at)
     conflict = "ON CONFLICT (symbol, bar_date)"
     row = await conn.fetchrow(
         f"""
@@ -632,7 +783,7 @@ async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str,
           summary = EXCLUDED.summary,
           articles = EXCLUDED.articles,
           sections = EXCLUDED.sections,
-          triggered_at = EXCLUDED.triggered_at,
+          triggered_at = COALESCE(alerts.triggered_at, EXCLUDED.triggered_at),
           price_move_threshold = EXCLUDED.price_move_threshold,
           sentiment_threshold = EXCLUDED.sentiment_threshold,
           origin = CASE
@@ -656,7 +807,7 @@ async def upsert_alert(conn: asyncpg.Connection, draft: AlertDraft) -> dict[str,
         draft.headline_title,
         draft.summary,
         json.dumps(list(draft.articles)),
-        json.dumps(draft.sections),
+        json.dumps(sections),
         draft.triggered_at,
         draft.price_move_threshold,
         draft.sentiment_threshold,
@@ -673,6 +824,39 @@ async def delete_all_alerts(conn: asyncpg.Connection) -> int:
         return int(str(result).rsplit(" ", 1)[-1])
     except (TypeError, ValueError):
         return 0
+
+
+def _delete_count(result: Any) -> int:
+    try:
+        return int(str(result).rsplit(" ", 1)[-1])
+    except (TypeError, ValueError):
+        return 0
+
+
+async def clear_watchlist_alerts(conn: asyncpg.Connection) -> dict[str, int]:
+    """Remove Watchlist-only rows; demote ``both`` → live so Live history stays."""
+    demoted = await conn.execute(
+        """
+        UPDATE alerts
+        SET origin = 'live', updated_at = NOW()
+        WHERE origin = 'both'
+        """
+    )
+    deleted = await conn.execute("DELETE FROM alerts WHERE origin = 'watchlist'")
+    return {"deleted": _delete_count(deleted), "demoted_to_live": _delete_count(demoted)}
+
+
+async def clear_live_alerts(conn: asyncpg.Connection) -> dict[str, int]:
+    """Remove Live-only rows; demote ``both`` → watchlist so Watchlist history stays."""
+    demoted = await conn.execute(
+        """
+        UPDATE alerts
+        SET origin = 'watchlist', updated_at = NOW()
+        WHERE origin = 'both'
+        """
+    )
+    deleted = await conn.execute("DELETE FROM alerts WHERE origin = 'live'")
+    return {"deleted": _delete_count(deleted), "demoted_to_watchlist": _delete_count(demoted)}
 
 
 async def delete_alerts_below_abs_change(conn: asyncpg.Connection, fraction: float) -> int:
@@ -701,13 +885,45 @@ def _qualified_alert_columns(alias: str = "alerts") -> str:
     return ", ".join(f"{alias}.{name}" for name in names)
 
 
+async def list_price_alerts_missing_climate(
+    conn: asyncpg.Connection, *, limit: int = 500
+) -> list[dict[str, Any]]:
+    """Price-led rows needing a FinBERT climate refresh.
+
+    Includes empty climate (null score / no articles) and older rows that have
+    headlines but were saved before sentiment_split / agreement stamping.
+    """
+    rows = await conn.fetch(
+        f"""
+        SELECT {_ALERT_COLUMNS}
+        FROM alerts
+        WHERE kind = 'price'
+          AND (
+            sentiment_score IS NULL
+            OR articles IS NULL
+            OR articles = '[]'::jsonb
+            OR COALESCE(sections->>'sentiment_split', '') = ''
+            OR (
+              articles IS NOT NULL
+              AND articles <> '[]'::jsonb
+              AND COALESCE(sections->>'agreement', '') = ''
+            )
+          )
+        ORDER BY triggered_at DESC NULLS LAST, updated_at DESC
+        LIMIT $1
+        """,
+        limit,
+    )
+    return [alert_record(row) for row in rows]
+
+
 async def list_alerts(conn: asyncpg.Connection, *, limit: int = 100) -> list[dict[str, Any]]:
     rows = await conn.fetch(
         f"""
         SELECT {_qualified_alert_columns()}, symbols.sector
         FROM alerts
         LEFT JOIN symbols ON symbols.symbol = alerts.symbol
-        ORDER BY alerts.triggered_at DESC
+        ORDER BY alerts.updated_at DESC NULLS LAST, alerts.triggered_at DESC
         LIMIT $1
         """,
         limit,

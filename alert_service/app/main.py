@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .checks import rebuild_history, rebuild_start, run_check
+from .climate_backfill import backfill_price_alert_climate, restamp_evidence_stories
 from .screener import DEFAULT_SCREENER_LIMIT, run_screener
 from .config import (
     DEFAULT_PRICE_MOVE_THRESHOLD,
@@ -28,6 +29,8 @@ from .perplexity_catalog import known_model, model_groups
 from .store import (
     add_live_ws_symbol,
     add_symbol,
+    clear_live_alerts,
+    clear_watchlist_alerts,
     delete_alerts_below_abs_change,
     delete_all_alerts,
     get_alert_rules,
@@ -90,10 +93,15 @@ class RebuildIn(BaseModel):
 
 
 class ClearAlertsIn(BaseModel):
-    """Wipe saved alerts. ``clear_all`` or delete rows under ``below_percent`` (e.g. 3 = 3%)."""
+    """Wipe saved alerts by scope.
+
+    ``clear_all`` / ``below_percent`` apply across origins. ``origin`` of
+    ``watchlist`` or ``live`` clears that path only (``both`` is demoted).
+    """
 
     clear_all: bool = False
     below_percent: float | None = None
+    origin: str | None = None
 
 
 class ScreenerIn(BaseModel):
@@ -380,17 +388,46 @@ async def post_rebuild(body: RebuildIn) -> dict:
     return await rebuild_history(_pool(), days=body.days)
 
 
+class ClimateBackfillIn(BaseModel):
+    limit: int = Field(default=500, ge=1, le=2000)
+
+
+@app.post("/v1/admin/alerts/backfill-climate")
+async def post_backfill_climate(body: ClimateBackfillIn | None = None) -> dict:
+    """Re-score near-term headlines onto price-led alerts that were saved without climate."""
+    payload = body or ClimateBackfillIn()
+    return await backfill_price_alert_climate(_pool(), limit=payload.limit)
+
+
+@app.post("/v1/admin/alerts/restamp-evidence")
+async def post_restamp_evidence(body: ClimateBackfillIn | None = None) -> dict:
+    """Rebuild What happened so Live/forest doors stay price→news in the evidence story."""
+    payload = body or ClimateBackfillIn()
+    return await restamp_evidence_stories(_pool(), limit=payload.limit)
+
+
 @app.post("/v1/admin/alerts/clear")
 async def post_clear_alerts(body: ClearAlertsIn) -> dict[str, object]:
-    """Delete all alerts, or only those whose |price change| is under a percent floor."""
+    """Delete alerts: all, under a percent floor, or by origin (watchlist / live)."""
     if body.clear_all:
         async with _pool().acquire() as conn:
             deleted = await delete_all_alerts(conn)
         return {"deleted": deleted, "mode": "all"}
+    origin = (body.origin or "").strip().lower()
+    if origin in ("watchlist", "live"):
+        async with _pool().acquire() as conn:
+            if origin == "watchlist":
+                result = await clear_watchlist_alerts(conn)
+            else:
+                result = await clear_live_alerts(conn)
+        return {"mode": origin, **result}
     if body.below_percent is None:
         raise HTTPException(
             status_code=400,
-            detail="Set clear_all, or below_percent (for example 3 to drop moves under 3%).",
+            detail=(
+                "Set clear_all, origin (watchlist|live), or below_percent "
+                "(for example 3 to drop moves under 3%)."
+            ),
         )
     try:
         fraction = price_fraction_from_percent(body.below_percent)
