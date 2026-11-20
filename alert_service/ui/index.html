@@ -587,7 +587,12 @@
     .live-status {
       align-self: stretch;
       cursor: pointer;
-      font: inherit;
+      /* Keep the shared lake/live cue type (do not use font:inherit — buttons reset it). */
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      line-height: 1.2;
       appearance: none;
       -webkit-appearance: none;
     }
