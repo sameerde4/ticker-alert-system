@@ -251,7 +251,7 @@ def test_ui_uses_desktop_notifications_and_tab_badge():
     assert "live Kafka stream" in ui
     assert "Alerts from the live Kafka stream" in ui
     assert "stay here across refresh until you clear" in ui
-    assert "Full list is always on Alert History." in ui
+    assert "Alert History has the full list" in ui
     assert "When new live alerts arrive, this tab gets a count badge" not in ui
     assert "Desktop notifications: on. Mac/Chrome will pop up when new alerts arrive." not in ui
     assert "function setRecentTip" in ui
