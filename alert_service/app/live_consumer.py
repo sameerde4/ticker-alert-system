@@ -140,6 +140,9 @@ class LiveBarConsumer:
             len(self._universe),
             "on" if self.forest.enabled else "off",
         )
+        # Heartbeat on its own task so FinBERT/Perplexity work in _handle_bar cannot
+        # starve the UI cue (armed + stale heartbeat shows "Live alerts starting…").
+        hb_task = asyncio.create_task(self._heartbeat_loop(), name="live-heartbeat")
         try:
             await self._heartbeat()
             while not self._stop.is_set():
@@ -147,7 +150,6 @@ class LiveBarConsumer:
                     log.info("Live alerts disarmed — leaving Kafka session.")
                     break
                 await self._refresh_rules_if_due()
-                await self._heartbeat_if_due()
                 batches = await consumer.getmany(timeout_ms=1000, max_records=200)
                 if not batches:
                     continue
@@ -155,6 +157,11 @@ class LiveBarConsumer:
                     for message in messages:
                         await self._handle_bar(message.value)
         finally:
+            hb_task.cancel()
+            try:
+                await hb_task
+            except asyncio.CancelledError:
+                pass
             try:
                 async with self.pool.acquire() as conn:
                     await clear_live_consumer_heartbeat(conn)
@@ -164,11 +171,19 @@ class LiveBarConsumer:
             self._consumer = None
             log.info("Live consumer session stopped.")
 
-    async def _heartbeat_if_due(self) -> None:
-        now = asyncio.get_running_loop().time()
-        if now - self._heartbeat_at < 5:
-            return
-        await self._heartbeat()
+    async def _heartbeat_loop(self) -> None:
+        """Keep the Home cue green while this armed Kafka session is alive."""
+        while not self._stop.is_set():
+            try:
+                await self._heartbeat()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                log.warning("Live heartbeat failed: %s", exc)
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                raise
 
     async def _heartbeat(self) -> None:
         async with self.pool.acquire() as conn:

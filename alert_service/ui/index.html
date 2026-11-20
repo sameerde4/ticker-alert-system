@@ -3689,7 +3689,7 @@
           badge.title = "Live is armed and the consumer is running. Click to disarm and idle live + producer.";
         } else if (armed) {
           label.textContent = "Live alerts starting…";
-          badge.title = "Live is armed; waiting for the consumer heartbeat. Click to disarm.";
+          badge.title = "Live is armed; waiting for a fresh consumer heartbeat (usually a few seconds after arming). Click to disarm.";
         } else {
           label.textContent = "Live alerts off";
           badge.title = "Live is disarmed (idle). Click to arm the Kafka live path and producer.";
