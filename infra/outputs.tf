@@ -3,6 +3,11 @@ output "lake_bucket" {
   value       = aws_s3_bucket.lake.bucket
 }
 
+output "cloudwatch_log_group" {
+  description = "CloudWatch Logs group for Docker Compose (awslogs driver)."
+  value       = aws_cloudwatch_log_group.demo.name
+}
+
 output "ec2_instance_id" {
   value = var.ec2_instance_id
 }

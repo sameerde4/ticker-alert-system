@@ -58,6 +58,19 @@ data "aws_iam_policy_document" "ec2_app" {
       resources = [aws_secretsmanager_secret.rds[0].arn]
     }
   }
+
+  statement {
+    sid = "CloudWatchLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:DescribeLogStreams",
+      "logs:PutLogEvents",
+    ]
+    resources = [
+      aws_cloudwatch_log_group.demo.arn,
+      "${aws_cloudwatch_log_group.demo.arn}:*",
+    ]
+  }
 }
 
 data "aws_secretsmanager_secret" "alpaca" {
