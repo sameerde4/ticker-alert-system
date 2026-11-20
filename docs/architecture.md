@@ -51,10 +51,10 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic); Summary citations render as clickable headline titles (bare URLs linked from the alert’s article list) |
 | Expanded alert metric tiles: Price change shows `$from → $to` plus a short span caption (`open → last`, `prior close → close`, …); Sentiment score shows FinBERT class counts (lead bucket, then the other two) |
 | Saved thresholds; admin rebuild of recent sessions for the watchlist |
-| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500) |
-| Live Kafka consumer over the **full S&P 500** stream (not limited to Watchlist chips): open→last price alerts (`python -m app.live`); Home “Live alerts on” heartbeat |
+| Minute bars on Kafka from Alpaca `delayed_sip` (WebSocket ≤30 on Basic; REST fills the rest of the S&P 500; REST-only demos backfill from the 9:30 ET open so open→last uses the real session open) |
+| Live Kafka consumer over the **full S&P 500** stream (not limited to Watchlist chips): open→last price alerts (`python -m app.live`); Home clickable Live alerts arm; “on” when a fresh consumer heartbeat is present |
 | Historical Yahoo daily bars for the S&P 500 (~1 year) in the lake raw zone (**training lake**, not the Watchlist UI) |
-| Auto first-boot lake land + train when `data/lake` is empty; header “Loading historical prices” cue + % progress |
+| Auto first-boot lake land + train when `data/lake` is empty; header “Loading historical prices” cue + % progress while running, then hides when the lake is ready (`ok` / `has_raw_prices`) |
 | Incremental lake refresh: resume from each symbol’s latest lake date (cap ~14d); skip Yahoo + retrain when already current through the last completed session (pre-open aware); daily auto schedule; Settings / CLI overrides |
 | Watchlist Scan today focus session: last completed session before the cash open / on weekends; today during RTH or after the close |
 | Spark-role curated feature table (gap, session, close, volume z-score) and Isolation Forest registry via `batch_train` (local pandas/scikit-learn) |
@@ -290,7 +290,11 @@ Home asks for notification permission (Enable desktop notifications). When Scan 
 
 ## Live price stream
 
-Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`. The Home Live alerts feed polls alerts; `/v1/live/status` drives the Live alerts on pill. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
+Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`.
+
+Home’s Live alerts control is a clickable **arm switch**: `POST /v1/live/armed` sets `app_settings.live_alerts_armed`. `/v1/live/status` returns `armed` (user switch) and `enabled` (fresh `live_consumer_heartbeat_at`). The UI shows **off** / **starting…** / **on** from that pair. While armed, the consumer heartbeats on a **background task** so FinBERT / Perplexity work on a bar cannot starve the cue into a stuck “starting…” state. Disarm clears the heartbeat and idles both the consumer and the producer (producer polls the same status). Demo hosts may set `TICKER_ALERT_LIVE_DISARM_ON_BOOT=true` so a redeploy starts idle until you click Live alerts on.
+
+On Basic, WebSocket may be capped or set to REST-only (`ALPACA_WS_SYMBOL_LIMIT=0`). Latest-only REST polls start mid-session with a minute bar’s open ≈ last price, so open→last never clears the percent rule. The REST poller therefore **backfills today’s RTH bars from the 9:30 ET cash open** once per producer session (still outside the free-plan ~15-minute SIP wall), then continues with latest-only polls. The live consumer resets its session book each arm so that backfill can stamp the real open. Rows are tagged `origin=live` (or merge to `both` when Scan today also wrote that symbol-day).
 
 ```mermaid
 flowchart LR
@@ -320,8 +324,9 @@ flowchart LR
 
     subgraph ui [4 Home]
         direction TB
-        LIVE --> BEAT["Heartbeat<br/>(liveness stamp)"]
-        BEAT --> API["GET /v1/live/status<br/>(HTTP status API)"]
+        LIVE --> BEAT["Background heartbeat<br/>(liveness stamp)"]
+        ARM["POST /v1/live/armed<br/>(Home arm switch)"] --> API["GET /v1/live/status<br/>(armed + enabled)"]
+        BEAT --> API
         PG --> UI2["Home Live alerts<br/>(live alert feed UI)"]
         API --> UI2
         UI2 --> NOTE2["Desktop notification<br/>(browser / OS popup)"]
@@ -337,11 +342,14 @@ sequenceDiagram
     participant PG as Postgres (alerts DB)
     participant UI as Home (dashboard UI)
 
-    Alpaca->>Producer: Minute bar delayed_sip
+    UI->>PG: Arm Live alerts
+    Producer->>Alpaca: Session backfill from 9:30 ET (REST-only)
+    Alpaca->>Producer: Minute bars delayed_sip
     Producer->>Kafka: Publish prices.raw.bars
     Live->>Kafka: Consume bar
     Live->>Live: Build session vector + forest score
-    Live->>PG: Write live_feature_rows + heartbeat
+    Live->>PG: Write live_feature_rows
+    Live->>PG: Background heartbeat (keeps cue on)
     alt Percent or forest trips
         Live->>PG: Upsert price alert then headline grade
         UI->>PG: Poll alerts / live status
@@ -353,7 +361,7 @@ sequenceDiagram
 
 ## Batch lake land and refresh
 
-S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in). On first API boot with an empty lake, **auto land + train** runs (~1 year) and the UI header shows “Loading historical prices” with a **% progress** bar. A **daily auto refresh** (and Settings Refresh merge) checks each symbol’s latest lake date first: if everything is already through the **last completed session** (pre-open aware — before 4:00 PM Eastern “today” is not required yet), it **skips Yahoo and retrain** and reports that session target in the status line (finished time shown in US Eastern). Otherwise it resumes from that latest date (lookback capped ~14 calendar days), merges by `dt` (union by dt keep newest), then runs `batch_train`. Settings **Land** remains a full replace. Kafka minute bars do **not** write the lake — a mid-session Refresh that finds the lake already through yesterday is expected.
+S&P 500 daily prices only. No historical headlines. Local disk lake (S3 stand-in). On first API boot with an empty lake, **auto land + train** runs (~1 year) and the UI header shows “Loading historical prices” with a **% progress** bar while `running`; when the job finishes (or raw prices are already on disk), the header **hides** (`ok` / `has_raw_prices`). A **daily auto refresh** (and Settings Refresh merge) checks each symbol’s latest lake date first: if everything is already through the **last completed session** (pre-open aware — before 4:00 PM Eastern “today” is not required yet), it **skips Yahoo and retrain** and reports that session target in the status line (finished time shown in US Eastern). Otherwise it resumes from that latest date (lookback capped ~14 calendar days), merges by `dt` (union by dt keep newest), then runs `batch_train`. Settings **Land** remains a full replace. Kafka minute bars do **not** write the lake — a mid-session Refresh that finds the lake already through yesterday is expected. API and live must share the same `LAKE_ROOT` / volume so `has_raw_prices` and the Isolation Forest registry match what land wrote.
 
 ```mermaid
 flowchart LR
@@ -558,7 +566,7 @@ sequenceDiagram
 
 ## Local schema
 
-`watchlist` holds the S&P 500 focus set for Scan today and rebuild. `symbols` caches the Yahoo sector or fund category. `daily_bars` and `headlines` are Watchlist Scan today inputs (near-term headlines only). `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, the selected Perplexity model, and `live_consumer_heartbeat_at` for the Home live cue. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`. `alerts.origin` is `live`, `watchlist`, or `both`. `live_feature_rows` stores live session feature vectors and Isolation Forest scores from `python -m app.live`.
+`watchlist` holds the S&P 500 focus set for Scan today and rebuild. `symbols` caches the Yahoo sector or fund category. `daily_bars` and `headlines` are Watchlist Scan today inputs (near-term headlines only). `app_settings` stores the price fraction, the FinBERT sentiment threshold, the optional Perplexity API key, the selected Perplexity model, `live_alerts_armed` (Home arm switch), and `live_consumer_heartbeat_at` for the Home live cue. The default threshold is 25 points from 50. The default model is `openai/gpt-5.4-mini`. `alerts.kind` is `price`, `news`, or `news_price`. `alerts.origin` is `live`, `watchlist`, or `both`. `live_feature_rows` stores live session feature vectors and Isolation Forest scores from `python -m app.live`. Deploy migrations track applied filenames in `schema_migrations` so older scripts that delete alerts are not re-run on every compose up.
 
 One row per symbol per `bar_date`. A repeated check replaces that day's alert and keeps `created_at`. When live and watchlist both write the same day, `origin` becomes `both`. The row also stores `price_move_threshold` and `sentiment_threshold` from the moment it fired. Price drafts stamp `sections.price_span` with a short from→to caption for the expanded Price change tile. When Perplexity rewrites Together, the alert `sections` keep the rule sentence, the model id, and the model label shown under Together; bare article URLs in the reply are rewritten to `[title](url)` on save and rendered as clickable headline links in the Summary (including older rows that still store a raw URL). Evidence steps live under `sections.evidence` with an `alignment` grade. A headline is eligible only when it was published on that Eastern trading day and is inside the news lookback.
 
