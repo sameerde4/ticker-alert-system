@@ -20,6 +20,7 @@ from .forest_live import (
     history_from_lake,
 )
 from .live_alerts import (
+    forest_alone_under_percent,
     forest_price_draft_from_session,
     price_draft_from_session,
 )
@@ -393,6 +394,17 @@ class LiveBarConsumer:
             upgraded = attach_evidence_story(draft)
 
         if not should_write_live_alert(existing, upgraded):
+            return
+
+        # Forest under the percent floor without news support is noise — still score
+        # features above, but do not open/refresh a bare price card.
+        if forest_alone_under_percent(upgraded, self._price_threshold) and upgraded.kind == "price":
+            log.info(
+                "Skip forest-only %s %s — under %.1f%% floor with no news support",
+                upgraded.symbol,
+                upgraded.bar_date,
+                self._price_threshold * 100.0,
+            )
             return
 
         if (

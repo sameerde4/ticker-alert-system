@@ -14,7 +14,11 @@ from app.forest_live import (
     history_from_lake,
     vector_from_session,
 )
-from app.live_alerts import forest_price_draft_from_session, should_write_live_price
+from app.live_alerts import (
+    forest_alone_under_percent,
+    forest_price_draft_from_session,
+    should_write_live_price,
+)
 from app.live_session import SessionBook, SessionState
 
 
@@ -278,6 +282,42 @@ def test_forest_price_draft_only_when_anomalous():
     assert draft.sections["forest"]["model_id"] == "isolation_forest_v1"
     assert "price" in draft.sections
     assert "synthesis" in draft.sections
+
+
+def test_forest_alone_under_percent_needs_news_support():
+    state = SessionState(
+        symbol="AAPL",
+        session_day=date(2026, 11, 18),
+        open=100.0,
+        last=101.0,
+        last_ts=datetime(2026, 11, 18, 16, 0, tzinfo=UTC),
+        volume=1_000_000,
+    )
+    weird = ForestScore(
+        features={
+            "gap_return": 0.05,
+            "session_return": 0.01,
+            "close_return": 0.01,
+            "volume_zscore": 4.0,
+        },
+        forest_score=-0.1,
+        score_cutoff=0.0,
+        anomalous=True,
+        model_id="isolation_forest_v1",
+    )
+    under = forest_price_draft_from_session(
+        state, weird, price_move_threshold=0.03, sentiment_threshold=25, now=state.last_ts
+    )
+    assert under is not None
+    assert forest_alone_under_percent(under, 0.03) is True
+    # News support would keep it even under the floor.
+    from dataclasses import replace
+
+    newsy = replace(under, kind="news_price")
+    assert forest_alone_under_percent(newsy, 0.03) is True
+    # Clearing the percent floor is not "forest alone."
+    big = replace(under, price_change_pct=0.04)
+    assert forest_alone_under_percent(big, 0.03) is False
 
 
 def test_should_write_live_price_still_blocks_news_kinds():

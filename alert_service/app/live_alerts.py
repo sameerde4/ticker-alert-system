@@ -127,6 +127,24 @@ def eastern_day_mismatch(state: SessionState, now: datetime) -> bool:
     return state.session_day != eastern_date(now)
 
 
+def forest_alone_under_percent(draft: AlertDraft, price_move_threshold: float) -> bool:
+    """True when forest fired but the move is still under the Settings percent floor.
+
+    Those rows need news support (news / news_price) before we keep them; bare
+    forest-only price cards under the floor are noise.
+    """
+    forest = (draft.sections or {}).get("forest")
+    if not isinstance(forest, dict) or not forest.get("anomalous"):
+        return False
+    change = draft.price_change_pct
+    try:
+        if change is not None and abs(float(change)) >= float(price_move_threshold):
+            return False
+    except (TypeError, ValueError):
+        pass
+    return True
+
+
 def should_write_live_price(existing: dict[str, Any] | None) -> bool:
     """Legacy helper: live may refresh a missing or price-only day.
 

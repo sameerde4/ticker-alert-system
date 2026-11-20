@@ -57,7 +57,7 @@ def _scorer(anomalous: bool) -> MagicMock:
     return scorer
 
 
-def test_forest_alone_opens_price_alert_when_under_percent(monkeypatch):
+def test_forest_alone_does_not_open_when_under_percent_without_news(monkeypatch):
     monkeypatch.setattr("app.watchlist_forest.settings.live_forest_alerts", True)
     day = date(2026, 11, 18)
     out = apply_forest_to_drafts(
@@ -70,11 +70,7 @@ def test_forest_alone_opens_price_alert_when_under_percent(monkeypatch):
         price_move_threshold=0.03,
         sentiment_threshold=25,
     )
-    assert len(out) == 1
-    assert out[0].kind == "price"
-    assert out[0].sections["forest"]["anomalous"] is True
-    assert "stayed under" in out[0].summary
-    assert "Isolation Forest" in out[0].summary
+    assert out == []
 
 
 def test_forest_not_anomalous_leaves_empty(monkeypatch):

@@ -1,22 +1,22 @@
 """Apply the same Isolation Forest gate on Watchlist Scan today / rebuild as live.
 
-Percent rule and forest are OR gates for a price-led day. Volume z-score is inside
-the forest feature vector; the plain volume-spike note on daily closes is not a
-standalone alert trigger.
+Percent clears a price-led day on its own. Forest enriches that day (or a news day)
+when anomalous; it does not open a bare under-threshold price card by itself.
+Volume z-score is inside the forest feature vector — not a standalone trigger.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from .config import settings
-from .engine import PRICE_SPAN, AlertDraft, price_change_pct
+from .engine import AlertDraft
 from .forest_live import ForestScore, LiveForestScorer, history_from_daily_rows
-from .forest_wording import enrich_price_draft_with_forest_wording, forest_price_summary
+from .forest_wording import enrich_price_draft_with_forest_wording
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +87,11 @@ def apply_forest_to_drafts(
     live_session: dict[str, float] | None = None,
     origin: str = "watchlist",
 ) -> list[AlertDraft]:
-    """OR the forest into Scan today / rebuild drafts the same way live does.
+    """Attach Isolation Forest to Scan today / rebuild drafts (same policy as live).
 
-    - Forest anomalous + no draft → open a forest price-only row.
     - Forest anomalous + existing draft → attach ``sections.forest`` and enrich wording.
+    - Forest anomalous + no draft → do **not** open a bare forest-only price row
+      (under the percent floor with no news is noise; news/percent must already open).
     - Forest not anomalous / unavailable → leave drafts unchanged.
     """
     scored_ctx = score_session_from_bars(
@@ -112,46 +113,9 @@ def apply_forest_to_drafts(
         "session_last": levels["last"],
         "prior_close": levels["prior_close"],
     }
-    change = price_change_pct(levels["last"], levels["open"])
-    moment = now if now.tzinfo else now.replace(tzinfo=UTC)
 
     if not drafts:
-        summary = forest_price_summary(
-            symbol,
-            model_id=scored.model_id,
-            forest_score=scored.forest_score,
-            score_cutoff=scored.score_cutoff,
-            features=scored.features,
-            open_px=levels["open"],
-            last_px=levels["last"],
-            price_move_threshold=price_move_threshold,
-            change=change,
-        )
-        draft = AlertDraft(
-            kind="price",
-            symbol=symbol,
-            bar_date=session_day,
-            headline_id=None,
-            price_change_pct=change,
-            latest_close=levels["last"],
-            prior_close=levels["open"],
-            volume_ratio=None,
-            volume_spike=False,
-            sentiment_score=None,
-            headline_title=None,
-            summary=summary,
-            sections={
-                "forest": forest_block,
-                "entry": "price",
-                "second_supports": False,
-                "price_span": PRICE_SPAN["live"],
-            },
-            triggered_at=moment.astimezone(UTC),
-            price_move_threshold=price_move_threshold,
-            sentiment_threshold=sentiment_threshold,
-            origin=origin,
-        )
-        return [enrich_price_draft_with_forest_wording(draft)]
+        return []
 
     out: list[AlertDraft] = []
     for draft in drafts:
