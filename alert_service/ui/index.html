@@ -339,7 +339,7 @@
     .alert-head {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 10px;
       flex: 1;
       min-width: 0;
     }
@@ -409,7 +409,10 @@
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin: 12px 0 10px;
+      margin: 10px 0;
+    }
+    .modal-body > .alert-metrics:first-child {
+      margin-top: 0;
     }
     .alert-metric {
       display: flex;
@@ -507,7 +510,7 @@
     .alert-metric-span .mixed {
       font-size: inherit;
     }
-    .rule-note { color: var(--muted); font-size: 13px; margin: 4px 0 10px; line-height: 1.4; }
+    .rule-note { color: var(--muted); font-size: 13px; margin: 0 0 10px; line-height: 1.4; }
     .summary { margin: 8px 0; line-height: 1.45; }
     .summary a {
       color: var(--gold);
@@ -956,9 +959,9 @@
     }
     .modal-header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
-      padding: 16px 16px 8px;
+      padding: 16px 16px 0;
     }
     .modal-header h3 {
       margin: 0;
@@ -970,26 +973,43 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      gap: 8px;
+      gap: 10px;
     }
     .modal-header h3 .when { font-size: 13px; font-weight: 500; }
     .modal-header h3 .detail-title-tags {
-      padding-bottom: 2px;
+      margin: 0;
+      padding: 0;
     }
     .modal-close {
-      margin-left: auto;
+      flex: 0 0 auto;
+      align-self: flex-start;
+      margin: 0;
       background: transparent;
-      color: var(--text);
+      color: var(--muted);
+      border: 0;
+      border-radius: 8px;
       min-width: 36px;
-      padding: 6px 10px;
-      font-size: 20px;
+      min-height: 36px;
+      padding: 6px;
+      font-size: 22px;
+      font-weight: 500;
       line-height: 1;
+    }
+    .modal-close:hover {
+      color: var(--text);
+      background: rgba(243, 239, 228, 0.06);
+    }
+    .modal-close:focus { outline: none; }
+    .modal-close:focus-visible {
+      outline: 2px solid rgba(212, 175, 55, 0.55);
+      outline-offset: 2px;
     }
     .modal-body {
       overflow: auto;
-      padding: 4px 16px 16px;
+      padding: 10px 16px 16px;
       font-family: ui-sans-serif, system-ui, sans-serif;
     }
+    .modal-body:focus { outline: none; }
   </style>
 </head>
 <body>
@@ -3412,10 +3432,10 @@
       when.className = "when";
       when.textContent = formatWhen(alertWhenStamp(alert));
       when.title = "Last updated";
-      // Top left: company identity; top right: when. Pills sit above the metric tiles.
+      // Same order as cards: symbol → company → when; pills on the next row.
+      primary.append(symbolLink(alert.symbol));
       const company = companyNameEl(alert.symbol);
       if (company) primary.append(company);
-      primary.append(symbolLink(alert.symbol));
       primary.append(when);
       appendStoryAndShapePills(tags, alert);
       title.replaceChildren(primary, tags);
@@ -3433,7 +3453,9 @@
         collapsibleSections: true,
       });
       detailModal.hidden = false;
-      document.querySelector("#detailClose").focus();
+      // Focus the body (not the ×) so the close control does not show a browser focus ring on open.
+      body.tabIndex = -1;
+      body.focus({ preventScroll: true });
     }
 
     function closeDetail() {
