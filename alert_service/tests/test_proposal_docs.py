@@ -108,6 +108,7 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "backfill" in architecture.lower() and "9:30" in architecture
     assert "schema_migrations" in architecture
     assert "has_raw_prices" in architecture
+    assert "TICKER_ALERT_LAKE_S3_BUCKET" in architecture or "S3" in architecture
     assert "Mac/Chrome desktop notification" in architecture
     assert "Desktop notification" in architecture and "tab badge" in architecture
     assert "ui/sw-notifications.js" in architecture
@@ -208,6 +209,9 @@ def test_aws_deployment_doc_matches_as_built_demo():
     assert "not EKS" in aws
     assert "Secrets Manager" in aws
     assert "8010/ui" in aws
+    assert "market-radar-lake" in aws
+    assert "TICKER_ALERT_LAKE_S3_BUCKET" in aws
+    assert "Durable" in aws or "durable" in aws
     assert "[architecture.md](architecture.md)" in aws
 
 

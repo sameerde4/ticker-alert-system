@@ -18,7 +18,7 @@ Local finished-system docs remain the product truth: [architecture.md](architect
 | 1 | Compute | **One EC2 instance** running Docker Compose (not EKS / not ECS). Unlocks Explore AWS “Launch an EC2 instance” **$20** credit when done via that checklist. |
 | 2 | Kafka | **On the same EC2** (Docker Kafka — same shape as local). Not MSK. |
 | 3 | Account / region / names | **Your account** · **`us-east-1`** · prefix **`market-radar-`** |
-| 4 | Batch / Spark | **Spark-role jobs on the EC2** (same `batch_ingest` / `batch_train` code). Lake data on the EC2 Docker volume today; S3 bucket `market-radar-lake` exists for the architecture story / optional sync. No EMR. |
+| 4 | Batch / Spark | **Spark-role jobs on the EC2** (same `batch_ingest` / `batch_train` code). Working copy on the EC2 Docker volume; **durable lake of record on S3** `market-radar-lake` (sync after land/train; hydrate on empty boot). No EMR. |
 | 5 | Secrets / auth | **Alpaca** in Secrets Manager (`market-radar/alpaca`). **Postgres on the EC2** (Docker) — optional RDS via `enable_rds=true` (off). **Perplexity** entered in the UI after stand-up. **No app login.** |
 
 **Cost posture:** Prefer free-tier / credit-friendly sizes; tear down after the talk. Explore EC2 **$20** unlocked; keep RDS off unless needed.
@@ -50,7 +50,7 @@ Open **one dashboard URL** and walk Live, Watchlist Scan today, History, lake re
 
 | Area | `main` | `aws-deployment` (as-built) |
 |---|---|---|
-| Runtime | Laptop: Docker Kafka, local Postgres, `data/lake/` on disk | **EC2** + Docker Compose; **Postgres container**; lake on Docker volume; S3 bucket present |
+| Runtime | Laptop: Docker Kafka, local Postgres, `data/lake/` on disk | **EC2** + Docker Compose; **Postgres container**; working lake on Docker volume; **S3** `market-radar-lake` durable |
 | Docs | Local architecture is the finished system | This plan + AWS diagram; local docs stay product reference |
 | IaC | `docker-compose.yml` for Kafka | `infra/` Terraform (S3, IAM, SG; RDS optional/off) |
 | Packaging | `dev.sh` / venv | `deploy/` Dockerfiles + compose + `sync-and-deploy.sh` |
@@ -67,7 +67,7 @@ Open **one dashboard URL** and walk Live, Watchlist Scan today, History, lake re
 
 | Local piece | Job | AWS / EC2 stand-in |
 |---|---|---|
-| `data/lake/` Parquet | Batch price lake | Docker volume `/data/lake` (S3 `market-radar-lake` reserved / optional sync) |
+| `data/lake/` Parquet | Batch price lake | Working copy `/data/lake` + durable **S3** `market-radar-lake` |
 | Local Postgres | Alerts, watchlist, settings, feature rows | **Postgres container on EC2** |
 | Docker Kafka | Minute bar bus | **Kafka container on EC2** |
 | `stream_ingest` | Alpaca → Kafka | `producer` service (Secrets Manager → `alpaca.env`) |
@@ -97,17 +97,19 @@ flowchart LR
             LIVE["Live consumer app.live<br/>(Flink-role container)"]
             API["Radar API + UI<br/>(FastAPI container)"]
             PG[("Alerts + watchlist<br/>(Postgres container)")]
-            LAKE[("Price lake + forest registry<br/>(Docker volume)")]
+            LAKE[("Working lake<br/>(Docker volume)")]
             BATCH["batch_ingest / batch_train<br/>(Spark-role on API image)"]
         end
 
-        S3[("S3 market-radar-lake<br/>(optional / architecture)")]
+        S3[("Durable price lake + registry<br/>(S3 market-radar-lake)")]
         SM["Secrets Manager<br/>(Alpaca)"]
         URL["Public demo URL<br/>(EC2 :8010/ui)"]
     end
 
     ALP --> INGEST --> KAFKA --> LIVE
     YF --> BATCH --> LAKE
+    LAKE --> S3
+    S3 --> LAKE
     LAKE --> LIVE
     LAKE --> API
     SM --> INGEST
@@ -117,7 +119,6 @@ flowchart LR
     API --> YF
     API --> PPLX
     API --> URL
-    LAKE -.-> S3
 ```
 
 Same product paths as local: Live → Home Live alerts; Watchlist Scan today → Watchlist results; lake trains Isolation Forest; Perplexity only after news / news+price.
@@ -132,6 +133,7 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | Re-deploy | `./deploy/sync-and-deploy.sh` from the laptop |
 | Migrations | `deploy/migrate.sh` applies each `db/migrations/*.sql` **once**, tracked in `schema_migrations` (re-running older scripts would `DELETE FROM alerts`) |
 | Lake path | Compose mounts volume at `/data/lake`; API image also exposes `/app/data/lake` → `/data/lake` so land, status, and forest registry agree |
+| S3 lake | `TICKER_ALERT_LAKE_S3_BUCKET=market-radar-lake`. After successful land/train the API syncs `raw/` + `curated/` + `registry/` to S3. Empty local volume hydrates from S3 on boot; empty S3 gets a one-time push from the volume. |
 | Live arm | Home cue toggles `live_alerts_armed`. Boot starts **disarmed** on this host. Producer idles until armed. |
 | REST bars | Demo uses `ALPACA_WS_SYMBOL_LIMIT=0` (REST-only) so we do not fight another app for the Basic WebSocket slot. On arm, producer **backfills from 9:30 ET**, then polls latest delayed bars. |
 | Heartbeat cue | `armed` + fresh heartbeat → **Live alerts on**. Heartbeat runs on a background task so news scoring cannot flip the cue back to **starting…**. |
@@ -155,12 +157,12 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 - [x] `deploy/` Docker Compose stack on EC2 (Kafka, Postgres, API/UI, live, producer)
 - [x] Alpaca from Secrets Manager; one-shot migrations; UI + live arm/heartbeat smoke-tested
 - [x] Lake path + header hide; REST session backfill; background live heartbeat
+- [x] Durable lake sync to S3 `market-radar-lake` (hydrate on empty boot)
 
 ### Still optional / later
 
-1. Point lake writes at S3 (today: lake volume on EC2; bucket exists for the architecture story / sync)
-2. HTTPS in front of `:8010` if desktop notifications are required for the talk
-3. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
+1. HTTPS in front of `:8010` if desktop notifications are required for the talk
+2. Presentation diagram freeze + teardown (`docker compose down`, stop EC2, `terraform destroy` when done)
 
 ---
 
@@ -194,3 +196,4 @@ Same product paths as local: Live → Home Live alerts; Watchlist Scan today →
 | 2026-11-20 | Spark-role jobs on EC2; lake volume first, S3 bucket ready | No EMR |
 | 2026-11-20 | Secrets Manager for Alpaca; Postgres on EC2; Perplexity via UI; no login | |
 | 2026-11-20 | Live arm + REST-only + session backfill + migrator once | Demo stability on shared Alpaca Basic |
+| 2026-11-20 | Durable lake on S3 `market-radar-lake` | Working copy on EC2 volume; sync after land/train |
