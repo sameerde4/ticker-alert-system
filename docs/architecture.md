@@ -11,17 +11,18 @@ Both write the same Postgres `alerts` table. History shows **Origin**, **Company
 
 The class design (CISC 525) is a **local lambda architecture** in the classic sense — a **batch layer** (historical lake + train) plus a **speed/stream layer** (Kafka + live scorer) that serve the same alerts table. That is *not* AWS Lambda. On this machine: Docker Kafka on the live path, a batch lake on disk, a Spark-**role** training job, FinBERT for near-term headline sentiment, an Isolation Forest trained on lake price/volume features, and Perplexity for the alert wording. How the original proposal slides map onto this stack — including what we kept, changed, or dropped and why — is [proposal-pipeline-audit.md](proposal-pipeline-audit.md).
 
-**Deploy target:** one developer machine (Docker Desktop + Postgres + local lake) is the finished product path. Cloud names from the original deck (S3, Aurora, managed Flink) map to local stand-ins below. An optional class AWS demo on branch `aws-deployment` runs the same app on one EC2 with Docker Compose, durable lake on S3, CloudWatch logs, and an Elastic IP — see [aws-deployment.md](aws-deployment.md). That is still a demo host, not a multi-AZ production deploy.
+**Deploy target:** the product path is the same stack whether it runs on a laptop or on the class AWS demo host. Locally: Docker Desktop + Postgres + disk lake. On AWS (branch `aws-deployment`): **one EC2** runs that same Docker Compose app (Kafka, Postgres, API/UI, live, producer), with a durable lake on **S3**, **CloudWatch Logs**, and an **Elastic IP** for `:8010/ui` — see [aws-deployment.md](aws-deployment.md). That is intentional. We are **not** running managed MSK, EMR/Dataproc Spark, managed Flink, EKS, or multi-AZ RDS. Kafka / Flink-role / Spark-role stay on the box; S3 + CloudWatch give the AWS-shaped lake and ops surface the course expects. Live alerts on the demo host are the operational proof — no separate scaling story is required for the class.
 
 **How to read the diagrams below.** They are one finished system at increasing grain — not two generations of the design. Keep all of them for the presentation. Flowcharts are laid out **left → right** in numbered stage columns (slide-friendly landscape); sequence diagrams stay top → bottom in time order. Each box names the **job in plain language**, then the **technical role** in parentheses (data lake, Kafka topic, Flink-role processor, Postgres table, and so on).
 
 1. **System overview** — lake train, Live, Watchlist, serving  
 2. **System overview with ML + AI** — same map with FinBERT grade + optional Perplexity wording called out  
-3. **Watchlist Scan today** / **Live price stream** / **Batch lake** / **Curated features + Isolation Forest** — path-level detail  
-4. **High-level lambda architecture** — batch + speed layers (the *pattern*, not AWS Lambda) with local stand-ins  
-5. **Batch historical ELT** — land → curate → train → registry  
-6. **Streaming ETL** — Kafka → live scorer → headline grade → alerts  
-7. **End-to-end alert sequence** — bar → gate → headlines → Perplexity → UI
+3. **AWS class demo host** — same app on one EC2 + S3 lake + CloudWatch  
+4. **Watchlist Scan today** / **Live price stream** / **Batch lake** / **Curated features + Isolation Forest** — path-level detail  
+5. **High-level lambda architecture** — batch + speed layers (the *pattern*, not AWS Lambda) with local stand-ins  
+6. **Batch historical ELT** — land → curate → train → registry  
+7. **Streaming ETL** — Kafka → live scorer → headline grade → alerts  
+8. **End-to-end alert sequence** — bar → gate → headlines → Perplexity → UI
 
 This repository runs:
 
@@ -90,17 +91,19 @@ A normal check writes the current Eastern trading day. Settings → **Rebuild Wa
 | One alert per symbol per day | One row per symbol per day (`alerts.origin` tracks live / watchlist / both) |
 | Notify the trader after the row exists | OS desktop notification + tab badge (`ui/sw-notifications.js`). Slack and email are not used |
 
-### Local stand-ins (no AWS required)
+### Deck names → what we actually run
 
-| Original deck / cloud name | Local stand-in in this repo |
-|---|---|
-| S3 data lake | `data/lake/` Parquet on disk |
-| Aurora / RDS | Local Postgres `ticker_alert_db` |
-| Managed Kafka | Docker Compose Kafka |
-| Spark cluster (EMR / Dataproc) | `batch_train` Spark-**role** job (pandas ELT + scikit-learn Isolation Forest) |
-| Flink on Kinesis/MSK | Local Flink-**role** live scorer in `python -m app.live`: same four features + registry cutoff |
-| Timescale (managed) | Postgres `live_feature_rows` (Timescale stand-in) |
-| Slack / email | Mac/Chrome desktop notification + tab badge |
+| Original deck / cloud name | Local stand-in | Class AWS demo (`aws-deployment`) |
+|---|---|---|
+| S3 data lake | `data/lake/` Parquet on disk | Working lake on the EC2 Docker volume + durable **S3** `market-radar-lake` (sync / hydrate) |
+| Aurora / RDS | Local Postgres `ticker_alert_db` | **Postgres container** on the same EC2 (no multi-AZ RDS by default) |
+| Managed Kafka (MSK) | Docker Compose Kafka | **Docker Kafka** on the same EC2 (not MSK) |
+| Spark cluster (EMR / Dataproc) | `batch_train` Spark-**role** (pandas + scikit-learn) | Same Spark-**role** jobs on the EC2 API image (not EMR) |
+| Flink on Kinesis/MSK | Flink-**role** live scorer `python -m app.live` | Same Flink-**role** container on EC2 (not managed Flink) |
+| Timescale (managed) | Postgres `live_feature_rows` | Same table in the Postgres container |
+| Ops / logging | Local container logs | **CloudWatch Logs** `/market-radar/demo` (awslogs) |
+| Public demo URL | `localhost` | **Elastic IP** → `:8010/ui` |
+| Slack / email | Mac/Chrome desktop notification + tab badge | Same (browser notifications on the demo URL) |
 
 ## System overview
 
@@ -147,6 +150,55 @@ flowchart LR
     HOME --> API
     CHECK --> API
 ```
+
+## AWS class demo host
+
+Same product paths as the overview above. The class deploy keeps Kafka, Postgres, the API/UI, the live scorer, and the producer **on one EC2 with Docker Compose**. AWS-native pieces are the durable **S3** lake, **CloudWatch Logs**, Secrets Manager for Alpaca, and an **Elastic IP** for a stable demo URL. Managed MSK / EMR / Flink / RDS are out of scope on purpose — the live feed already writes alerts on that host.
+
+```mermaid
+flowchart LR
+    subgraph vendors [External feeds]
+        ALP["Alpaca delayed_sip<br/>(broker market feed)"]
+        YF["Yahoo daily / headlines<br/>(market data API)"]
+        PPLX["Perplexity<br/>(LLM wording API)"]
+    end
+
+    subgraph aws [AWS account us-east-1]
+        subgraph ec2box [EC2 market-radar host]
+            KAFKA[("Minute bars topic<br/>(Docker Kafka)")]
+            INGEST["stream_ingest<br/>(Docker producer)"]
+            LIVE["Live consumer app.live<br/>(Flink-role container)"]
+            API["Radar API + UI<br/>(FastAPI container)"]
+            PG[("Alerts + watchlist<br/>(Postgres container)")]
+            LAKE[("Working lake<br/>(Docker volume)")]
+            BATCH["batch_ingest / batch_train<br/>(Spark-role on API image)"]
+        end
+
+        S3[("Durable price lake + registry<br/>(S3 market-radar-lake)")]
+        SM["Secrets Manager<br/>(Alpaca)"]
+        CW["CloudWatch Logs<br/>(/market-radar/demo)"]
+        EIP["Elastic IP<br/>(stable :8010/ui)"]
+    end
+
+    ALP --> INGEST --> KAFKA --> LIVE
+    YF --> BATCH --> LAKE
+    LAKE --> S3
+    S3 --> LAKE
+    LAKE --> LIVE
+    LAKE --> API
+    SM --> INGEST
+    LIVE --> PG
+    API --> PG
+    LIVE --> YF
+    API --> YF
+    API --> PPLX
+    API --> EIP
+    API -.-> CW
+    LIVE -.-> CW
+    INGEST -.-> CW
+```
+
+Detail checklist (Compose services, S3 hydrate/sync, awslogs streams, EIP teardown) lives in [aws-deployment.md](aws-deployment.md).
 
 ## System overview with ML + AI
 
@@ -418,7 +470,7 @@ flowchart LR
 
 ## High-level lambda architecture
 
-This is the classic **lambda architecture pattern** (batch layer + speed/stream layer → serving), **not** AWS Lambda. Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. The finished product path stays on the local machine. No historical news lake. An optional class AWS demo host is documented separately; a multi-AZ production deploy is not required.
+This is the classic **lambda architecture pattern** (batch layer + speed/stream layer → serving), **not** AWS Lambda. Batch trains on **price history**, with automatic first-boot land and incremental **Refresh lake + retrain** so the registry stays current. Stream scores minute bars with that model and runs a same-day headline check that grades how well the news explains the session. Watchlist Scan today uses the **same percent or forest** gate and headline grade on daily bars. Headlines join by pull-after-price (or on Scan today), not via a Kafka news topic. The same pattern runs locally or on the class EC2 demo (Compose Kafka + Spark/Flink **roles** on-box; S3 + CloudWatch for durable lake and logs). No historical news lake. A multi-AZ production deploy with managed MSK/EMR/Flink/RDS is not required.
 
 ```mermaid
 flowchart LR

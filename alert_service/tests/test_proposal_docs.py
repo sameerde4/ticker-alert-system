@@ -92,6 +92,10 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Local stand-ins (no AWS required)" in architecture
     assert "production deploy" in architecture.lower()
     assert "optional class AWS demo" in architecture or "aws-deployment" in architecture
+    assert "AWS class demo host" in architecture
+    assert "CloudWatch Logs" in architecture
+    assert "market-radar-lake" in architecture
+    assert "Managed MSK" in architecture or "not MSK" in architecture
     assert "## Live price stream" in architecture
     assert "## Batch lake land and refresh" in architecture
     assert "## Curated features and Isolation Forest" in architecture
