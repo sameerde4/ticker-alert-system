@@ -71,6 +71,8 @@ services:
       TICKER_ALERT_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       TICKER_ALERT_LAKE_ROOT: /data/lake
       TICKER_ALERT_LAKE_AUTO_ENABLED: "true"
+      # Start disarmed on the demo host; click the Home cue to arm when presenting.
+      TICKER_ALERT_LIVE_DISARM_ON_BOOT: "true"
     volumes:
       - lake:/data/lake
       - hfcache:/data/hf
@@ -108,6 +110,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      api:
+        condition: service_started
     env_file:
       - alpaca.env
     environment:
@@ -118,6 +122,8 @@ services:
       ALPACA_WS_SYMBOL_LIMIT: "0"
       REST_POLL_ENABLED: "true"
       REST_POLL_SECONDS: "60"
+      LIVE_CONTROL_URL: http://api:8010/v1/live/status
+      LIVE_CONTROL_POLL_SECONDS: "3"
 
 volumes:
   pgdata:

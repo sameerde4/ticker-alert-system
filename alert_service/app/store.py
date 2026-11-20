@@ -342,20 +342,49 @@ def heartbeat_is_fresh(
     return age <= max(5, int(limit))
 
 
+async def get_live_alerts_armed(conn: asyncpg.Connection) -> bool:
+    """Whether the user wants Live alerts processing on (Home arm switch)."""
+    row = await conn.fetchrow("SELECT live_alerts_armed FROM app_settings WHERE id")
+    if row is None or row["live_alerts_armed"] is None:
+        return True
+    return bool(row["live_alerts_armed"])
+
+
+async def set_live_alerts_armed(conn: asyncpg.Connection, armed: bool) -> bool:
+    """Persist the Live alerts arm switch. Disarming clears the heartbeat cue."""
+    await conn.execute(
+        """
+        INSERT INTO app_settings (
+          id, price_move_threshold, sentiment_threshold, live_alerts_armed
+        )
+        VALUES (TRUE, $1, $2, $3)
+        ON CONFLICT (id) DO UPDATE SET live_alerts_armed = EXCLUDED.live_alerts_armed
+        """,
+        settings.price_move_threshold,
+        settings.sentiment_threshold,
+        bool(armed),
+    )
+    if not armed:
+        await clear_live_consumer_heartbeat(conn)
+    return bool(armed)
+
+
 async def live_consumer_status(
     conn: asyncpg.Connection, *, stale_after_seconds: int | None = None, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Whether the live consumer heartbeat is fresh enough for the UI cue."""
+    """Live cue: armed (user switch) and enabled (fresh consumer heartbeat)."""
     row = await conn.fetchrow(
-        "SELECT live_consumer_heartbeat_at FROM app_settings WHERE id"
+        "SELECT live_consumer_heartbeat_at, live_alerts_armed FROM app_settings WHERE id"
     )
     heartbeat = None if row is None else row["live_consumer_heartbeat_at"]
+    armed = True if row is None or row["live_alerts_armed"] is None else bool(row["live_alerts_armed"])
     if heartbeat is not None and heartbeat.tzinfo is None:
         heartbeat = heartbeat.replace(tzinfo=UTC)
-    enabled = heartbeat_is_fresh(
+    enabled = armed and heartbeat_is_fresh(
         heartbeat, now=now, stale_after_seconds=stale_after_seconds
     )
     return {
+        "armed": armed,
         "enabled": enabled,
         "heartbeat_at": heartbeat.isoformat() if heartbeat is not None else None,
     }

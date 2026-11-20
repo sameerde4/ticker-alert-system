@@ -34,6 +34,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def _live_is_armed() -> bool:
+    """True when Live alerts are armed (or control URL is unset)."""
+    url = (settings.live_control_url or "").strip()
+    if not url:
+        return True
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            payload = response.json()
+        if "armed" in payload:
+            return bool(payload["armed"])
+        return bool(payload.get("enabled"))
+    except Exception as exc:
+        log.warning("Live control poll failed (%s); treating as armed.", exc)
+        return True
+
+
 async def run(args: argparse.Namespace) -> None:
     if not settings.alpaca_api_key_id.strip() or not settings.alpaca_api_secret_key.strip():
         raise SystemExit(
@@ -52,6 +72,40 @@ async def run(args: argparse.Namespace) -> None:
         await run_probe(symbols, dry_run=args.dry_run or settings.dry_run)
         return
 
+    stop = asyncio.Event()
+
+    def _stop(*_args: object) -> None:
+        stop.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _stop)
+        except NotImplementedError:
+            pass
+
+    control = (settings.live_control_url or "").strip()
+    if control:
+        log.info("Producer follows Live arm switch at %s", control)
+
+    while not stop.is_set():
+        if control and not await _live_is_armed():
+            log.info("Live alerts disarmed — producer idle.")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=max(1.0, settings.live_control_poll_seconds))
+            except asyncio.TimeoutError:
+                continue
+            break
+        await _run_publish_session(args, symbols, stop=stop)
+        if stop.is_set():
+            break
+        if not control:
+            break
+
+
+async def _run_publish_session(
+    args: argparse.Namespace, symbols: list[str], *, stop: asyncio.Event
+) -> None:
     # 0 = REST-only (useful when another app already holds the WebSocket slot).
     limit = max(0, settings.alpaca_ws_symbol_limit)
     ws_symbols = symbols[:limit]
@@ -87,6 +141,7 @@ async def run(args: argparse.Namespace) -> None:
     tasks: list[asyncio.Task] = []
     streams: list[AlpacaBarStream] = []
     poller: AlpacaRestBarPoller | None = None
+    control = (settings.live_control_url or "").strip()
 
     try:
         if ws_symbols and not args.rest_only:
@@ -119,24 +174,27 @@ async def run(args: argparse.Namespace) -> None:
         if not tasks:
             raise SystemExit("Nothing to run. Check --ws-only / --rest-only and symbol lists.")
 
-        stop = asyncio.Event()
+        async def _watch_disarm() -> None:
+            if not control:
+                await stop.wait()
+                return
+            while not stop.is_set():
+                if not await _live_is_armed():
+                    log.info("Live alerts disarmed — stopping producer session.")
+                    return
+                try:
+                    await asyncio.wait_for(
+                        stop.wait(), timeout=max(1.0, settings.live_control_poll_seconds)
+                    )
+                except asyncio.TimeoutError:
+                    continue
 
-        def _stop(*_args: object) -> None:
-            stop.set()
-
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                loop.add_signal_handler(sig, _stop)
-            except NotImplementedError:
-                pass
-
-        waiter = asyncio.create_task(stop.wait(), name="stop")
+        watcher = asyncio.create_task(_watch_disarm(), name="live-arm-watch")
         done, pending = await asyncio.wait(
-            [*tasks, waiter],
+            [*tasks, watcher],
             return_when=asyncio.FIRST_COMPLETED,
         )
-        if waiter in done:
+        if watcher in done and stop.is_set():
             log.info("Shutdown requested.")
         for task in tasks:
             task.cancel()
@@ -144,7 +202,8 @@ async def run(args: argparse.Namespace) -> None:
             stream.request_stop()
         if poller is not None:
             poller.request_stop()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        watcher.cancel()
+        await asyncio.gather(*tasks, watcher, return_exceptions=True)
         for task in pending:
             task.cancel()
     finally:

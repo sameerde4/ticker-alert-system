@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     rest_poll_enabled: bool = True
     rest_poll_seconds: int = 60
     rest_symbols_per_request: int = 100
+    # When set (e.g. http://api:8010/v1/live/status), pause publishing while armed=false.
+    live_control_url: str = ""
+    live_control_poll_seconds: float = 3.0
 
     @property
     def ws_url(self) -> str:

@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # Disable with TICKER_ALERT_LAKE_AUTO_ENABLED=false or TICKER_ALERT_SKIP_LAKE_AUTO=1.
     lake_auto_enabled: bool = True
     lake_refresh_interval_hours: float = 24.0
+    # When true (AWS demo compose), disarm Live alerts on API boot so the host idles
+    # until someone clicks the Home cue.
+    live_disarm_on_boot: bool = False
 
 
 settings = Settings()

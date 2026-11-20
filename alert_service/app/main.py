@@ -58,6 +58,12 @@ async def lifespan(_app: FastAPI):
         yield
         return
     await db.connect()
+    if settings.live_disarm_on_boot:
+        from .store import set_live_alerts_armed
+
+        assert db.pool is not None
+        async with db.pool.acquire() as conn:
+            await set_live_alerts_armed(conn, False)
     await start_lake_auto_scheduler()
     try:
         yield
@@ -257,8 +263,22 @@ async def get_alerts(limit: int = 100) -> dict[str, list]:
 
 @app.get("/v1/live/status")
 async def get_live_status() -> dict[str, object]:
-    """Whether ``python -m app.live`` is heartbeating (UI cue for live alerts)."""
+    """Live alerts cue: ``armed`` is the user switch; ``enabled`` is a fresh consumer heartbeat."""
     async with _pool().acquire() as conn:
+        return await live_consumer_status(conn)
+
+
+class LiveArmedIn(BaseModel):
+    armed: bool
+
+
+@app.post("/v1/live/armed")
+async def post_live_armed(body: LiveArmedIn) -> dict[str, object]:
+    """Arm or disarm Live alerts from the Home cue (pauses live + producer when polled)."""
+    from .store import set_live_alerts_armed
+
+    async with _pool().acquire() as conn:
+        await set_live_alerts_armed(conn, body.armed)
         return await live_consumer_status(conn)
 
 

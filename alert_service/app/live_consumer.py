@@ -30,6 +30,7 @@ from .store import (
     fetch_recent_daily_bars,
     get_alert_for_day,
     get_alert_rules,
+    get_live_alerts_armed,
     insert_live_feature_row,
     touch_live_consumer_heartbeat,
     upsert_alert,
@@ -77,12 +78,44 @@ class LiveBarConsumer:
         self._feature_min_interval = max(5, int(settings.live_feature_min_interval_seconds))
         self._last_news_lookup: dict[str, float] = {}
         self._news_lookup_min_interval = 120.0
+        self._armed_checked_at = 0.0
+        self._armed_cached = True
 
     def request_stop(self) -> None:
         self._stop.set()
 
     async def run(self) -> None:
+        """Run until stop is requested. When disarmed, idle without Kafka/heartbeat."""
         await self._refresh_rules()
+        while not self._stop.is_set():
+            if not await self._is_armed():
+                await self._idle_while_disarmed()
+                continue
+            await self._run_armed_session()
+
+    async def _is_armed(self) -> bool:
+        now = asyncio.get_running_loop().time()
+        if now - self._armed_checked_at < 2:
+            return self._armed_cached
+        async with self.pool.acquire() as conn:
+            self._armed_cached = await get_live_alerts_armed(conn)
+        self._armed_checked_at = now
+        return self._armed_cached
+
+    async def _idle_while_disarmed(self) -> None:
+        try:
+            async with self.pool.acquire() as conn:
+                await clear_live_consumer_heartbeat(conn)
+        except Exception as exc:
+            log.warning("Could not clear live heartbeat while disarmed: %s", exc)
+        log.info("Live alerts disarmed — consumer idle (click Live alerts on Home to arm).")
+        while not self._stop.is_set():
+            if await self._is_armed():
+                log.info("Live alerts armed — connecting to Kafka.")
+                return
+            await asyncio.sleep(2)
+
+    async def _run_armed_session(self) -> None:
         consumer = AIOKafkaConsumer(
             self.topic,
             bootstrap_servers=self.bootstrap,
@@ -105,6 +138,9 @@ class LiveBarConsumer:
         try:
             await self._heartbeat()
             while not self._stop.is_set():
+                if not await self._is_armed():
+                    log.info("Live alerts disarmed — leaving Kafka session.")
+                    break
                 await self._refresh_rules_if_due()
                 await self._heartbeat_if_due()
                 batches = await consumer.getmany(timeout_ms=1000, max_records=200)
@@ -121,7 +157,7 @@ class LiveBarConsumer:
                 log.warning("Could not clear live heartbeat: %s", exc)
             await consumer.stop()
             self._consumer = None
-            log.info("Live consumer stopped.")
+            log.info("Live consumer session stopped.")
 
     async def _heartbeat_if_due(self) -> None:
         now = asyncio.get_running_loop().time()

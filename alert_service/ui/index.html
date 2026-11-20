@@ -586,6 +586,29 @@
     }
     .live-status {
       align-self: stretch;
+      cursor: pointer;
+      font: inherit;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .live-status:hover {
+      border-color: rgba(212, 175, 55, 0.45);
+    }
+    .live-status:focus-visible {
+      outline: 2px solid rgba(212, 175, 55, 0.55);
+      outline-offset: 2px;
+    }
+    .live-status.is-armed:not(.is-on) {
+      color: var(--gold);
+      border-color: rgba(212, 175, 55, 0.45);
+      background: rgba(212, 175, 55, 0.08);
+    }
+    .live-status.is-armed:not(.is-on) .live-dot {
+      background: var(--gold);
+    }
+    .live-status.is-busy {
+      opacity: 0.75;
+      pointer-events: none;
     }
     .lake-status {
       max-width: 280px;
@@ -943,15 +966,17 @@
           <div class="lake-progress-fill" id="lakeHeaderProgressFill"></div>
         </div>
       </div>
-      <div
+      <button
+        type="button"
         class="live-status"
         id="liveStatus"
-        title="Shows when python -m app.live is connected: percent threshold or Isolation Forest, then a same-day headline check that grades how well the news explains the session"
+        title="Click to arm or disarm Live alerts. When on, the Kafka live consumer (and producer) process bars; when off they idle to save compute."
         aria-live="polite"
+        aria-pressed="false"
       >
         <span class="live-dot" aria-hidden="true"></span>
         <span class="live-label" id="liveStatusLabel">Live alerts off</span>
-      </div>
+      </button>
     </div>
   </header>
   <main>
@@ -3646,17 +3671,52 @@
       const label = document.querySelector("#liveStatusLabel");
       try {
         const status = await readJson(await fetch("/v1/live/status"));
+        const armed = status.armed !== false;
         const on = Boolean(status.enabled);
         badge.classList.toggle("is-on", on);
-        label.textContent = on ? "Live alerts on" : "Live alerts off";
-        badge.title = on
-          ? "Live consumer is running. Session-move price alerts can appear as bars arrive."
-          : "Start python -m app.live (with Kafka + the Alpaca producer) to enable live price alerts.";
+        badge.classList.toggle("is-armed", armed && !on);
+        badge.setAttribute("aria-pressed", armed ? "true" : "false");
+        if (on) {
+          label.textContent = "Live alerts on";
+          badge.title = "Live is armed and the consumer is running. Click to disarm and idle live + producer.";
+        } else if (armed) {
+          label.textContent = "Live alerts starting…";
+          badge.title = "Live is armed; waiting for the consumer heartbeat. Click to disarm.";
+        } else {
+          label.textContent = "Live alerts off";
+          badge.title = "Live is disarmed (idle). Click to arm the Kafka live path and producer.";
+        }
         return on;
       } catch (_err) {
-        badge.classList.remove("is-on");
+        badge.classList.remove("is-on", "is-armed");
+        badge.setAttribute("aria-pressed", "false");
         label.textContent = "Live alerts off";
         return false;
+      }
+    }
+
+    async function toggleLiveArmed() {
+      const badge = document.querySelector("#liveStatus");
+      if (!badge || badge.classList.contains("is-busy")) return;
+      badge.classList.add("is-busy");
+      try {
+        const status = await readJson(await fetch("/v1/live/status"));
+        const next = status.armed === false;
+        await readJson(await fetch("/v1/live/armed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ armed: next }),
+        }));
+        await refreshLiveStatus();
+        setHomeStatus(
+          next
+            ? "Live alerts armed. Consumer and producer will start within a few seconds."
+            : "Live alerts disarmed. Consumer and producer will idle (saves compute on the demo host).",
+        );
+      } catch (err) {
+        setHomeStatus(err.message || "Could not toggle Live alerts.", true);
+      } finally {
+        badge.classList.remove("is-busy");
       }
     }
 
@@ -3674,6 +3734,10 @@
         }
       }
     }
+
+    document.querySelector("#liveStatus")?.addEventListener("click", () => {
+      toggleLiveArmed();
+    });
 
     updateNotifyHint(("Notification" in window) ? Notification.permission : "denied");
     registerNotificationWorker().catch(() => {});

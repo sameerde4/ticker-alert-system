@@ -12,6 +12,9 @@ def test_health_and_ui_without_a_database():
     assert "<span>S&amp;P 500</span> Radar" in page.text
     assert 'id="liveStatus"' in page.text
     assert "Live alerts off" in page.text
+    assert "/v1/live/armed" in page.text
+    assert "toggleLiveArmed" in page.text
+    assert 'aria-pressed="false"' in page.text
     assert "live-pulse" in page.text
     assert 'id="lakeHeaderStatus"' in page.text
     assert 'id="lakeHeaderProgress"' in page.text
