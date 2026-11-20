@@ -3405,6 +3405,8 @@
         return "Landing historical prices";
       }
       if (status.ok === false && status.auto) return "Historical price load failed";
+      // Successful land/train (or raw lake present) — hide the header cue.
+      if (status.ok === true || status.has_raw_prices) return "";
       if (!status.has_raw_prices && status.auto_enabled) return "Loading historical prices";
       return "";
     }

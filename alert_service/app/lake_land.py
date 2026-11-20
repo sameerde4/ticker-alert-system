@@ -780,6 +780,8 @@ async def _run_batch_ingest(
         "app.main",
         "--days",
         str(days),
+        "--lake-root",
+        str(_LAKE),
     ]
     if merge:
         cmd.append("--merge")
@@ -788,6 +790,7 @@ async def _run_batch_ingest(
         cwd=str(_BATCH),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        env={**os.environ, "LAKE_ROOT": str(_LAKE)},
     )
     chunks: list[str] = []
     assert proc.stdout is not None
@@ -830,9 +833,12 @@ async def _run_batch_train() -> tuple[int, str]:
         str(_python()),
         "-m",
         "app.main",
+        "--lake-root",
+        str(_LAKE),
         cwd=str(_TRAIN),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        env={**os.environ, "LAKE_ROOT": str(_LAKE)},
     )
     stdout, _ = await proc.communicate()
     return proc.returncode or 0, (stdout or b"").decode("utf-8", errors="replace")

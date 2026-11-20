@@ -24,7 +24,12 @@ COPY batch_ingest /app/batch_ingest
 COPY batch_train /app/batch_train
 COPY stream_ingest/data /app/stream_ingest/data
 COPY db /app/db
-RUN mkdir -p /app/data/lake
+# Lake lives on the compose volume at /data/lake (TICKER_ALERT_LAKE_ROOT).
+# Keep /app/data/lake as a symlink so batch defaults cannot drift off the volume.
+RUN rm -rf /app/data/lake \
+    && mkdir -p /data/lake \
+    && mkdir -p /app/data \
+    && ln -s /data/lake /app/data/lake
 
 WORKDIR /app/alert_service
 EXPOSE 8010
