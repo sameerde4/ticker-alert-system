@@ -137,10 +137,18 @@ def test_forest_draft_uses_richer_wording_and_sections():
     )
     draft = forest_price_draft_from_session(
         state,
-        _weird_score(),
+        _weird_score(
+            features={
+                "gap_return": 0.01,
+                "session_return": 0.01,
+                "close_return": 0.02,
+                "volume_zscore": 4.0,
+            }
+        ),
         price_move_threshold=0.03,
         sentiment_threshold=25,
         now=state.last_ts,
+        prior_close=99.0,
     )
     assert draft is not None
     assert draft.sections["synthesis"]
@@ -170,15 +178,19 @@ def test_enrich_rewrites_generic_price_synthesis_after_news_check():
             "synthesis": "Price led for AAPL: the move cleared the rule, and news was checked with no qualifying headlines.",
             "entry": "price",
             "second_supports": False,
+            "price_span": "open → last",
             "forest": {
                 "model_id": "isolation_forest_v1",
                 "forest_score": -0.1,
                 "score_cutoff": 0.0,
                 "anomalous": True,
+                "product_span": "live",
+                "session_open": 100.0,
+                "session_last": 101.0,
                 "features": {
-                    "gap_return": 0.05,
+                    "gap_return": 0.01,
                     "session_return": 0.01,
-                    "close_return": 0.06,
+                    "close_return": 0.02,
                     "volume_zscore": 4.0,
                 },
             },

@@ -1175,17 +1175,32 @@ def _headline_windows(
 def _live_slices(
     ordered: list[dict[str, Any]], session_day: date, live: dict[str, float]
 ) -> dict[str, tuple[float | None, float, float]]:
-    """Gap from the prior close, and the session so far from the open to the latest price."""
+    """Gap / session / last-vs-prior for live bars.
+
+    ``live`` may include ``prior_close`` from the forest history so a gap day still
+    measures correctly when ``daily_bars`` has not caught up yet.
+    """
     open_px = float(live["open"])
     last = float(live["price"])
-    completed = [row for row in ordered if row["dt"] < session_day]
-    prior_px = float(completed[-1]["close"]) if completed else None
+    prior_px: float | None = None
+    raw_prior = live.get("prior_close")
+    if raw_prior is not None:
+        try:
+            candidate = float(raw_prior)
+            if candidate > 0:
+                prior_px = candidate
+        except (TypeError, ValueError):
+            prior_px = None
+    if prior_px is None:
+        completed = [row for row in ordered if row["dt"] < session_day]
+        prior_px = float(completed[-1]["close"]) if completed else None
     gap = price_change_pct(open_px, prior_px) if prior_px is not None else None
+    close = price_change_pct(last, prior_px) if prior_px is not None else None
     baseline = prior_px if prior_px is not None else open_px
     return {
         "gap": (gap, open_px, baseline),
         "session": (price_change_pct(last, open_px), last, open_px),
-        "close": (None, last, baseline),
+        "close": (close, last, baseline),
     }
 
 

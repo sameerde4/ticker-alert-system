@@ -43,6 +43,15 @@ async def upgrade_price_draft_with_news(
         scored = await _headlines_for_rules(conn, state.symbol, raw, "finbert")
         bars = await load_bars(conn, state.symbol)
 
+    live_session: dict[str, float] = {"price": state.last, "open": state.open}
+    forest = (draft.sections or {}).get("forest")
+    if isinstance(forest, dict):
+        raw_prior = forest.get("prior_close")
+        try:
+            if raw_prior is not None and float(raw_prior) > 0:
+                live_session["prior_close"] = float(raw_prior)
+        except (TypeError, ValueError):
+            pass
     drafts = evaluate_symbol(
         symbol=state.symbol,
         bars=bars,
@@ -54,7 +63,10 @@ async def upgrade_price_draft_with_news(
         sentiment_threshold=sentiment_threshold,
         news_lookback_hours=settings.news_lookback_hours,
         fusion_window_hours=settings.fusion_window_hours,
-        live_session={"price": state.last, "open": state.open},
+        live_session=live_session,
+        # Keep the forest/percent product print (e.g. prior→last on a gap day)
+        # so news joins that move instead of re-measuring only flat open→last.
+        seed_price_draft=draft,
     )
     today = eastern_date(moment)
     kept = [item for item in drafts if item.bar_date == today]
@@ -67,9 +79,14 @@ async def upgrade_price_draft_with_news(
     # Live always noticed price/forest first — even when the final kind is news-led.
     sections = dict(result.sections or {})
     sections["entry"] = "price"
-    forest = (draft.sections or {}).get("forest")
     if isinstance(forest, dict):
         sections["forest"] = forest
+        if forest.get("product_span") and not sections.get("price_span"):
+            from .engine import PRICE_SPAN
+
+            sections["price_span"] = PRICE_SPAN.get(
+                str(forest.get("product_span")), sections.get("price_span")
+            )
     result = replace(result, sections=sections)
     if isinstance(forest, dict):
         # Price-only: rebuild Summary/Price with forest-aware deterministic wording.

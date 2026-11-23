@@ -344,6 +344,7 @@ class LiveBarConsumer:
                 price_move_threshold=self._price_threshold,
                 sentiment_threshold=self._sentiment_threshold,
                 now=datetime.now(UTC),
+                prior_close=hist.prior_close,
             )
         return None
 

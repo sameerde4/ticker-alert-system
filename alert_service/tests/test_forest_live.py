@@ -4,6 +4,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pytest
 from sklearn.ensemble import IsolationForest
 
 from app.forest_live import (
@@ -256,9 +257,9 @@ def test_forest_price_draft_only_when_anomalous():
     )
     weird = ForestScore(
         features={
-            "gap_return": 0.05,
-            "session_return": -0.04,
-            "close_return": 0.01,
+            "gap_return": 0.01,
+            "session_return": 0.01,
+            "close_return": 0.02,
             "volume_zscore": 4.0,
         },
         forest_score=-0.1,
@@ -272,11 +273,12 @@ def test_forest_price_draft_only_when_anomalous():
         price_move_threshold=0.03,
         sentiment_threshold=25,
         now=state.last_ts,
+        prior_close=99.0,
     )
     assert draft is not None
     assert draft.kind == "price"
     assert "Isolation Forest" in draft.summary
-    assert "stayed under" in draft.summary or "also cleared" in draft.summary
+    assert "stayed under" in draft.summary or "cleared the" in draft.summary
     assert "What stood out" in draft.summary
     assert draft.sections["forest"]["anomalous"] is True
     assert draft.sections["forest"]["model_id"] == "isolation_forest_v1"
@@ -295,7 +297,7 @@ def test_forest_alone_under_percent_needs_news_support():
     )
     weird = ForestScore(
         features={
-            "gap_return": 0.05,
+            "gap_return": 0.01,
             "session_return": 0.01,
             "close_return": 0.01,
             "volume_zscore": 4.0,
@@ -306,7 +308,12 @@ def test_forest_alone_under_percent_needs_news_support():
         model_id="isolation_forest_v1",
     )
     under = forest_price_draft_from_session(
-        state, weird, price_move_threshold=0.03, sentiment_threshold=25, now=state.last_ts
+        state,
+        weird,
+        price_move_threshold=0.03,
+        sentiment_threshold=25,
+        now=state.last_ts,
+        prior_close=99.0,
     )
     assert under is not None
     assert forest_alone_under_percent(under, 0.03) is True
@@ -318,6 +325,67 @@ def test_forest_alone_under_percent_needs_news_support():
     # Clearing the percent floor is not "forest alone."
     big = replace(under, price_change_pct=0.04)
     assert forest_alone_under_percent(big, 0.03) is False
+
+
+def test_forest_gap_day_uses_prior_close_not_flat_open_to_last():
+    """NVDA-style: flat open→last but huge gap vs prior must not print −0.1% as the move."""
+    from app.live_alerts import dominant_product_price_move
+
+    # Open 164.82, last 164.65 (−0.10%); prior close ~136 → gap/close ~+21%.
+    prior = 164.82 / (1.0 + 0.21173353053165578)
+    last = 164.65
+    open_px = 164.82
+    span, change, start, end = dominant_product_price_move(
+        open_px=open_px,
+        last_px=last,
+        prior_close=prior,
+        price_move_threshold=0.04,
+    )
+    assert span == "close"
+    assert change == pytest.approx((last - prior) / prior, rel=1e-6)
+    assert start == pytest.approx(prior)
+    assert end == last
+    assert change > 0.2
+
+    state = SessionState(
+        symbol="NVDA",
+        session_day=date(2026, 11, 23),
+        open=open_px,
+        last=last,
+        last_ts=datetime(2026, 11, 23, 19, 0, tzinfo=UTC),
+        volume=1_000_000,
+    )
+    scored = ForestScore(
+        features={
+            "gap_return": 0.21173353053165578,
+            "session_return": -0.0010314282247299326,
+            "close_return": 0.21048371436741375,
+            "volume_zscore": -1.5,
+        },
+        forest_score=-0.05,
+        score_cutoff=0.0,
+        anomalous=True,
+        model_id="isolation_forest_v1",
+    )
+    draft = forest_price_draft_from_session(
+        state,
+        scored,
+        price_move_threshold=0.04,
+        sentiment_threshold=25,
+        now=state.last_ts,
+        prior_close=prior,
+    )
+    assert draft is not None
+    assert draft.price_change_pct == pytest.approx(change, rel=1e-6)
+    assert draft.price_change_pct > 0
+    assert "prior close" in (draft.sections or {}).get("price_span", "")
+    assert forest_alone_under_percent(draft, 0.04) is False
+    price_text = (draft.sections or {}).get("price", "")
+    assert "prior close → last" in price_text or "close vs prior" in price_text.lower()
+    assert "+21" in price_text or "21.0" in price_text
+    # Open→last may still be mentioned as context, but the product print is the gap day.
+    assert draft.latest_close == last
+    assert draft.prior_close == pytest.approx(prior)
 
 
 def test_should_write_live_price_still_blocks_news_kinds():

@@ -1,6 +1,8 @@
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.engine import (
     PRICE_SPAN,
     cash_session_open,
@@ -600,6 +602,21 @@ def test_a_live_session_alerts_from_the_open_before_the_close():
     assert drafts[0].triggered_at == now.astimezone(UTC)
     assert "from the open of $100.00" in drafts[0].sections["price"]
     assert "prior close" not in drafts[0].sections["price"]
+
+
+def test_live_slices_measure_close_vs_prior_when_prior_close_is_supplied():
+    from app.engine import _live_slices
+
+    today = date(2026, 11, 23)
+    slices = _live_slices(
+        [{"dt": today - timedelta(days=1), "open": 100, "close": 100, "volume": 1}],
+        today,
+        {"price": 121.0, "open": 120.5, "prior_close": 100.0},
+    )
+    assert slices["session"][0] == pytest.approx((121.0 - 120.5) / 120.5)
+    assert slices["gap"][0] == pytest.approx(0.205)
+    assert slices["close"][0] == pytest.approx(0.21)
+    assert slices["close"][0] is not None
 
 
 def test_a_small_move_from_the_open_does_not_borrow_the_partial_close():

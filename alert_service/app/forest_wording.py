@@ -80,6 +80,16 @@ def forest_driver_sentence(features: dict[str, Any] | None) -> str:
     return f"What stood out most was {lines[0]} and {lines[1]}."
 
 
+def _span_phrase(span_key: str | None) -> str:
+    if span_key == "gap":
+        return "overnight gap (prior close → open)"
+    if span_key == "close":
+        return "close vs prior (prior close → last)"
+    if span_key == "live":
+        return "open→last"
+    return "session move"
+
+
 def forest_price_summary(
     symbol: str,
     *,
@@ -92,26 +102,46 @@ def forest_price_summary(
     price_move_threshold: float,
     change: float | None = None,
     news_tail: str | None = None,
+    product_change: float | None = None,
+    product_span: str | None = None,
+    from_px: float | None = None,
+    to_px: float | None = None,
 ) -> str:
     """Full Summary text for a forest-led (or forest+percent) price-only alert."""
-    move = change if change is not None else price_change_pct(last_px, open_px)
-    percent_cleared = move is not None and abs(move) >= price_move_threshold
+    session_move = change if change is not None else price_change_pct(last_px, open_px)
+    product = product_change if product_change is not None else session_move
+    span_key = product_span or "live"
+    start = from_px if from_px is not None else open_px
+    end = to_px if to_px is not None else last_px
+    product_cleared = product is not None and abs(product) >= price_move_threshold
+    session_cleared = session_move is not None and abs(session_move) >= price_move_threshold
     rule_text = f"{price_move_threshold * 100:.1f}%"
-    move_text = _fmt_pct(move) if move is not None else "n/a"
+    product_text = _fmt_pct(product) if product is not None else "n/a"
+    session_text = _fmt_pct(session_move) if session_move is not None else "n/a"
     callouts = forest_feature_callouts(features)
     feature_clause = (", ".join(callouts) + ".") if callouts else ""
-    if percent_cleared:
+    span_phrase = _span_phrase(span_key)
+    if product_cleared and span_key != "live":
+        gate = (
+            f"The Isolation Forest ({model_id}) marked the session anomalous "
+            f"(score {forest_score:.4f}, at or below cutoff {score_cutoff:.4f}). The product "
+            f"print is {span_phrase} {product_text} "
+            f"(from {_money(start)} to {_money(end)}), which clears the {rule_text} percent "
+            f"rule — even though open→last was only {session_text} "
+            f"({_money(open_px)} → {_money(last_px)})."
+        )
+    elif product_cleared or session_cleared:
         gate = (
             f"The Isolation Forest ({model_id}) marked the session anomalous "
             f"(score {forest_score:.4f}, at or below cutoff {score_cutoff:.4f}), and the "
-            f"open→last move of {move_text} also cleared the {rule_text} percent rule "
-            f"(from {_money(open_px)} to {_money(last_px)})."
+            f"{span_phrase} move of {product_text} also cleared the {rule_text} percent rule "
+            f"(from {_money(start)} to {_money(end)})."
         )
     else:
         gate = (
             f"The Isolation Forest ({model_id}) marked the session anomalous "
             f"(score {forest_score:.4f}, at or below cutoff {score_cutoff:.4f}) even though "
-            f"open→last ({move_text}, {_money(open_px)} → {_money(last_px)}) stayed under "
+            f"{span_phrase} ({product_text}, {_money(start)} → {_money(end)}) stayed under "
             f"the {rule_text} percent rule — the model fired on the price/volume pattern, "
             "not the percent alone."
         )
@@ -131,23 +161,37 @@ def forest_price_section(
     change: float | None,
     price_move_threshold: float,
     forest: dict[str, Any],
+    product_change: float | None = None,
+    product_span: str | None = None,
+    from_px: float | None = None,
+    to_px: float | None = None,
 ) -> str:
     """Price accordion text: levels + percent status + short forest note."""
-    move = change if change is not None else price_change_pct(last_px, open_px)
-    move_text = _fmt_pct(move) if move is not None else "n/a"
+    session_move = change if change is not None else price_change_pct(last_px, open_px)
+    product = product_change if product_change is not None else session_move
+    span_key = product_span or str(forest.get("product_span") or "live")
+    start = from_px if from_px is not None else open_px
+    end = to_px if to_px is not None else last_px
+    move_text = _fmt_pct(product) if product is not None else "n/a"
+    session_text = _fmt_pct(session_move) if session_move is not None else "n/a"
     rule_text = f"{price_move_threshold * 100:.1f}%"
-    percent_cleared = move is not None and abs(move) >= price_move_threshold
-    percent_line = (
-        f"Open→last {move_text} cleared the {rule_text} rule."
-        if percent_cleared
-        else f"Open→last {move_text} stayed under the {rule_text} rule."
-    )
+    product_cleared = product is not None and abs(product) >= price_move_threshold
+    span_phrase = _span_phrase(span_key)
+    if product_cleared:
+        percent_line = f"{span_phrase.capitalize()} {move_text} cleared the {rule_text} rule."
+    else:
+        percent_line = f"{span_phrase.capitalize()} {move_text} stayed under the {rule_text} rule."
+    if span_key != "live" and session_move is not None:
+        percent_line = (
+            f"{percent_line} Open→last was {session_text} "
+            f"({_money(open_px)} → {_money(last_px)})."
+        )
     model_id = str(forest.get("model_id") or "isolation_forest")
     score = _as_float(forest.get("forest_score")) or 0.0
     cutoff = _as_float(forest.get("score_cutoff"))
     cutoff_text = f"{cutoff:.4f}" if cutoff is not None else "n/a"
     return (
-        f"{symbol} is at {_money(last_px)}, from the open of {_money(open_px)} ({move_text}). "
+        f"{symbol} is at {_money(end)}, from {_money(start)} ({move_text}, {span_phrase}). "
         f"{percent_line} Isolation Forest {model_id} score {score:.4f} "
         f"(cutoff {cutoff_text}) marked the session anomalous. "
         f"{forest_driver_sentence(forest.get('features') if isinstance(forest.get('features'), dict) else {})}"
@@ -238,6 +282,22 @@ def enrich_price_draft_with_forest_wording(draft: AlertDraft) -> AlertDraft:
     forest_score = float(forest.get("forest_score") or 0.0)
     score_cutoff = float(forest.get("score_cutoff") or 0.0)
     session_change = price_change_pct(last_px, open_px)
+    product_change = (
+        float(draft.price_change_pct)
+        if draft.price_change_pct is not None
+        else session_change
+    )
+    product_span = str(forest.get("product_span") or "")
+    if not product_span:
+        caption = str(sections.get("price_span") or "")
+        if "prior close → close" in caption or caption == PRICE_SPAN.get("close"):
+            product_span = "close"
+        elif "prior close → open" in caption or caption == PRICE_SPAN.get("gap"):
+            product_span = "gap"
+        else:
+            product_span = "live"
+    from_px = float(draft.prior_close) if draft.prior_close is not None else open_px
+    to_px = float(draft.latest_close) if draft.latest_close is not None else last_px
 
     price_text = forest_price_section(
         draft.symbol,
@@ -246,9 +306,13 @@ def enrich_price_draft_with_forest_wording(draft: AlertDraft) -> AlertDraft:
         change=session_change,
         price_move_threshold=threshold,
         forest=forest,
+        product_change=product_change,
+        product_span=product_span,
+        from_px=from_px,
+        to_px=to_px,
     )
     sections["price"] = price_text
-    sections.setdefault("price_span", PRICE_SPAN["live"])
+    sections.setdefault("price_span", PRICE_SPAN.get(product_span, PRICE_SPAN["live"]))
 
     if draft.kind != "price":
         return replace(draft, sections=sections)
@@ -265,6 +329,10 @@ def enrich_price_draft_with_forest_wording(draft: AlertDraft) -> AlertDraft:
         price_move_threshold=threshold,
         change=session_change,
         news_tail=news_tail,
+        product_change=product_change,
+        product_span=product_span,
+        from_px=from_px,
+        to_px=to_px,
     )
     sections["synthesis"] = summary
     sections.setdefault("entry", "price")
