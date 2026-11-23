@@ -49,7 +49,7 @@ This is the finished local system for the class demo. Near-term headlines are fe
 | History tab: paged list (20 rows; First / Previous / Next / Last) with Origin, Company, Alert type, Price shape, Direction, Price change, Sentiment score; click row for details; sortable + draggable columns; **When** = `updated_at` |
 | Yahoo daily bars into `daily_bars` for Watchlist Scan today / rebuild (session-day product pass) |
 | Near-term Yahoo headlines scored with local FinBERT (0–100), with confidence and class shares |
-| Price alert: open→last while the market is open; close versus prior close after the close. Volume spike note on the completed close |
+| Price alert: open→last while the market is open; close versus prior close after the close. Forest gap days use a **product print** (prefer prior→last / gap when those clear the Settings floor). Volume spike note on the completed close |
 | News alert and news + price when the headline’s price slice clears the same percent |
 | Plain-English summary; Perplexity richer news / news+price reasoning when a key is saved (price-only stays deterministic); Summary citations render as clickable headline titles (bare URLs linked from the alert’s article list) |
 | Collapsed Live / Watchlist cards: one-line head — symbol, company, story pills (type / shape / direction), **When**; Price change and Sentiment score tiles only when the card is open (same tiles in the details popup) |
@@ -261,7 +261,7 @@ flowchart LR
 | UI | Home → **Live alerts** (scope: All, Watchlist, or Others) | Watchlist → chips + **Scan today** → **Watchlist results** |
 | Inputs | Kafka minute bars (+ near-term Yahoo headlines after a price/forest hit) | Yahoo `daily_bars` + near-term headlines for watchlist symbols |
 | Focus session | Wall-clock RTH / live open→last | **Today** during RTH or after the close; **last completed weekday** before the open / on weekends |
-| Price gate | open→last **percent or** Isolation Forest (lake registry) | Same **percent or** Isolation Forest on the focus session’s vector |
+| Price gate | open→last **percent or** Isolation Forest (product print prefers prior→last / gap on forest gap days) | Same **percent or** Isolation Forest on the focus session’s vector |
 | When it shines | Deployed day; laptop left open on the stream | Pre-market catch-up; after the close; after changing Settings; class demo without Kafka |
 | Origin on the row | `live` (or `both` if Scan today also wrote the day) | `watchlist` (or `both` if live also wrote the day) |
 
@@ -269,7 +269,9 @@ The lake batch path does **not** replace Watchlist. Lake Parquet trains the fore
 
 ## Price gates (percent, with forest as enricher)
 
-The **percent floor** opens a price-led day on its own. Isolation Forest can still mark a session anomalous under that floor, but a bare forest-only price card with **no news support** is dropped (noise). Forest + supporting headlines under the floor can still keep a news / news_price row.
+The **percent floor** opens a price-led day on its own (Live RTH gate is **open→last**; Scan today / after the close use **close vs prior**). Isolation Forest can still mark a session anomalous when open→last is flat — for example a large **overnight gap** — but a bare forest-only card with **no** product print that clears the Settings floor and **no news support** is dropped (noise). Forest + supporting headlines under every product print can still keep a news / news_price row.
+
+**Product price print (forest gap days):** when forest fires, the card’s Price change is **not** forced to open→last. Among gap (prior→open), session (open→last), and close (prior→last), the scorer prefers any slice that clears the Settings floor, with **prior→last** first, then gap, then open→last. That way an NVDA-style +20% overnight jump is shown as up vs prior close — not as a −0.1% open→last “news-led” card. Live headline slices also measure **close vs prior** (and accept `prior_close` from forest history when `daily_bars` lag). News upgrade **seeds** from that forest draft so the join keeps the same print.
 
 Cards and Alert History use three tag axes when relevant: **alert type** (`price-led` / `news-led` / `price + news`), **price shape** (`volatile` / `anomalous` / `volatile + anomalous`), and **direction** (`agrees` / `disagrees` / `mixed` / `no recent news` when no near-term headlines were found) when price and news can be compared. Those story pills sit on the collapsed card (and details header) beside the company name; the large Price change / Sentiment tiles stay in the open body so closed cards stay short. `price + news` means price was in play and headlines joined that slice (not a separate news-first join kind). **Sentiment is always the climate average of all near-term FinBERT scores** (not screamers only). A news side can join two ways: (1) **headline join** — at least one headline clears the full distance-from-50 gate and lines up with the move; (2) **climate join** — no single headline clears that gate, but the full climate average clears a softer half-distance bar (so a consistent mild lean can still upgrade; an average of in-range scores cannot clear the same bar as a screamer). Polarized sets (both above-50 and below-50 headlines) force Direction to **mixed** and show split counts. On a **price-led** day where neither join clears, the card still lists climate context.
 
@@ -288,10 +290,10 @@ Cards and Alert History use three tag axes when relevant: **alert type** (`price
 | # | Trigger | Opens a price alert alone? | Notes |
 |---|---|---|---|
 | 1 | **Price move threshold** — open→last (RTH) or close vs prior (after close / Scan) ≥ Settings % (UI label: Price move threshold) | **Yes** | Live + Watchlist |
-| 2 | **Isolation Forest anomalous** — score ≤ registry cutoff on the four-feature vector | **No** under the % floor without news; **enriches** when percent or news already opens | Live + Watchlist |
-| 3 | **Gap return** (open vs prior close) | No — forest **feature** | Inside #2 |
+| 2 | **Isolation Forest anomalous** — score ≤ registry cutoff on the four-feature vector | **No** when every product print (gap / session / close) is under the floor without news; **enriches** when a product print or news already opens | Live + Watchlist |
+| 3 | **Gap return** (open vs prior close) | No — forest **feature**; may become the **product print** when it clears the floor on a forest day | Inside #2 |
 | 4 | **Session return** (open→last) | No — forest **feature** (and #1 if large enough) | Inside #1 / #2 |
-| 5 | **Close return** (last vs prior close) | No — forest **feature** | Inside #2 |
+| 5 | **Close return** (last vs prior close) | No — forest **feature**; preferred **product print** when it clears the floor on a forest day | Inside #2 |
 | 6 | **Volume z-score** (today’s volume vs ~20 prior days) | No — forest **feature** | How “heavy trading” usually fires |
 | 7 | **Volume spike note** (≥ ~2× recent average on a completed daily close) | **No** — annotation only | Shown when a percent-led daily card also spiked |
 
@@ -353,7 +355,7 @@ Home asks for notification permission (Enable desktop notifications). When Scan 
 
 ## Live price stream
 
-Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). A later live **price** draft for the same symbol-day may re-enter that upgrade path so open→last moves can refresh an earlier live news / news_price row; a Watchlist-origin price draft still must not clobber a news kind. News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`.
+Docker Kafka, Alpaca producer, and `python -m app.live`. The consumer accepts Kafka bars for the **full S&P 500 universe** (Watchlist chips are only the Scan today focus set — not a live filter). Writes **price** alerts with the **open→last percent rule** and, when the lake registry is present, scores the same four session features with the registered Isolation Forest (Flink role). On forest hits, the **product Price change** prefers prior→last / gap when those clear the Settings floor (open→last alone must not mislabel a gap day as flat). After a live price (or forest) alert, the consumer fetches near-term Yahoo headlines, scores them with FinBERT, and grades how well the news explains the session — upgrading to news or news+price when the same-day slice supports it, otherwise keeping price-only with that grade. The upgrade **seeds** from the forest/percent draft (including `prior_close`) so the join does not re-measure only flat open→last. Same join as Watchlist Scan today. The upgrade path keeps `origin=live` (it does not fall back to the evaluate default of `watchlist`). A later live **price** draft for the same symbol-day may re-enter that upgrade path so moves can refresh an earlier live news / news_price row; a Watchlist-origin price draft still must not clobber a news kind. News / news+price rows go through Perplexity when a key is saved. Feature vectors land in Postgres `live_feature_rows`.
 
 Home’s Live alerts control is a clickable **arm switch**: `POST /v1/live/armed` sets `app_settings.live_alerts_armed`. `/v1/live/status` returns `armed` (user switch) and `enabled` (fresh `live_consumer_heartbeat_at`). The UI shows **off** / **starting…** / **on** from that pair. While armed, the consumer heartbeats on a **background task** so FinBERT / Perplexity work on a bar cannot starve the cue into a stuck “starting…” state. Disarm clears the heartbeat and idles both the consumer and the producer (producer polls the same status). Demo hosts may set `TICKER_ALERT_LIVE_DISARM_ON_BOOT=true` so a redeploy starts idle until you click Live alerts on.
 
@@ -373,14 +375,15 @@ flowchart LR
         LIVE --> UNI{S&P 500 universe?}
         REG["Isolation Forest registry<br/>(trained model on disk)"] --> LIVE
         UNI -->|yes| BOOK["Session book<br/>(open / last / volume state)"]
-        BOOK --> RULE2{Percent gate}
+        BOOK --> RULE2{Open→last percent gate}
         BOOK --> FOREST{Forest cutoff}
+        FOREST -->|anomalous| PRINT["Product print<br/>(prior→last / gap / open→last)"]
     end
 
     subgraph join [3 Headline grade]
         direction TB
-        RULE2 -->|clears| NEWSU["Same-day headline grade<br/>(Yahoo pull + FinBERT)"]
-        FOREST -->|anomalous| NEWSU
+        RULE2 -->|clears| NEWSU["Same-day headline grade<br/>(seeded draft + FinBERT)"]
+        PRINT -->|product print| NEWSU
         NEWSU --> PG[("Alerts origin=live<br/>(Postgres database)")]
         FOREST --> FEAT[("Session feature rows<br/>(Postgres table)")]
     end
@@ -411,14 +414,15 @@ sequenceDiagram
     Producer->>Kafka: Publish prices.raw.bars
     Live->>Kafka: Consume bar
     Live->>Live: Build session vector + forest score
+    Live->>Live: Pick product print (prior→last on gap days)
     Live->>PG: Write live_feature_rows
     Live->>PG: Background heartbeat (keeps cue on)
-    alt Percent or forest trips
-        Live->>PG: Upsert price alert then headline grade
+    alt Open→last clears or forest product print clears / has news
+        Live->>PG: Upsert seeded price alert then headline grade
         UI->>PG: Poll alerts / live status
         PG->>UI: Card + Live alerts on
-    else Below both gates
-        Live-->>PG: No price overwrite
+    else Forest under every print, no news
+        Live-->>PG: Features only (no bare forest card)
     end
 ```
 
@@ -551,7 +555,7 @@ flowchart LR
 
 ## Streaming ETL
 
-Minute bars are scored by the registered forest. **Product join is price-first on Live and Watchlist Scan today:** when the percent rule or forest marks a move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and grades how well the news explains the session — news or news+price when the same Eastern-day slice supports it, otherwise price-only with that grade. Under the percent floor, forest + supporting headlines can keep a news / news_price row (bare forest-only is dropped). Stale prior-day stories stay out. Postgres holds the alert with `origin`. Perplexity writes after news / news+price rows exist. The details popup freezes symbol / company / story pills / When / close above a full-width rule (same boundary as an open Live card) and scrolls only the evidence body. That body shows the evidence story with a granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts). What happened always leads **price → news** on Live/forest doors, with percent vs anomaly bullets on Price noticed, then a tone-colored outcome chip for the grade.
+Minute bars are scored by the registered forest. **Product join is price-first on Live and Watchlist Scan today:** when the percent rule or forest marks a move, the scorer fetches near-term headlines for that symbol, scores them with FinBERT, and grades how well the news explains the session — news or news+price when the same Eastern-day slice supports it, otherwise price-only with that grade. “Under the percent floor” for forest-alone drops means **every** product print (gap / session / close) is under the Settings % — a clearing overnight gap is not treated as under-floor just because open→last is flat. Under that full under-floor case, forest + supporting headlines can keep a news / news_price row (bare forest-only is dropped). Stale prior-day stories stay out. Postgres holds the alert with `origin`. Perplexity writes after news / news+price rows exist. The details popup freezes symbol / company / story pills / When / close above a full-width rule (same boundary as an open Live card) and scrolls only the evidence body. That body shows the evidence story with a granular second-side alignment (supports / somewhat supports / neutral / disagrees / contradicts). What happened always leads **price → news** on Live/forest doors, with percent vs anomaly bullets on Price noticed, then a tone-colored outcome chip for the grade.
 
 ```mermaid
 flowchart LR
@@ -565,14 +569,17 @@ flowchart LR
     subgraph gate [2 Price gate]
         direction TB
         SCORE --> GATE{Percent or forest}
-        GATE -->|percent or forest+news| PRICE["Upsert price-first row<br/>(Postgres write)"]
-        GATE -->|forest alone under %| DROP["Drop bare forest noise<br/>(features only)"]
+        GATE -->|open→last clears| PRICE["Upsert price-first row<br/>(Postgres write)"]
+        GATE -->|forest anomalous| PRINT["Pick product print<br/>(prior→last preferred on gap days)"]
+        PRINT -->|print clears floor| PRICE
+        PRINT -->|all prints under + news| PRICE
+        PRINT -->|all prints under, no news| DROP["Drop bare forest noise<br/>(features only)"]
     end
 
     subgraph news [3 Headline grade]
         direction TB
         PRICE --> NEWSLOOK["Fetch near-term headlines<br/>(Yahoo news pull)"]
-        NEWSLOOK --> FINBERT["FinBERT climate + join<br/>(local NLP scorer)"]
+        NEWSLOOK --> FINBERT["FinBERT climate + join<br/>(seeded forest/percent draft)"]
         FINBERT --> SLICE{Explains session?}
         SLICE -->|supports| UPGRADE["Upgrade to news or news_price<br/>(kind may be news-led)"]
         SLICE -->|no| KEEP["Keep price-only with grade<br/>(evidence outcome)"]
