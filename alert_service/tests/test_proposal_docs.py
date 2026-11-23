@@ -143,6 +143,11 @@ def test_architecture_points_at_the_audit_and_names_the_target():
     assert "Watchlist Scan today / rebuild uses the same Isolation Forest" in architecture
     assert "Price gates (percent" in architecture
     assert "no news support" in architecture.lower() or "without news" in architecture.lower()
+    assert "Product price print" in architecture or "product print" in architecture.lower()
+    assert "prior→last" in architecture or "prior close → last" in architecture.lower()
+    assert "Pick product print" in architecture or "Product print" in architecture
+    assert "seeded forest/percent draft" in architecture or "seeded draft" in architecture.lower()
+    assert "every** product print" in architecture or "every product print" in architecture.lower()
     assert "volatile" in architecture and "anomalous" in architecture
     assert "price-led" in architecture and "news-led" in architecture
     assert "price + news" in architecture and "agrees" in architecture and "disagrees" in architecture
@@ -424,6 +429,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "last completed session" in sources
     assert "focus-session" in sources or "Focus session" in sources or "focus session" in sources.lower()
     assert "Percent floor + forest enricher" in sources or "forest enricher" in sources
+    assert "product print" in sources.lower()
+    assert "prior→last" in sources or "prior close → close" in sources
     assert "Alert history" in sources
     assert "Rebuild Watchlist history" in sources
     assert "20 rows" in sources
@@ -494,6 +501,8 @@ def test_data_sources_and_readmes_name_the_same_target():
     assert "First / Previous / Next / Last" in readme
     assert "story pills" in readme
     assert "full-width rule" in readme
+    assert "prior close → last" in readme or "overnight gap" in readme
+    assert "every** product print" in readme or "every product print" in readme
     assert "Origin" in readme
     assert "Watchlist results" in readme
     assert "Scan today" in readme
